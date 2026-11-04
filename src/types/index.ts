@@ -371,6 +371,14 @@ export interface Observation {
 /* ── Moteur de fatigue ─────────────────────────────────────────────────── */
 
 export interface FatigueConfig {
+  /** Numéro de version des valeurs par défaut : un changement remplace les anciens réglages. */
+  configVersion: number
+  /** Repos de référence entre deux séries (s) : en dessous, l'effort monte ; au-dessus, il baisse. */
+  restRefSec: number
+  /** Variation d'effort par seconde d'écart au repos de référence. */
+  restSensitivity: number
+  restFactorMin: number
+  restFactorMax: number
   /** Constante de saturation du volume : F0 = 100 × (1 − exp(−(V/k + w·P²))). */
   k: Record<ZoneSize, number>
   /** Poids du pic d'intensité P (proximité de l'échec) dans l'exposant. */
@@ -408,7 +416,14 @@ export interface ZoneFatigue {
   value: number /* 0 → 100 */
   hasHistory: boolean
   readyInHours: number | null
-  contributors: { workoutId: Id; startedAt: Iso; label: string; load: number }[]
+  contributors: {
+    workoutId: Id
+    startedAt: Iso
+    label: string
+    load: number
+    hoursAgo: number
+    overreach: boolean
+  }[]
   load7d: number
   load28dAvg7d: number
 }

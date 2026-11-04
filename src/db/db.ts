@@ -99,7 +99,13 @@ export function defaultSettings(): Settings {
 export function withSettingsDefaults(row?: Settings): Settings {
   const base = defaultSettings()
   if (!row) return base
-  return { ...base, ...row, fatigue: { ...base.fatigue, ...row.fatigue } }
+  /* Nouvelles valeurs par défaut du moteur : on remplace les anciens réglages. */
+  const sameVersion = row.fatigue?.configVersion === base.fatigue.configVersion
+  return {
+    ...base,
+    ...row,
+    fatigue: sameVersion ? { ...base.fatigue, ...row.fatigue } : base.fatigue,
+  }
 }
 
 export const uid = (prefix = 'id'): string => {

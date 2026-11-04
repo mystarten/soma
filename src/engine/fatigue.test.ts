@@ -149,6 +149,51 @@ describe('moteur de fatigue — récupération', () => {
   })
 })
 
+describe('moteur de fatigue — retour à la normale', () => {
+  it('après 48 h avec de bonnes nuits, une grosse séance de tractions est revenue à la normale', () => {
+    const w = pullSession('2025-06-02T18:00:00.000Z')
+    const cs = [goodNight('2025-06-03'), goodNight('2025-06-04')]
+    const b = fatigueAt('2025-06-04T18:00:00.000Z', ctx({ workouts: [w], checkins: cs }))
+    expect(b.dorsaux.value).toBeLessThan(15)
+    expect(fatigueBand(b.dorsaux.value)).toBe('pret')
+    expect(b.biceps.value).toBeLessThan(15)
+  })
+
+  it('100 pompes à l’échec : encore marqué à J+1, quasi normal à J+2 avec de bonnes nuits', () => {
+    const w = hundredPushups('2025-06-02T18:00:00.000Z')
+    const cs = [goodNight('2025-06-03'), goodNight('2025-06-04')]
+    const d1 = fatigueAt('2025-06-03T18:00:00.000Z', ctx({ workouts: [w], checkins: cs }))
+    const d2 = fatigueAt('2025-06-04T18:00:00.000Z', ctx({ workouts: [w], checkins: cs }))
+    expect(d1.pectoraux.value).toBeGreaterThan(30)
+    expect(d2.pectoraux.value).toBeLessThan(20)
+  })
+
+  it('de mauvaises nuits ralentissent le retour à la normale', () => {
+    const w = pullSession('2025-06-02T18:00:00.000Z')
+    const g = fatigueAt('2025-06-04T18:00:00.000Z', ctx({ workouts: [w], checkins: [goodNight('2025-06-03'), goodNight('2025-06-04')] }))
+    const b = fatigueAt('2025-06-04T18:00:00.000Z', ctx({ workouts: [w], checkins: [badNight('2025-06-03'), badNight('2025-06-04')] }))
+    expect(b.dorsaux.value).toBeGreaterThan(g.dorsaux.value + 2)
+  })
+
+  it('un repos court rend la même séance plus fatigante', () => {
+    const mk = (rest: number) =>
+      makeWorkout({
+        startedAt: '2025-06-02T18:00:00.000Z',
+        sets: Array.from({ length: 10 }, () => makeSet('ex_tractions_pronation', { reps: 18, restSec: rest })),
+      })
+    const fast = fatigueAt('2025-06-02T18:00:00.000Z', ctx({ workouts: [mk(30)] })).dorsaux.value
+    const slow = fatigueAt('2025-06-02T18:00:00.000Z', ctx({ workouts: [mk(180)] })).dorsaux.value
+    expect(fast).toBeGreaterThan(slow)
+  })
+
+  it('chaque contributeur indique depuis combien de temps il pèse', () => {
+    const w = pullSession('2025-06-02T18:00:00.000Z')
+    const b = fatigueAt('2025-06-03T06:00:00.000Z', ctx({ workouts: [w] }))
+    expect(b.dorsaux.contributors[0].hoursAgo).toBeCloseTo(12, 0)
+    expect(b.dorsaux.contributors[0].label).toContain('Tractions')
+  })
+})
+
 describe('moteur de fatigue — course et cardio', () => {
   it('un footing charge surtout les mollets, pas le dos', () => {
     const run = makeWorkout({
@@ -220,5 +265,22 @@ describe('résumé du corps', () => {
     expect(careful).toContain('triceps')
     expect(ready).toContain('quadriceps')
     expect(availabilityScore(body)).toBeLessThan(95)
+  })
+})
+
+describe('explication d’une zone chargée', async () => {
+  const { explainZone } = await import('./suggest')
+  it('dit quelle séance pèse, depuis quand, et l’effet de la nuit', () => {
+    const w = pullSession('2025-06-02T18:00:00.000Z')
+    const body = fatigueAt('2025-06-03T08:00:00.000Z', ctx({ workouts: [w], checkins: [badNight('2025-06-03')] }))
+    const lines = explainZone('dorsaux', body, { sleepHours: 4.5, sleepScore: 40, recovery: 32 })
+    expect(lines[0]).toMatch(/Surtout : .*Tractions.*il y a 14 h/)
+    expect(lines.join(' ')).toMatch(/récupération ralentie/)
+    expect(lines.join(' ')).toMatch(/Récupération du jour : 32 %/)
+    expect(lines.join(' ')).toMatch(/Retour au vert dans environ \d+ h/)
+  })
+  it('zone sans séance : message clair', () => {
+    const body = fatigueAt('2025-06-03T08:00:00.000Z', ctx())
+    expect(explainZone('mollets', body, { sleepHours: null, sleepScore: 0, recovery: null })[0]).toMatch(/Aucune séance/)
   })
 })

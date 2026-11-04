@@ -252,3 +252,14 @@ input[type='range']::-moz-range-thumb {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Champs numériques : pas de petites flèches, on a des gros boutons */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

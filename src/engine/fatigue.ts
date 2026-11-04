@@ -86,6 +86,16 @@ function runIntensity(w: Workout, ctx: FatigueContext): number {
   return clamp(intensity, 0.15, 1)
 }
 
+/** Repos court = série plus intense ; repos long = plus facile. Sans repos noté : neutre. */
+export function restFactor(restSec: number | undefined, config: FatigueConfig): number {
+  if (typeof restSec !== 'number' || restSec <= 0) return 1
+  return clamp(
+    1 + (config.restRefSec - restSec) * config.restSensitivity,
+    config.restFactorMin,
+    config.restFactorMax,
+  )
+}
+
 /** Facteur de pondération issu du strain WHOOP (1 = neutre). */
 function strainFactor(w: Workout, config: FatigueConfig): number {
   const strain = w.whoopStrain
@@ -114,8 +124,9 @@ export function workoutStimulus(w: Workout, ctx: FatigueContext): Stimulus {
         config.failureBonus,
       )
       if (effort <= 0) continue
-      addMix(V, ex.mix, effort, 'sum')
-      addMix(P, ex.mix, intensity, 'max')
+      const rf = restFactor(set.restSec, config)
+      addMix(V, ex.mix, effort * rf, 'sum')
+      addMix(P, ex.mix, clamp(intensity * rf, 0, 1), 'max')
       byExercise.set(ex.name, (byExercise.get(ex.name) ?? 0) + 1)
     }
     for (const [name, n] of byExercise) names.push(n > 1 ? `${name} ×${n}` : name)
@@ -276,6 +287,8 @@ export interface PreparedEntry {
   label: string
   /** Exposant initial par zone, majoration de surcharge incluse. */
   E: ZoneNums
+  /** Zones où la charge dépassait nettement la moyenne des 4 semaines. */
+  over: Set<MuscleZone>
   V: ZoneNums
 }
 
@@ -309,6 +322,7 @@ export function prepareFatigue(
     const { w, start, s } = stimuli[i]
     if (start < windowStart) continue
     const E: ZoneNums = {}
+    const over = new Set<MuscleZone>()
     for (const zone of MUSCLE_ZONES) {
       const v = s.V[zone] ?? 0
       const p = s.P[zone] ?? 0
@@ -324,10 +338,11 @@ export function prepareFatigue(
       }
       if (past.length >= 3 && v > ctx.config.overreachRatio * mean(past)) {
         e *= 1 + ctx.config.overreachBonus
+        over.add(zone)
       }
       if (e > 0) E[zone] = e
     }
-    if (Object.keys(E).length) entries.push({ workout: w, start, label: s.label, E, V: s.V })
+    if (Object.keys(E).length) entries.push({ workout: w, start, label: s.label, E, over, V: s.V })
   }
 
   const from = entries.length ? Math.min(...entries.map((e) => e.start)) : anchor - DAY_MS
@@ -438,6 +453,8 @@ export function fatigueAt(
           startedAt: entry.workout.startedAt as Iso,
           label: entry.label,
           load: Math.round(fatigueFromExponent(decayed)),
+          hoursAgo: (time - entry.start) / HOUR_MS,
+          overreach: entry.over.has(zone),
         })
       }
     }

@@ -7,7 +7,15 @@ import { clamp, lerpColor } from './stats'
    par défaut). Aucune autre partie du code ne doit contenir de nombre magique.
    ────────────────────────────────────────────────────────────────────────── */
 
+export const FATIGUE_CONFIG_VERSION = 2
+
 export const DEFAULT_FATIGUE_CONFIG: FatigueConfig = {
+  configVersion: FATIGUE_CONFIG_VERSION,
+  /* Repos entre séries : 90 s = neutre. 30 s → effort ×1,15 ; 180 s → ×0,9. */
+  restRefSec: 90,
+  restSensitivity: 0.0025,
+  restFactorMin: 0.9,
+  restFactorMax: 1.15,
   /* Saturation du volume. Plus k est grand, plus il faut de volume pour saturer. */
   k: { small: 8.5, medium: 9.5, large: 10.7 },
   /* Poids du pic d'intensité (proximité de l'échec). Calibré pour que :
@@ -15,8 +23,11 @@ export const DEFAULT_FATIGUE_CONFIG: FatigueConfig = {
      – 100 pompes d'un coup à l'échec (réf. 100) → pecs ≈ 97, triceps ≈ 83,
        deltoïdes antérieurs ≈ 73 */
   peakWeight: 3.45,
-  /* Demi-constantes de temps, en heures. */
-  tau: { small: 30, medium: 36, large: 48 },
+  /* Constantes de temps de récupération, en heures « efficaces ».
+     Avec deux bonnes nuits, une grosse séance revient à ~normal après 48 h :
+     – 10×18 tractions (dos 82) → ~28 le lendemain, ~6 après 48 h
+     – 100 pompes à l'échec → pecs ~97 → ~35 à J+1 → ~12 à J+2 */
+  tau: { small: 14, medium: 16, large: 18 },
   effortCap: 1.2,
   failureBonus: 1.25,
   overreachRatio: 1.5,

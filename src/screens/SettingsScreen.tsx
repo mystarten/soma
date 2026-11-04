@@ -805,6 +805,26 @@ function FatigueSettings({
               />
             </div>
           </Field>
+          <Field label="Repos de référence" hint="Plus court = série plus intense.">
+            <Stepper
+              value={config.restRefSec}
+              onChange={(v) => set({ restRefSec: v })}
+              step={5}
+              min={20}
+              max={300}
+              suffix="s"
+            />
+          </Field>
+          <Field label="Effet du repos (par minute d'écart)">
+            <Stepper
+              value={Math.round(config.restSensitivity * 6000) / 100}
+              onChange={(v) => set({ restSensitivity: v / 6000 })}
+              step={1}
+              min={0}
+              max={30}
+              suffix="%"
+            />
+          </Field>
           <Field label="Charge de course (par unité)">
             <Stepper
               value={config.runLoadPerMin}

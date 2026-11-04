@@ -166,7 +166,8 @@ créent pas de doublons, et tes saisies manuelles ne sont jamais écrasées.
 Fonction pure et testée, dans `src/engine/fatigue.ts`. Pour chaque zone :
 
 1. **Effort d'une série** = `reps / reps max estimées à cette charge`
-   (1RM via Epley, poids du corps × facteur + lest). Plafonné à 1,2 ;
+   (1RM via Epley, poids du corps × facteur + lest). Le repos entre séries module
+   l'intensité (90 s = neutre, 30 s ×1,15, 3 min ×0,9). Plafonné à 1,2 ;
    × 1,25 si série menée à l'échec. Pour les statiques :
    `tenue / record de tenue`. Pour la course et le cardio :
    `durée × intensité`, avec un bonus excentrique sur le dénivelé négatif.
@@ -176,7 +177,8 @@ Fonction pure et testée, dans `src/engine/fatigue.ts`. Pour chaque zone :
    où `V` est le volume relatif et `P` le pic d'intensité de la séance sur la
    zone. Majoration de 15 % si la charge dépasse 150 % de la moyenne 4 semaines.
 4. **Récupération** : décroissance horaire `exp(−m / τ)`.
-   `τ` ≈ 30 h (petits muscles), 36 h (moyens), 48 h (gros).
+   `τ` ≈ 14 h (petits muscles), 16 h (moyens), 18 h (gros) : avec de bonnes nuits,
+   une grosse séance est revenue à la normale après ~48 h.
    `m` monte jusqu'à 1,6 pendant le sommeil selon la qualité de la nuit, varie
    de 0,8 à 1,2 en éveil selon la récupération du jour, et vaut 1 sans données.
    L'heure de la séance compte donc vraiment.

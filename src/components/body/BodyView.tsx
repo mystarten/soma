@@ -14,7 +14,7 @@ import {
   fatigueColor,
 } from '../../engine/fatigueConfig'
 import { allJointInfo, hasWebGL, isLowPower } from '../../engine/body'
-import { suggestSession, zoneList, zoneSentence } from '../../engine/suggest'
+import { agoLabel, explainZone, suggestSession, zoneList, zoneSentence } from '../../engine/suggest'
 import { computeSleepScore, sleepDebtHours, sleepHours, sleepRegularity } from '../../engine/sleep'
 import { addDayKey, lastDays, toDate } from '../../engine/time'
 import { volumeSummary } from '../../engine/load'
@@ -304,6 +304,7 @@ export default function BodyView({ compact = false }: { compact?: boolean }) {
 
       {!compact && (
         <>
+          <WhyCard body={body} onSelect={setSelected} />
           <ZoneGrid body={body} onSelect={setSelected} />
           <Card title="Organes & articulations" subtitle="Touche un élément pour le détail">
             <div className="mt-2 flex flex-wrap gap-2">
@@ -341,9 +342,63 @@ export default function BodyView({ compact = false }: { compact?: boolean }) {
         onClose={() => setSelected(null)}
         body={body}
         joints={joints}
-        at={effectiveTime}
       />
     </div>
+  )
+}
+
+/* ── Pourquoi ces zones sont chargées ─────────────────────────────────── */
+
+function WhyCard({
+  body,
+  onSelect,
+}: {
+  body: ReturnType<typeof fatigueAt>
+  onSelect: (z: MuscleZone) => void
+}) {
+  const data = useSoma()
+  const hot = MUSCLE_ZONES.filter((z) => body[z].hasHistory && body[z].value >= 55).sort(
+    (a, b) => body[b].value - body[a].value,
+  )
+  if (!hot.length) return null
+  const rc = {
+    sleepHours: data.sleepScore.hours,
+    sleepScore: data.sleepScore.score,
+    recovery: data.checkinByDay.get(data.today)?.recovery ?? null,
+  }
+  return (
+    <Card title="Pourquoi ces zones sont chargées" subtitle="Touche une zone pour le détail complet">
+      <div className="mt-3 space-y-2">
+        {hot.map((z) => {
+          const f = body[z]
+          const color = fatigueColor(f.value)
+          const lines = explainZone(z, body, rc)
+          return (
+            <button
+              key={z}
+              onClick={() => onSelect(z)}
+              className="flex w-full gap-3 rounded-xl bg-white/4 p-3 text-left hairline active:scale-[0.99]"
+            >
+              <span className="w-1 shrink-0 rounded-full" style={{ background: color }} />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-baseline justify-between gap-2">
+                  <span className="text-sm text-mist-100">{ZONE_LABEL[z]}</span>
+                  <span className="text-sm font-medium tnum" style={{ color }}>
+                    {Math.round(f.value)} %
+                  </span>
+                </span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-mist-300">{lines[0]}</span>
+                {f.readyInHours ? (
+                  <span className="mt-0.5 block text-[0.68rem] text-mist-700">
+                    Retour au vert dans ~{f.readyInHours} h
+                  </span>
+                ) : null}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </Card>
   )
 }
 
@@ -397,13 +452,11 @@ function DetailSheet({
   onClose,
   body,
   joints,
-  at,
 }: {
   selection: Selection
   onClose: () => void
   body: ReturnType<typeof fatigueAt>
   joints: ReturnType<typeof allJointInfo>
-  at: number
 }) {
   const data = useSoma()
   const open = selection !== null
@@ -427,29 +480,19 @@ function DetailSheet({
       )}
       {selection !== null &&
         MUSCLE_ZONES.includes(selection as MuscleZone) && (
-          <ZonePanel zone={selection as MuscleZone} body={body} at={at} data={data} />
+          <ZonePanel zone={selection as MuscleZone} body={body} data={data} />
         )}
     </Sheet>
   )
 }
 
-/** « il y a 6 h » / « il y a 3 j » */
-function ago(now: number, iso: string): string {
-  const h = (now - toDate(iso).getTime()) / 3_600_000
-  if (h < 1) return 'à l’instant'
-  if (h < 48) return `il y a ${Math.round(h)} h`
-  return `il y a ${Math.round(h / 24)} j`
-}
-
 function ZonePanel({
   zone,
   body,
-  at,
   data,
 }: {
   zone: MuscleZone
   body: ReturnType<typeof fatigueAt>
-  at: number
   data: ReturnType<typeof useSoma>
 }) {
   const f = body[zone]
@@ -499,6 +542,24 @@ function ZonePanel({
       <p className="rounded-xl bg-white/4 p-3 text-sm text-mist-300 hairline">
         {zoneSentence(zone, body)}
       </p>
+
+      <div>
+        <h4 className="mb-2 text-[0.68rem] tracking-wider text-mist-500 uppercase">
+          Pourquoi cette couleur ?
+        </h4>
+        <ul className="space-y-1.5 rounded-xl bg-white/4 p-3 text-xs text-mist-300 hairline">
+          {explainZone(zone, body, {
+            sleepHours: data.sleepScore.hours,
+            sleepScore: data.sleepScore.score,
+            recovery: data.checkinByDay.get(data.today)?.recovery ?? null,
+          }).map((l, i) => (
+            <li key={i} className="flex gap-2">
+              <span className="text-mist-700">•</span>
+              <span>{l}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl bg-white/4 p-3 hairline">
@@ -555,7 +616,7 @@ function ZonePanel({
                     {format(toDate(c.startedAt), "EEE d MMM 'à' HH'h'mm", { locale: fr })}
                   </span>
                 </span>
-                <span className="shrink-0 text-mist-500 tnum">{ago(at, c.startedAt)}</span>
+                <span className="shrink-0 text-mist-500 tnum">{agoLabel(c.hoursAgo)}</span>
               </li>
             ))}
           </ul>

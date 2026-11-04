@@ -200,3 +200,47 @@ export function zoneList(zones: MuscleZone[], max = 5): string {
   return names.join(', ') + (rest > 0 ? ` +${rest}` : '')
 }
 
+
+/* ── Explication d'une couleur ──────────────────────────────────────── */
+
+export interface RecoveryContext {
+  sleepHours: number | null
+  sleepScore: number
+  recovery: number | null
+}
+
+export function agoLabel(hours: number): string {
+  if (hours < 1) return 'à l’instant'
+  if (hours < 36) return `il y a ${Math.round(hours)} h`
+  return `il y a ${Math.round(hours / 24)} jours`
+}
+
+/** Phrases courtes qui répondent à « pourquoi cette zone est chargée ? ». */
+export function explainZone(zone: MuscleZone, body: BodyFatigue, rc: RecoveryContext): string[] {
+  const z = body[zone]
+  const lines: string[] = []
+  if (!z.hasHistory) return ['Aucune séance enregistrée sur cette zone.']
+
+  const [top, ...others] = z.contributors
+  if (!top) {
+    lines.push('Plus aucune séance récente ne pèse sur cette zone.')
+  } else {
+    lines.push(`Surtout : ${top.label}, ${agoLabel(top.hoursAgo)}.`)
+    for (const c of others.slice(0, 2)) lines.push(`S’y ajoute : ${c.label}, ${agoLabel(c.hoursAgo)}.`)
+    if (z.contributors.some((c) => c.overreach)) {
+      lines.push('Volume nettement au-dessus de ta moyenne des 4 dernières semaines : fatigue majorée de 15 %.')
+    }
+  }
+
+  if (rc.sleepHours !== null) {
+    const speed = rc.sleepScore >= 75 ? 'récupération accélérée' : rc.sleepScore >= 50 ? 'récupération normale' : 'récupération ralentie'
+    lines.push(`Dernière nuit : ${rc.sleepHours.toFixed(1)} h, score ${Math.round(rc.sleepScore)}/100 → ${speed}.`)
+  } else {
+    lines.push('Nuit non notée : la récupération est estimée à vitesse neutre.')
+  }
+  if (rc.recovery !== null) lines.push(`Récupération du jour : ${Math.round(rc.recovery)} %.`)
+
+  if (z.readyInHours === null) lines.push('Retour au vert dans plus de 15 jours.')
+  else if (z.readyInHours > 0) lines.push(`Retour au vert dans environ ${z.readyInHours} h si tu dors bien.`)
+  return lines
+}
