@@ -69,7 +69,7 @@ export default function Goals() {
   )
 
   return (
-    <div className="mx-auto w-full max-w-3xl">
+    <div className="mx-auto w-full max-w-6xl">
       {toast.node}
 
       <Card className="mb-3">
@@ -114,7 +114,7 @@ export default function Goals() {
         </Button>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="grid gap-3 xl:grid-cols-2">
         {!progress.length && (
           <Card>
             <EmptyState
@@ -178,6 +178,8 @@ export default function Goals() {
                     }))}
                     xKey="day"
                     height={120}
+                    hideY
+                    yDomain={[0, 1]}
                     series={[
                       { key: 'prevu', color: '#2d4668', name: 'Prévu' },
                       { key: 'reel', color: 'var(--accent)', name: 'Réel' },
@@ -274,7 +276,7 @@ function GoalEditor({
         </Field>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Période">
+          <Field label="Période" group>
             <Segmented
               value={g.period}
               onChange={(v) => patch({ period: v })}
@@ -284,7 +286,7 @@ function GoalEditor({
               ]}
             />
           </Field>
-          <Field label="Direction">
+          <Field label="Direction" group>
             <Segmented
               value={g.direction}
               onChange={(v) => patch({ direction: v })}

@@ -249,7 +249,7 @@ export default function SettingsScreen() {
               suffix="h"
             />
           </Field>
-          <Field label="Début de semaine">
+          <Field label="Début de semaine" group>
             <Segmented
               value={String(s.weekStartsOn)}
               onChange={(v) => void patch({ weekStartsOn: Number(v) as 0 | 1 })}
@@ -259,7 +259,7 @@ export default function SettingsScreen() {
               ]}
             />
           </Field>
-          <Field label="Unités">
+          <Field label="Unités" group>
             <Segmented
               value={s.units}
               onChange={(v) => void patch({ units: v as Settings['units'] })}
@@ -269,7 +269,7 @@ export default function SettingsScreen() {
               ]}
             />
           </Field>
-          <Field label="Rendu du corps">
+          <Field label="Rendu du corps" group>
             <Segmented
               value={s.bodyRender}
               onChange={(v) => void patch({ bodyRender: v as Settings['bodyRender'] })}
@@ -281,7 +281,7 @@ export default function SettingsScreen() {
           </Field>
         </div>
 
-        <Field label="Couleur d’accent">
+        <Field label="Couleur d’accent" group>
           <div className="mt-1 flex flex-wrap gap-2">
             {ACCENTS.map((c) => (
               <button
@@ -785,7 +785,7 @@ function FatigueSettings({
               suffix="×"
             />
           </Field>
-          <Field label="Récupération éveillé (min → max)">
+          <Field label="Récupération éveillé (min → max)" group>
             <div className="flex gap-2">
               <Stepper
                 value={config.awakeMultiplier.min}
@@ -1296,7 +1296,7 @@ function MetricEditor({
             <Stepper value={m.max} onChange={(v) => setM({ ...m, max: v })} min={-1000} max={10000} />
           </Field>
         </div>
-        <Field label="Couleur">
+        <Field label="Couleur" group>
           <div className="flex flex-wrap gap-2">
             {ACCENTS.map((c) => (
               <button

@@ -65,6 +65,8 @@ export default function Workouts({ focusId }: { focusId?: string }) {
   const data = useSoma()
   const [tab, setTab] = useState<'journal' | 'modeles' | 'records'>('journal')
   const [editing, setEditing] = useState<Workout | null>(null)
+  const [autoPick, setAutoPick] = useState(false)
+  const [visibleDays, setVisibleDays] = useState(25)
   const toast = useToast()
 
   useEffect(() => {
@@ -96,7 +98,13 @@ export default function Workouts({ focusId }: { focusId?: string }) {
             { value: 'records', label: 'Records' },
           ]}
         />
-        <Button variant="primary" onClick={() => setEditing(emptyWorkout())}>
+        <Button
+          variant="primary"
+          onClick={() => {
+            setAutoPick(false)
+            setEditing(emptyWorkout())
+          }}
+        >
           + Séance
         </Button>
       </div>
@@ -116,7 +124,7 @@ export default function Workouts({ focusId }: { focusId?: string }) {
               />
             </Card>
           )}
-          {byDay.map(([day, list]) => (
+          {byDay.slice(0, visibleDays).map(([day, list]) => (
             <div key={day}>
               <div className="mb-1.5 px-1 text-[0.68rem] tracking-wider text-mist-500 uppercase">
                 {format(parseDay(day), 'EEEE d MMMM yyyy', { locale: fr })}
@@ -126,7 +134,14 @@ export default function Workouts({ focusId }: { focusId?: string }) {
                   <WorkoutRow
                     key={w.id}
                     workout={w}
-                    onEdit={() => setEditing(structuredClone(w))}
+                    onEdit={() => {
+                      setAutoPick(false)
+                      setEditing(structuredClone(w))
+                    }}
+                    onComplete={() => {
+                      setAutoPick(true)
+                      setEditing(structuredClone(w))
+                    }}
                     onDuplicate={async () => {
                       const copy: Workout = {
                         ...structuredClone(w),
@@ -145,6 +160,11 @@ export default function Workouts({ focusId }: { focusId?: string }) {
               </div>
             </div>
           ))}
+          {byDay.length > visibleDays && (
+            <Button full onClick={() => setVisibleDays((n) => n + 25)}>
+              Afficher plus ({byDay.length - visibleDays} jours de plus)
+            </Button>
+          )}
         </div>
       )}
 
@@ -201,8 +221,10 @@ export default function Workouts({ focusId }: { focusId?: string }) {
       {editing && (
         <WorkoutEditor
           workout={editing}
+          autoPick={autoPick}
           onClose={() => {
             setEditing(null)
+            setAutoPick(false)
             if (focusId) navigate('seances')
           }}
           onSaved={() => toast.show('Séance enregistrée')}
@@ -218,15 +240,28 @@ function WorkoutRow({
   workout,
   onEdit,
   onDuplicate,
+  onComplete,
 }: {
   workout: Workout
   onEdit: () => void
   onDuplicate: () => void
+  onComplete: () => void
 }) {
   const data = useSoma()
   const load = workoutLoad(workout, data.loadCtx)
   const setCount = workout.sets?.length ?? 0
   const km = (workout.run?.distanceM ?? workout.cardio?.distanceM ?? 0) / 1000
+  const exerciseNames = useMemo(() => {
+    const names: string[] = []
+    for (const s of workout.sets ?? []) {
+      const n = data.exercises.find((e) => e.id === s.exerciseId)?.name
+      if (n && !names.includes(n)) names.push(n)
+    }
+    return names
+  }, [workout.sets, data.exercises])
+  /* Séance importée sans détail : on propose de la compléter. */
+  const needsDetail =
+    setCount === 0 && ['street', 'muscu', 'abdos'].includes(workout.kind) && !workout.planned
   return (
     <Card>
       <div className="flex items-start justify-between gap-3">
@@ -254,6 +289,12 @@ function WorkoutRow({
               {workout.run.elevationGainM ? ` · ${workout.run.elevationGainM} m D+` : ''}
             </div>
           )}
+          {exerciseNames.length > 0 && (
+            <div className="mt-0.5 truncate text-[0.68rem] text-mist-700">
+              {exerciseNames.slice(0, 4).join(' · ')}
+              {exerciseNames.length > 4 ? ` +${exerciseNames.length - 4}` : ''}
+            </div>
+          )}
           {workout.notes && (
             <div className="mt-1 line-clamp-2 text-[0.68rem] text-mist-700">{workout.notes}</div>
           )}
@@ -268,6 +309,14 @@ function WorkoutRow({
           </IconButton>
         </div>
       </div>
+      {needsDetail && (
+        <button
+          onClick={onComplete}
+          className="mt-2 rounded-lg bg-accent/12 px-2.5 py-1 text-[0.68rem] text-accent hairline"
+        >
+          Compléter la séance →
+        </button>
+      )}
     </Card>
   )
 }
@@ -376,10 +425,12 @@ function WorkoutEditor({
   workout,
   onClose,
   onSaved,
+  autoPick,
 }: {
   workout: Workout
   onClose: () => void
   onSaved: () => void
+  autoPick?: boolean
 }) {
   const data = useSoma()
   const [w, setW] = useState<Workout>(workout)
@@ -486,7 +537,7 @@ function WorkoutEditor({
           </Field>
         </div>
 
-        <Field label="Ressenti">
+        <Field label="Ressenti" group>
           <div className="flex gap-1.5">
             {[1, 2, 3, 4, 5].map((n) => (
               <button
@@ -513,7 +564,7 @@ function WorkoutEditor({
 
         {/* ── Détails par type ── */}
         {(w.kind === 'street' || w.kind === 'muscu' || w.kind === 'abdos' || w.kind === 'mobilite') && (
-          <SetsEditor w={w} patch={patch} />
+          <SetsEditor w={w} patch={patch} autoPick={autoPick} />
         )}
         {w.kind === 'course' && <RunEditor w={w} patch={patch} />}
         {w.kind === 'cardio' && <CardioEditor w={w} patch={patch} />}
@@ -575,9 +626,17 @@ function WorkoutEditor({
 
 /* ── Séries ──────────────────────────────────────────────────────────── */
 
-function SetsEditor({ w, patch }: { w: Workout; patch: (p: Partial<Workout>) => void }) {
+function SetsEditor({
+  w,
+  patch,
+  autoPick,
+}: {
+  w: Workout
+  patch: (p: Partial<Workout>) => void
+  autoPick?: boolean
+}) {
   const data = useSoma()
-  const [picker, setPicker] = useState(false)
+  const [picker, setPicker] = useState(Boolean(autoPick))
   const sets = w.sets ?? []
 
   const grouped = useMemo(() => {
@@ -845,7 +904,7 @@ function RunEditor({ w, patch }: { w: Workout; patch: (p: Partial<Workout>) => v
             suffix="min"
           />
         </Field>
-        <Field label="Allure calculée">
+        <Field label="Allure calculée" group>
           <div className="rounded-xl bg-ink-900/70 px-3.5 py-2.5 text-sm text-accent tnum hairline">
             {pace > 0 ? fmtPace(pace) : '—'}
           </div>

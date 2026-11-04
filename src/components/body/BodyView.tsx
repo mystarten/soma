@@ -192,7 +192,7 @@ export default function BodyView({ compact = false }: { compact?: boolean }) {
               <div className="grid h-full place-items-center text-xs text-mist-700">…</div>
             )
           ) : (
-            <div className="h-full px-2 pt-14 pb-2">
+            <div className="h-full px-2 pt-16 pb-3">
               <Body2D
                 body={body}
                 selected={

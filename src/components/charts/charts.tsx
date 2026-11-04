@@ -100,7 +100,7 @@ export function SmoothLines({
   return (
     <div style={{ height }} className="w-full">
       <ResponsiveContainer>
-        <LineChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: -24 }}>
+        <LineChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: -6 }}>
           <CartesianGrid stroke="#ffffff0a" vertical={false} />
           <XAxis
             dataKey={xKey}
@@ -108,7 +108,7 @@ export function SmoothLines({
             tickFormatter={xKey === 'day' ? shortDay : undefined}
             minTickGap={28}
           />
-          <YAxis {...axis} domain={yDomain ?? ['auto', 'auto']} width={44} />
+          <YAxis {...axis} domain={yDomain ?? ["auto", "auto"]} width={38} />
           <Tooltip
             content={<TooltipBox />}
             labelFormatter={xKey === 'day' ? (v) => shortDay(String(v)) : undefined}
@@ -158,7 +158,7 @@ export function GlowArea({
   return (
     <div style={{ height }} className="w-full">
       <ResponsiveContainer>
-        <AreaChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: -24 }}>
+        <AreaChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: -6 }}>
           <defs>
             <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={color} stopOpacity={0.45} />
@@ -167,7 +167,7 @@ export function GlowArea({
           </defs>
           <CartesianGrid stroke="#ffffff0a" vertical={false} />
           <XAxis dataKey="day" {...axis} tickFormatter={shortDay} minTickGap={28} />
-          <YAxis {...axis} width={44} domain={yDomain ?? ['auto', 'auto']} />
+          <YAxis {...axis} width={38} domain={yDomain ?? ['auto', 'auto']} />
           <Tooltip content={<TooltipBox unit={unit} />} labelFormatter={(v) => shortDay(String(v))} />
           {reference !== undefined && (
             <ReferenceLine y={reference} stroke="#ffffff22" strokeDasharray="4 4" />
@@ -196,6 +196,8 @@ export function Bars({
   unit,
   colorByValue,
   xKey = 'day',
+  hideY,
+  yDomain,
 }: {
   data: Record<string, number | string | null>[]
   series: Serie[]
@@ -204,11 +206,13 @@ export function Bars({
   unit?: string
   colorByValue?: (v: number) => string
   xKey?: string
+  hideY?: boolean
+  yDomain?: [number, number]
 }) {
   return (
     <div style={{ height }} className="w-full">
       <ResponsiveContainer>
-        <BarChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: -24 }} barGap={2}>
+        <BarChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: -6 }} barGap={2}>
           <CartesianGrid stroke="#ffffff0a" vertical={false} />
           <XAxis
             dataKey={xKey}
@@ -216,7 +220,11 @@ export function Bars({
             tickFormatter={xKey === 'day' ? shortDay : undefined}
             minTickGap={18}
           />
-          <YAxis {...axis} width={44} />
+          {hideY ? (
+            <YAxis hide domain={yDomain ?? ['auto', 'auto']} />
+          ) : (
+            <YAxis {...axis} width={38} domain={yDomain ?? ['auto', 'auto']} />
+          )}
           <Tooltip
             content={<TooltipBox unit={unit} />}
             labelFormatter={xKey === 'day' ? (v) => shortDay(String(v)) : undefined}
@@ -281,7 +289,7 @@ export function Correlation({
             dataKey={yKey}
             name={yLabel}
             {...axis}
-            width={44}
+            width={38}
             domain={['auto', 'auto']}
           />
           <Tooltip content={<TooltipBox />} />

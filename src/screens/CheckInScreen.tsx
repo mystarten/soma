@@ -243,7 +243,7 @@ export default function CheckInScreen({ day: dayParam }: { day?: string }) {
                     ['stress', 'Stress'],
                   ] as const
                 ).map(([key, label]) => (
-                  <Field key={key} label={`${label} · ${MOOD_LABELS[draft[key] ?? 3]}`} optional>
+                  <Field key={key} label={`${label} · ${MOOD_LABELS[draft[key] ?? 3]}`} optional group>
                     <div className="flex gap-1.5">
                       {[1, 2, 3, 4, 5].map((n) => (
                         <button

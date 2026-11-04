@@ -79,8 +79,8 @@ function Figure({
 }) {
   const zones = ZONES.filter((z) => z.face === face || z.face === 'both')
   return (
-    <div className="flex-1">
-      <svg viewBox="0 0 100 170" className="h-full w-full" style={{ maxHeight: '58vh' }}>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <svg viewBox="0 0 100 170" className="min-h-0 w-full flex-1" preserveAspectRatio="xMidYMid meet">
         <defs>
           <radialGradient id={`halo-${face}`} cx="50%" cy="40%" r="60%">
             <stop offset="0%" stopColor="#35e3ff" stopOpacity="0.10" />
@@ -112,7 +112,7 @@ function Figure({
         )}
         <ellipse cx="50" cy="167" rx="30" ry="2" fill="none" stroke="#35e3ff" strokeOpacity="0.3" strokeWidth="0.4" />
       </svg>
-      <div className="mt-1 text-center text-[0.65rem] tracking-[0.2em] text-mist-500 uppercase">
+      <div className="pt-2 text-center text-[0.65rem] tracking-[0.2em] text-mist-500 uppercase">
         {title}
       </div>
     </div>

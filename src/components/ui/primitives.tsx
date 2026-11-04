@@ -193,21 +193,25 @@ export function Field({
   hint,
   children,
   optional,
+  group,
 }: {
   label: ReactNode
   hint?: ReactNode
   children: ReactNode
   optional?: boolean
+  /** `true` quand le contenu n'est pas un champ unique (groupe de boutons). */
+  group?: boolean
 }) {
+  const Tag = group ? 'div' : 'label'
   return (
-    <label className="block">
+    <Tag className="block" role={group ? 'group' : undefined}>
       <span className="mb-1.5 flex items-baseline gap-2 text-xs font-medium text-mist-300">
         {label}
         {optional && <span className="text-[0.65rem] text-mist-700">facultatif</span>}
       </span>
       {children}
       {hint && <span className="mt-1 block text-[0.68rem] text-mist-700">{hint}</span>}
-    </label>
+    </Tag>
   )
 }
 

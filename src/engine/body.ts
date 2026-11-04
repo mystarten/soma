@@ -75,6 +75,6 @@ export function isLowPower(): boolean {
   const mem = (navigator as unknown as { deviceMemory?: number }).deviceMemory
   const cores = navigator.hardwareConcurrency ?? 4
   const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false
-  const narrow = window.innerWidth < 900
-  return coarse || narrow || cores <= 4 || (typeof mem === 'number' && mem <= 4)
+  const narrow = window.innerWidth < 820
+  return coarse || narrow || cores <= 2 || (typeof mem === 'number' && mem <= 2)
 }
