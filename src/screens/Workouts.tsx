@@ -70,9 +70,21 @@ export default function Workouts({ focusId }: { focusId?: string }) {
   const toast = useToast()
 
   useEffect(() => {
-    if (!focusId) return
+    if (!focusId?.startsWith('new:')) return
+    const day = focusId.slice(4)
+    const w = emptyWorkout()
+    const d = parseDay(day)
+    d.setHours(18, 0, 0, 0)
+    w.day = day
+    w.startedAt = d.toISOString()
+    setAutoPick(false)
+    setEditing(w)
+  }, [focusId])
+
+  useEffect(() => {
+    if (!focusId || focusId.startsWith('new:')) return
     const w = data.workouts.find((x) => x.id === focusId)
-    if (w) setEditing(structuredClone(w))
+    if (w) setEditing((cur) => cur ?? structuredClone(w))
   }, [focusId, data.workouts])
 
   const byDay = useMemo(() => {

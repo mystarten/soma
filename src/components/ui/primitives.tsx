@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import {
   createContext,
   useContext,
@@ -295,7 +296,7 @@ export function Stepper({
   const v = value ?? 0
   const set = (n: number) => onChange(Math.min(max, Math.max(min, Number(n.toFixed(precision)))))
   return (
-    <div className="flex items-center gap-1 rounded-xl bg-ink-900/70 p-1 hairline">
+    <div className="flex w-full min-w-0 items-center gap-1 rounded-xl bg-ink-900/70 p-1 hairline">
       <button
         type="button"
         aria-label="Diminuer"
@@ -309,7 +310,7 @@ export function Stepper({
         inputMode="decimal"
         value={value ?? ''}
         onChange={(e) => (e.target.value === '' ? onChange(min) : set(Number(e.target.value)))}
-        className="min-w-0 flex-1 bg-transparent text-center text-base font-medium text-mist-100 tnum outline-none"
+        className="w-0 min-w-0 flex-1 bg-transparent text-center text-base font-medium text-mist-100 tnum outline-none"
       />
       {suffix && <span className="pr-1 text-xs text-mist-500">{suffix}</span>}
       <button
@@ -425,7 +426,7 @@ export function Sheet({
   }, [open, onClose])
 
   if (!open) return null
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       <div
         className="absolute inset-0 bg-ink-950/75 backdrop-blur-sm"
@@ -435,7 +436,7 @@ export function Sheet({
       <div
         role="dialog"
         aria-modal="true"
-        className={`glass-strong anim-in relative flex max-h-[92vh] w-full flex-col rounded-t-3xl sm:rounded-3xl ${
+        className={`glass-strong anim-in relative flex max-h-[90dvh] w-full flex-col rounded-t-3xl sm:rounded-3xl ${
           wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'
         }`}
         style={{ paddingBottom: 'var(--safe-bottom)' }}
@@ -451,7 +452,8 @@ export function Sheet({
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">{children}</div>
         {footer && <div className="border-t border-white/8 px-5 py-3">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

@@ -87,7 +87,7 @@ export default function CalendarScreen({ day: dayParam }: { day?: string }) {
       DayKey,
       {
         recovery?: number
-        kinds: { kind: WorkoutKind; planned: boolean }[]
+        kinds: { kind: WorkoutKind; planned: boolean; title: string }[]
         load: number
         missed: boolean
         unplanned: boolean
@@ -107,7 +107,11 @@ export default function CalendarScreen({ day: dayParam }: { day?: string }) {
       const plannedWorkout = workouts.find((w) => w.planned)
       map.set(d, {
         recovery: checkin?.recovery,
-        kinds: workouts.map((w) => ({ kind: w.kind, planned: !!w.planned })),
+        kinds: workouts.map((w) => ({
+          kind: w.kind,
+          planned: !!w.planned,
+          title: w.title || WORKOUT_KIND_LABEL[w.kind],
+        })),
         load: dayLoad(d, data.workouts, data.checkinByDay, data.loadCtx).load,
         missed,
         unplanned,
@@ -187,7 +191,7 @@ export default function CalendarScreen({ day: dayParam }: { day?: string }) {
                 onClick={() => setSelected(d)}
                 className={`relative flex flex-col items-center gap-1 rounded-xl py-2 transition active:scale-95 ${
                   inMonth ? '' : 'opacity-35'
-                } ${view === 'semaine' ? 'min-h-[5.5rem]' : 'min-h-[3.4rem]'}`}
+                } ${view === 'semaine' ? 'min-h-[6.5rem]' : 'min-h-[3.4rem] sm:min-h-[5.6rem]'}`}
                 style={{
                   background: recoveryTint(i.recovery),
                   boxShadow: isToday
@@ -196,7 +200,7 @@ export default function CalendarScreen({ day: dayParam }: { day?: string }) {
                 }}
               >
                 <span className="text-[0.72rem] text-mist-100 tnum">{parseDay(d).getDate()}</span>
-                <span className="flex min-h-[0.5rem] flex-wrap justify-center gap-0.5">
+                <span className="flex min-h-[0.5rem] flex-wrap justify-center gap-0.5 sm:hidden">
                   {i.kinds.slice(0, 4).map((k, n) => (
                     <Dot
                       key={n}
@@ -204,6 +208,23 @@ export default function CalendarScreen({ day: dayParam }: { day?: string }) {
                       size={view === 'semaine' ? 7 : 5}
                     />
                   ))}
+                </span>
+                <span className="hidden w-full flex-col gap-0.5 px-1 sm:flex">
+                  {i.kinds.slice(0, 3).map((k, n) => (
+                    <span
+                      key={n}
+                      className="truncate rounded px-1 py-px text-left text-[0.62rem] leading-tight"
+                      style={{
+                        background: `${k.planned ? '#4f5f7a' : KIND_COLOR[k.kind]}26`,
+                        color: k.planned ? '#9aa9c2' : KIND_COLOR[k.kind],
+                      }}
+                    >
+                      {k.title}
+                    </span>
+                  ))}
+                  {i.kinds.length > 3 && (
+                    <span className="text-[0.58rem] text-mist-700">+{i.kinds.length - 3}</span>
+                  )}
                 </span>
                 {i.missed && (
                   <span
@@ -240,6 +261,8 @@ export default function CalendarScreen({ day: dayParam }: { day?: string }) {
           </span>
         </div>
       </Card>
+
+      <PeriodList from={bounds.start} to={bounds.end} view={view} />
 
       {conflicts.length > 0 && (
         <Card className="mt-3">
@@ -310,6 +333,55 @@ export default function CalendarScreen({ day: dayParam }: { day?: string }) {
   )
 }
 
+/* ── Liste des séances faites sur la période ─────────────────────────── */
+
+function PeriodList({ from, to, view }: { from: DayKey; to: DayKey; view: 'mois' | 'semaine' }) {
+  const data = useSoma()
+  const list = useMemo(
+    () =>
+      data.workouts
+        .filter((w) => !w.planned && w.day >= from && w.day <= to)
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt)),
+    [data.workouts, from, to],
+  )
+  const minutes = list.reduce((s, w) => s + w.durationMin, 0)
+  const km = list.reduce((s, w) => s + (w.run?.distanceM ?? w.cardio?.distanceM ?? 0) / 1000, 0)
+  return (
+    <Card
+      className="mt-3"
+      title={view === 'mois' ? 'Séances du mois' : 'Séances de la semaine'}
+      subtitle={`${list.length} séance${list.length > 1 ? 's' : ''} · ${Math.round(minutes)} min${
+        km > 0.5 ? ` · ${km.toFixed(1)} km` : ''
+      }`}
+    >
+      <div className="mt-3 space-y-1.5">
+        {list.map((w) => (
+          <button
+            key={w.id}
+            onClick={() => navigate('seances', w.id)}
+            className="flex w-full items-center gap-3 rounded-xl bg-white/4 px-3 py-2 text-left hairline"
+          >
+            <Dot color={KIND_COLOR[w.kind]} size={8} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm text-mist-100">
+                {w.title || WORKOUT_KIND_LABEL[w.kind]}
+              </span>
+              <span className="text-[0.68rem] text-mist-700">
+                {format(parseDay(w.day), 'EEE d MMM', { locale: fr })} ·{' '}
+                {format(new Date(w.startedAt), 'HH:mm')} · {w.durationMin} min
+                {w.rpe ? ` · RPE ${w.rpe}` : ''}
+              </span>
+            </span>
+          </button>
+        ))}
+        {!list.length && (
+          <p className="py-3 text-center text-xs text-mist-700">Aucune séance sur cette période.</p>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 /* ── Détail d'un jour ────────────────────────────────────────────────── */
 
 function DaySheet({ day, onClose }: { day: DayKey | null; onClose: () => void }) {
@@ -330,7 +402,7 @@ function DaySheet({ day, onClose }: { day: DayKey | null; onClose: () => void })
           <Button variant="primary" full onClick={() => navigate('checkin', day)}>
             {checkin ? 'Modifier le check-in' : 'Ajouter un check-in'}
           </Button>
-          <Button onClick={() => navigate('seances')}>Séances</Button>
+          <Button onClick={() => navigate('seances', `new:${day}`)}>+ Séance</Button>
         </div>
       }
     >

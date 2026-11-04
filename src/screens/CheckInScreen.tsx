@@ -20,6 +20,7 @@ import {
 import { saveCheckIn } from '../db/repo'
 import { addDayKey, parseDay, todayKey } from '../engine/time'
 import { ZONE_SHORT, fatigueColor } from '../engine/fatigueConfig'
+import { WORKOUT_KIND_LABEL } from '../engine/muscleMap'
 import { navigate } from '../lib/router'
 
 const recoveryColor = (v: number) => (v >= 67 ? '#41e08a' : v >= 34 ? '#ffc24b' : '#ff5a5a')
@@ -34,10 +35,11 @@ function timeValue(iso?: string) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-function isoFromTime(day: string, value: string, previousDay = false) {
+/** Coucher : après midi → la veille au soir ; avant midi → après minuit, le jour même. */
+function isoBedtime(day: string, value: string) {
   if (!value) return undefined
   const [h, m] = value.split(':').map(Number)
-  const base = parseDay(previousDay ? addDayKey(day, -1) : day)
+  const base = parseDay(h >= 12 ? addDayKey(day, -1) : day)
   base.setHours(h, m, 0, 0)
   return base.toISOString()
 }
@@ -68,8 +70,27 @@ export default function CheckInScreen({ day: dayParam }: { day?: string }) {
 
   const set = <K extends keyof CheckIn>(key: K, value: CheckIn[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))
-  const setSleep = (patch: Partial<NonNullable<CheckIn['sleep']>>) =>
-    setDraft((d) => ({ ...d, sleep: { ...d.sleep, ...patch } }))
+
+  /* Le réveil se déduit : coucher + durée. */
+  const withWake = (sleep: NonNullable<CheckIn['sleep']>): NonNullable<CheckIn['sleep']> => {
+    if (sleep.bedtime && typeof sleep.hours === 'number') {
+      return {
+        ...sleep,
+        wakeTime: new Date(new Date(sleep.bedtime).getTime() + sleep.hours * 3_600_000).toISOString(),
+      }
+    }
+    return sleep
+  }
+  const setHours = (hours: number) =>
+    setDraft((d) => ({ ...d, sleep: withWake({ ...d.sleep, hours }) }))
+  const setBedtime = (value: string) =>
+    setDraft((d) => ({
+      ...d,
+      sleep: withWake({ ...d.sleep, bedtime: isoBedtime(day, value) }),
+    }))
+  const yesterday = data.workouts
+    .filter((w) => w.day === addDayKey(day, -1) && !w.planned)
+    .sort((a, b) => a.startedAt.localeCompare(b.startedAt))
 
   const recovery = draft.recovery ?? 60
   const sorenessMap = useMemo(() => {
@@ -132,13 +153,20 @@ export default function CheckInScreen({ day: dayParam }: { day?: string }) {
         </div>
       </Card>
 
-      {/* ── Sommeil ── */}
+      {/* ── Sommeil : coucher + durée, c'est tout ── */}
       <Card title="Sommeil" subtitle="La nuit qui vient de se terminer">
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Field label="Heure de coucher">
+            <TextInput
+              type="time"
+              value={timeValue(draft.sleep?.bedtime)}
+              onChange={(e) => setBedtime(e.target.value)}
+            />
+          </Field>
           <Field label="Heures de sommeil">
             <Stepper
               value={draft.sleep?.hours ?? 7.5}
-              onChange={(v) => setSleep({ hours: v })}
+              onChange={setHours}
               step={0.25}
               min={0}
               max={14}
@@ -146,36 +174,44 @@ export default function CheckInScreen({ day: dayParam }: { day?: string }) {
               suffix="h"
             />
           </Field>
-          <Field label={`Qualité ressentie · ${draft.sleep?.quality ?? 70} %`}>
-            <RangeSlider
-              value={draft.sleep?.quality ?? 70}
-              onChange={(v) => setSleep({ quality: v })}
-              color="#9b7bff"
-              label="Qualité du sommeil"
-            />
-          </Field>
-          <Field label="Coucher">
-            <TextInput
-              type="time"
-              value={timeValue(draft.sleep?.bedtime)}
-              onChange={(e) => setSleep({ bedtime: isoFromTime(day, e.target.value, true) })}
-            />
-          </Field>
-          <Field label="Lever">
-            <TextInput
-              type="time"
-              value={timeValue(draft.sleep?.wakeTime)}
-              onChange={(e) => setSleep({ wakeTime: isoFromTime(day, e.target.value) })}
-            />
-          </Field>
-          <Field label="Réveils nocturnes" optional>
-            <Stepper
-              value={draft.sleep?.awakenings ?? 0}
-              onChange={(v) => setSleep({ awakenings: v })}
-              min={0}
-              max={20}
-            />
-          </Field>
+        </div>
+        {draft.sleep?.wakeTime && (
+          <p className="mt-2 text-[0.7rem] text-mist-700">
+            Réveil estimé vers {timeValue(draft.sleep.wakeTime)}
+          </p>
+        )}
+      </Card>
+
+      {/* ── Séance d'hier ── */}
+      <Card
+        title="Séance d’hier"
+        subtitle={format(parseDay(addDayKey(day, -1)), 'EEEE d MMMM', { locale: fr })}
+      >
+        <div className="mt-3 space-y-1.5">
+          {yesterday.map((w) => (
+            <button
+              key={w.id}
+              onClick={() => navigate('seances', w.id)}
+              className="flex w-full items-center justify-between gap-3 rounded-xl bg-white/4 px-3 py-2.5 text-left hairline"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm text-mist-100">
+                  {w.title || WORKOUT_KIND_LABEL[w.kind]}
+                </span>
+                <span className="text-[0.68rem] text-mist-700">
+                  {format(new Date(w.startedAt), 'HH:mm')} · {w.durationMin} min
+                  {w.rpe ? ` · RPE ${w.rpe}` : ''}
+                </span>
+              </span>
+              <span className="text-xs text-accent">Modifier</span>
+            </button>
+          ))}
+          {!yesterday.length && (
+            <p className="py-1 text-xs text-mist-700">Aucune séance enregistrée hier.</p>
+          )}
+          <Button full onClick={() => navigate('seances', `new:${addDayKey(day, -1)}`)}>
+            + Ajouter une séance d’hier
+          </Button>
         </div>
       </Card>
 
