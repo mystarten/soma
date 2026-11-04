@@ -1,0 +1,28 @@
+# Dépendances & build
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+
+# Environnement — aucune clé ne doit entrer dans le dépôt
+.env
+.env.*
+!.env.example
+
+# MES DONNÉES — ne doivent jamais être commitées (le dépôt est public)
+whoop-export/
+data/
+*.csv
+*.zip
+soma-sauvegarde-*.json
+soma-jours-*.json
+
+# Outils
+.DS_Store
+Thumbs.db
+*.log
+coverage/
+.idea/
+.vscode/*
+!.vscode/extensions.json
