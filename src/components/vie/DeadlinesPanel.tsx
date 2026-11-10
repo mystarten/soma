@@ -129,7 +129,7 @@ export default function DeadlinesPanel({ limit = 5, full = false }: { limit?: nu
   )
 }
 
-function DeadlineEditor({ deadline, onClose }: { deadline: Deadline; onClose: () => void }) {
+export function DeadlineEditor({ deadline, onClose }: { deadline: Deadline; onClose: () => void }) {
   const [d, setD] = useState<Deadline>(deadline)
   const isNew = !deadline.title
   return (

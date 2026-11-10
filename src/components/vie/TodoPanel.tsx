@@ -55,24 +55,26 @@ export default function TodoPanel({ initialView = 'today' }: { initialView?: Tas
   const done = useMemo(() => (view === 'today' ? doneToday(data.tasks, data.today) : []), [data.tasks, view, data.today])
 
   const add = async () => {
-    if (!preview?.title) return
+    const p = preview
+    if (!p?.title) return
+    /* On vide tout de suite : ce que tu tapes ensuite ne doit jamais être effacé. */
+    setText('')
     const now = new Date().toISOString()
+    /* La tâche créée doit rester visible : on bascule sur une vue qui la contient. */
+    if (view === 'today' && p.due !== data.today) setView(p.due ? 'week' : 'all')
+    if (view === 'overdue') setView(p.due === data.today ? 'today' : 'all')
+    inputRef.current?.focus()
     await saveTask({
       id: uid('task'),
-      title: preview.title,
-      due: preview.due,
-      dueTime: preview.dueTime,
-      priority: preview.priority,
-      category: preview.category,
+      title: p.title,
+      due: p.due,
+      dueTime: p.dueTime,
+      priority: p.priority,
+      category: p.category,
       status: 'a_faire',
       createdAt: now,
       updatedAt: now,
     })
-    setText('')
-    /* La tâche créée doit rester visible : on bascule sur une vue qui la contient. */
-    if (view === 'today' && preview.due !== data.today) setView(preview.due ? 'week' : 'all')
-    if (view === 'overdue') setView(preview.due === data.today ? 'today' : 'all')
-    inputRef.current?.focus()
   }
 
   const toggle = async (t: Task) => {

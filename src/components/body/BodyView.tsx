@@ -25,6 +25,7 @@ import type { BodyLayer } from './Body3D'
 import Body2D from './Body2D'
 
 const Body3D = lazy(() => import('./Body3D'))
+const NeuralOverlay = lazy(() => import('../neural/NeuralOverlay'))
 
 type Selection = MuscleZone | 'cerveau' | 'coeur' | Joint | null
 
@@ -61,6 +62,7 @@ export default function BodyView({
   const [dayOffset, setDayOffset] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [render3d, setRender3d] = useState(false)
+  const [neural, setNeural] = useState(false)
   const raf = useRef(0)
 
   const webgl = useMemo(() => hasWebGL(), [])
@@ -176,6 +178,11 @@ export default function BodyView({
           }}
         >
           {hero && <div className="hero-scan" aria-hidden />}
+          {!compact && use3d && (
+            <p className="pointer-events-none absolute inset-x-0 bottom-2 z-10 text-center text-[0.62rem] tracking-wide text-mist-700">
+              {low ? 'Écarte deux doigts' : 'Zoome à la molette sur la tête'} pour entrer dans le cerveau
+            </p>
+          )}
           {use3d ? (
             render3d ? (
               <Suspense
@@ -197,6 +204,9 @@ export default function BodyView({
                   jointLoad={jointColors}
                   quality={low ? 'low' : 'high'}
                   compact={compact}
+                  hero={hero}
+                  onDive={compact ? undefined : () => setNeural(true)}
+                  paused={neural}
                 />
               </Suspense>
             ) : (
@@ -219,7 +229,19 @@ export default function BodyView({
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-2">
-          <Segmented value={layer} onChange={setLayer} options={LAYERS} size="sm" />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Segmented value={layer} onChange={setLayer} options={LAYERS} size="sm" />
+            {!compact && (
+              <button
+                onClick={() => setNeural(true)}
+                className="flex items-center gap-1.5 rounded-xl bg-accent/12 px-3 py-1.5 text-xs text-accent shadow-[inset_0_0_0_1px_var(--accent-soft)] transition active:scale-95"
+                title="Ouvrir le réseau de neurones (ou zoome sur la tête)"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_var(--accent)]" />
+                Réseau
+              </button>
+            )}
+          </div>
           {use3d && (
             <div className="flex gap-1">
               <Button
@@ -354,6 +376,12 @@ export default function BodyView({
       )}
       </div>
         </>
+      )}
+
+      {neural && (
+        <Suspense fallback={null}>
+          <NeuralOverlay onClose={() => setNeural(false)} />
+        </Suspense>
       )}
 
       <DetailSheet

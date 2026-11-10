@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Bloom, EffectComposer } from '@react-three/postprocessing'
 import * as THREE from 'three'
@@ -31,7 +31,25 @@ export interface Body3DProps {
   jointLoad: Record<Joint, { ratio: number; color: string }>
   quality: 'high' | 'low'
   compact?: boolean
+  /** Écran d'accueil : la molette fait défiler la page, sauf au-dessus de la tête. */
+  hero?: boolean
+  /** Appelé quand la caméra a plongé dans le cerveau. */
+  onDive?: () => void
+  /** Rendu suspendu (réseau de neurones ouvert par-dessus). */
+  paused?: boolean
 }
+
+/** État partagé de la plongée vers le cerveau. */
+interface DiveState {
+  focus: number
+  target: number
+  fired: boolean
+  headX: number
+  headY: number
+  headR: number
+}
+
+const HEAD_Y = 1.64
 
 /* ── Géométries ───────────────────────────────────────────────────────── */
 
@@ -191,12 +209,14 @@ function Brain({
   onSelect,
   seg,
   clickGuard,
+  dive,
 }: {
   score: number
   selected: boolean
   onSelect: () => void
   seg: number
   clickGuard: () => boolean
+  dive: React.RefObject<DiveState>
 }) {
   const material = useMemo(() => createJarvisMaterial({ opacity: 0.95, grid: 0.3, gridScale: 22, gain: 1.4 }), [])
   const arcMaterial = useMemo(
@@ -219,8 +239,12 @@ function Brain({
     material.uniforms.uSelected.value = selected ? 1 : 0
     /* Rythme de pulsation lié au score : plus le sommeil est bon, plus c'est calme. */
     const speed = 1.1 + (1 - clamp(score, 0, 100) / 100) * 2.4
-    const k = 1 + Math.sin(s.clock.elapsedTime * speed) * 0.035
+    const f = dive.current?.focus ?? 0
+    const k = (1 + Math.sin(s.clock.elapsedTime * (speed + f * 5)) * 0.035) * (1 + f * 0.12)
     if (group.current) group.current.scale.setScalar(k)
+    /* Plus on s'approche, plus le cerveau s'allume. */
+    material.uniforms.uGain.value = 1.4 + f * 3
+    arcMaterial.uniforms.uGain.value = 1.6 + f * 3
     arcMaterial.uniforms.uTime.value = s.clock.elapsedTime
   })
 
@@ -437,22 +461,29 @@ function Rig({
   zoom,
   children,
   compact,
+  dive,
+  onDive,
 }: {
   azimuth: number
   drag: React.RefObject<number>
   zoom: React.RefObject<number>
   children: React.ReactNode
   compact?: boolean
+  dive: React.RefObject<DiveState>
+  onDive?: () => void
 }) {
   const group = useRef<THREE.Group>(null)
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera
   const size = useThree((s) => s.size)
-  const target = useMemo(() => new THREE.Vector3(0, BODY_CENTER_Y, 0), [])
+  const look = useMemo(() => new THREE.Vector3(), [])
+  const want = useMemo(() => new THREE.Vector3(), [])
+  const probe = useMemo(() => new THREE.Vector3(), [])
 
   useFrame(() => {
     if (!group.current) return
-    const want = azimuth + drag.current
-    group.current.rotation.y += (want - group.current.rotation.y) * 0.12
+    const d = dive.current
+    const wantRot = azimuth + drag.current
+    group.current.rotation.y += (wantRot - group.current.rotation.y) * 0.12
 
     /* Cadrage automatique : le corps entier tient toujours dans le cadre. */
     const fovRad = (camera.fov * Math.PI) / 180
@@ -461,20 +492,43 @@ function Rig({
     const halfW = BODY_HALF_WIDTH * 1.25
     const distH = halfH / Math.tan(fovRad / 2)
     const distW = halfW / (Math.tan(fovRad / 2) * aspect)
-    const dist = Math.max(distH, distW) * zoom.current
-    camera.position.lerp(new THREE.Vector3(0, BODY_CENTER_Y, dist), 0.15)
-    camera.lookAt(target)
+    const base = Math.max(distH, distW) * zoom.current
+
+    /* Plongée : la caméra glisse vers la tête puis traverse le crâne. */
+    d.focus += (d.target - d.focus) * 0.14
+    const e = d.focus * d.focus * (3 - 2 * d.focus)
+    const lookY = BODY_CENTER_Y + (HEAD_Y - BODY_CENTER_Y) * Math.min(1, e * 1.6)
+    const dist = base + (0.16 - base) * e
+    want.set(0, lookY, dist)
+    camera.position.lerp(want, 0.2)
+    look.set(0, lookY, 0)
+    camera.lookAt(look)
+
+    /* Où est la tête à l'écran (pour savoir si la molette vise le cerveau). */
+    probe.set(0, HEAD_Y, 0).project(camera)
+    d.headX = (probe.x * 0.5 + 0.5) * size.width
+    d.headY = (-probe.y * 0.5 + 0.5) * size.height
+    probe.set(0, HEAD_Y + 0.11, 0).project(camera)
+    d.headR = Math.abs((-probe.y * 0.5 + 0.5) * size.height - d.headY)
+
+    if (!d.fired && d.focus > 0.96) {
+      d.fired = true
+      d.target = 0
+      onDive?.()
+    }
+    if (d.fired && d.focus < 0.4) d.fired = false
   })
 
   return <group ref={group}>{children}</group>
 }
 
-function Throttle({ fps }: { fps: number }) {
+function Throttle({ fps, paused }: { fps: number; paused?: boolean }) {
   const invalidate = useThree((s) => s.invalidate)
   useEffect(() => {
+    if (paused) return
     const t = window.setInterval(() => invalidate(), 1000 / fps)
     return () => window.clearInterval(t)
-  }, [fps, invalidate])
+  }, [fps, invalidate, paused])
   return null
 }
 
@@ -486,7 +540,38 @@ export default function Body3D(props: Body3DProps) {
   const drag = useRef(0)
   const zoom = useRef(1)
   const pointer = useRef<{ x: number; y: number; moved: number } | null>(null)
-  const [, force] = useState(0)
+  const dive = useRef<DiveState>({ focus: 0, target: 0, fired: false, headX: 0, headY: 0, headR: 40 })
+  const touches = useRef(new Map<number, { x: number; y: number }>())
+  const pinch = useRef<number | null>(null)
+  const wrap = useRef<HTMLDivElement>(null)
+  const heroRef = useRef(props.hero)
+  heroRef.current = props.hero
+
+  /* Molette : au-dessus de la tête → plongée ; ailleurs → zoom (ou défilement sur l'accueil). */
+  useEffect(() => {
+    const el = wrap.current
+    if (!el) return
+    const onWheelNative = (e: WheelEvent) => {
+      const rect = el.getBoundingClientRect()
+      const d = dive.current
+      const x = e.clientX - rect.left
+      const y = e.clientY - rect.top
+      const near = Math.hypot(x - d.headX, y - d.headY) < Math.max(60, d.headR * 2.4)
+      const step = Math.max(-0.4, Math.min(0.4, -e.deltaY / 420))
+      if (step > 0 && (near || d.target > 0.02)) {
+        e.preventDefault()
+        d.target = clamp(d.target + step, 0, 1)
+      } else if (step < 0 && d.target > 0.02) {
+        e.preventDefault()
+        d.target = clamp(d.target + step, 0, 1)
+      } else if (!heroRef.current) {
+        e.preventDefault()
+        zoom.current = clamp(zoom.current + e.deltaY * 0.0012, 0.72, 1.6)
+      }
+    }
+    el.addEventListener('wheel', onWheelNative, { passive: false })
+    return () => el.removeEventListener('wheel', onWheelNative)
+  }, [])
 
   const showMuscles = layer === 'muscles' || layer === 'tout'
   const showOrgans = layer === 'organes' || layer === 'tout'
@@ -496,9 +581,22 @@ export default function Body3D(props: Body3DProps) {
   const clickGuard = () => (pointer.current?.moved ?? 99) < 9
 
   const onPointerDown = (e: React.PointerEvent) => {
-    pointer.current = { x: e.clientX, y: e.clientY, moved: 0 }
+    touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    pointer.current = { x: e.clientX, y: e.clientY, moved: touches.current.size > 1 ? 99 : 0 }
   }
   const onPointerMove = (e: React.PointerEvent) => {
+    if (touches.current.has(e.pointerId)) touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    /* Pincement à deux doigts : écarter = plonger dans le cerveau. */
+    if (touches.current.size === 2) {
+      const [a, b] = [...touches.current.values()]
+      const dist = Math.hypot(a.x - b.x, a.y - b.y)
+      if (pinch.current !== null) {
+        dive.current.target = clamp(dive.current.target + (dist - pinch.current) / 220, 0, 1)
+      }
+      pinch.current = dist
+      if (pointer.current) pointer.current.moved = 99
+      return
+    }
     const p = pointer.current
     if (!p || e.buttons === 0) return
     const dx = e.clientX - p.x
@@ -507,17 +605,20 @@ export default function Body3D(props: Body3DProps) {
     p.y = e.clientY
     drag.current += dx * 0.011
   }
-  const onPointerUp = () => {
+  const onPointerUp = (e: React.PointerEvent) => {
+    touches.current.delete(e.pointerId)
+    if (touches.current.size < 2) {
+      pinch.current = null
+      /* Pincement relâché à mi-chemin : on revient doucement au corps. */
+      if (dive.current.target < 0.96) dive.current.target = dive.current.target > 0.6 ? 1 : 0
+    }
     window.setTimeout(() => {
       pointer.current = null
     }, 0)
   }
-  const onWheel = (e: React.WheelEvent) => {
-    zoom.current = clamp(zoom.current + e.deltaY * 0.0012, 0.72, 1.6)
-    force((n) => n + 1)
-  }
 
   return (
+    <div ref={wrap} className="h-full w-full">
     <Canvas
       dpr={quality === 'high' ? [1, 2] : [1, 1.5]}
       frameloop="demand"
@@ -528,21 +629,21 @@ export default function Body3D(props: Body3DProps) {
         powerPreference: 'high-performance',
         failIfMajorPerformanceCaveat: false,
       }}
-      style={{ touchAction: 'none' }}
+      style={{ touchAction: props.hero ? 'pan-y' : 'none' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
       onPointerLeave={onPointerUp}
-      onWheel={onWheel}
       onCreated={({ gl, scene }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping
         gl.toneMappingExposure = 1.05
         scene.background = null
       }}
     >
-      <Throttle fps={quality === 'high' ? 60 : 30} />
+      <Throttle fps={quality === 'high' ? 60 : 30} paused={props.paused} />
       <ambientLight intensity={0.5} />
-      <Rig azimuth={props.azimuth} drag={drag} zoom={zoom} compact={compact}>
+      <Rig azimuth={props.azimuth} drag={drag} zoom={zoom} compact={compact} dive={dive} onDive={props.onDive}>
         <Shell seg={seg} opacity={layer === 'organes' ? 0.22 : 0.3} />
         {showMuscles && (
           <Muscles
@@ -562,6 +663,7 @@ export default function Body3D(props: Body3DProps) {
               onSelect={() => props.onSelect('cerveau')}
               seg={seg}
               clickGuard={clickGuard}
+              dive={dive}
             />
             <Heart
               score={props.cardioScore}
@@ -589,5 +691,6 @@ export default function Body3D(props: Body3DProps) {
         </EffectComposer>
       )}
     </Canvas>
+    </div>
   )
 }
