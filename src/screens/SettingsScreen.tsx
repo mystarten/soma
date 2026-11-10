@@ -1206,7 +1206,7 @@ function TemplateEditor({
                   <Stepper
                     value={item.sets}
                     onChange={(v) =>
-                      setT({ ...t, items: t.items.map((x, n) => (n === i ? { ...x, sets: v } : x)) })
+                      setT({ ...t, items: t.items.map((x, n) => (n === i ? { ...x, sets: v, setList: undefined } : x)) })
                     }
                     min={1}
                     max={30}
@@ -1222,8 +1222,8 @@ function TemplateEditor({
                         items: t.items.map((x, n) =>
                           n === i
                             ? ex?.kind === 'static'
-                              ? { ...x, holdSec: v }
-                              : { ...x, reps: v }
+                              ? { ...x, holdSec: v, setList: undefined }
+                              : { ...x, reps: v, setList: undefined }
                             : x,
                         ),
                       })

@@ -12,7 +12,8 @@ import type {
   WorkoutTemplate,
   WorkoutTypeDef,
 } from '../types'
-import { db, defaultSettings, nowIso, withSettingsDefaults } from './db'
+import { db, defaultSettings, nowIso, uid, withSettingsDefaults } from './db'
+import { findTemplateByName, isRememberable, workoutToTemplate } from '../engine/templates'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Écritures : toujours dans Dexie d'abord, puis mise en file pour Supabase.
@@ -85,6 +86,27 @@ export async function saveTemplate(row: WorkoutTemplate) {
   await db.templates.put(next)
   await enqueue('templates', next.id, next, 'upsert')
   return next
+}
+
+/** Mémorise une séance faite à la main pour pouvoir la refaire en un clic. */
+export async function rememberWorkout(w: Workout) {
+  if (!isRememberable(w)) return null
+  const existing = findTemplateByName(await db.templates.toArray(), w.title ?? '')
+  /* On ne remplace pas une séance mémorisée par une plus ancienne. */
+  if (existing?.lastDoneAt && existing.lastDoneAt > w.startedAt) return existing
+  const tpl = workoutToTemplate(w, existing, () => uid('tpl'))
+  return tpl ? saveTemplate(tpl) : null
+}
+
+/** Une seule fois : mémorise les séances déjà saisies (les plus récentes l'emportent). */
+export async function backfillTemplates() {
+  if ((await db.meta.get('tpl_backfill_v1'))?.value) return
+  const all = (await db.workouts.toArray())
+    .filter(isRememberable)
+    .sort((a, b) => a.startedAt.localeCompare(b.startedAt))
+  /* Ta vraie séance remplace un modèle de départ du même nom (« Pull », « Push »…). */
+  for (const w of all) await rememberWorkout(w)
+  await db.meta.put({ key: 'tpl_backfill_v1', value: new Date().toISOString() })
 }
 
 export async function deleteTemplate(id: string) {

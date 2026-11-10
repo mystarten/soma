@@ -2,7 +2,7 @@ import type { CustomMetric, Goal, Settings, WeekdayPlan, WorkoutTypeDef } from '
 import { EXERCISE_LIBRARY, TEMPLATE_SEEDS } from '../engine/muscleMap'
 import { addDayKey, todayKey } from '../engine/time'
 import { db, nowIso, uid } from './db'
-import { getSettings } from './repo'
+import { backfillTemplates, getSettings } from './repo'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Amorçage du premier lancement : bibliothèque d'exercices, modèles,
@@ -152,6 +152,11 @@ export const STARTING_REFERENCES: Settings['references'] = [
 ]
 
 export async function ensureSeeded(): Promise<void> {
+  await seedFirstRun()
+  await backfillTemplates()
+}
+
+async function seedFirstRun(): Promise<void> {
   const flag = await db.meta.get('seeded_v1')
   const existing = await db.exercises.count()
   if (flag && existing > 0) return

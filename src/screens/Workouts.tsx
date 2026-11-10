@@ -11,6 +11,7 @@ import type {
   SetEntry,
   Workout,
   WorkoutKind,
+  WorkoutTemplate,
 } from '../types'
 import {
   Badge,
@@ -29,7 +30,7 @@ import {
   Toggle,
   useToast,
 } from '../components/ui/primitives'
-import { deleteWorkout, saveWorkout } from '../db/repo'
+import { deleteTemplate, deleteWorkout, rememberWorkout, saveWorkout } from '../db/repo'
 import { uid } from '../db/db'
 import {
   CARDIO_MODALITIES,
@@ -40,6 +41,13 @@ import { exerciseRecords, runRecords, workoutLoad } from '../engine/load'
 import { fmtClock, fmtPace, parseDay, todayKey } from '../engine/time'
 import { estimated1RM, set1RM } from '../engine/strength'
 import { groupByExercise, summarizeSets } from '../engine/sets'
+import {
+  DEFAULT_REST_SEC,
+  sortTemplates,
+  templateItemSets,
+  workoutFromTemplate,
+} from '../engine/templates'
+import { agoLabel } from '../engine/suggest'
 import { navigate } from '../lib/router'
 
 const KINDS: WorkoutKind[] = ['street', 'muscu', 'course', 'cardio', 'abdos', 'mobilite', 'custom']
@@ -107,7 +115,7 @@ export default function Workouts({ focusId }: { focusId?: string }) {
           onChange={setTab}
           options={[
             { value: 'journal', label: 'Journal' },
-            { value: 'modeles', label: 'Modèles' },
+            { value: 'modeles', label: 'Mes séances' },
             { value: 'records', label: 'Records' },
           ]}
         />
@@ -168,7 +176,7 @@ export default function Workouts({ focusId }: { focusId?: string }) {
                       }
                       setAutoPick(false)
                       setEditing(copy)
-                      toast.show('Copie ouverte : choisis la date puis Enregistrer')
+                      toast.show('Modifie si besoin, puis Enregistrer')
                     }}
                   />
                 ))}
@@ -184,51 +192,19 @@ export default function Workouts({ focusId }: { focusId?: string }) {
       )}
 
       {tab === 'modeles' && (
-        <div className="flex flex-col gap-2">
-          {data.templates.map((t) => (
-            <Card key={t.id}>
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-mist-100">{t.name}</div>
-                  <div className="truncate text-xs text-mist-700">
-                    {t.items.length
-                      ? t.items
-                          .map(
-                            (i) =>
-                              `${data.exercises.find((e) => e.id === i.exerciseId)?.name ?? '?'} ${i.sets}×${
-                                i.reps ?? `${i.holdSec}s`
-                              }`,
-                          )
-                          .join(' · ')
-                      : WORKOUT_KIND_LABEL[t.kind]}
-                  </div>
-                </div>
-                <Button
-                  onClick={() => {
-                    const w = emptyWorkout(t.kind)
-                    w.title = t.name
-                    w.sets = t.items.flatMap((i) =>
-                      Array.from({ length: i.sets }, () => ({
-                        id: uid('set'),
-                        exerciseId: i.exerciseId,
-                        reps: i.reps,
-                        holdSec: i.holdSec,
-                        loadKg: i.loadKg,
-                        restSec: 90,
-                      })),
-                    )
-                    setEditing(w)
-                  }}
-                >
-                  Démarrer
-                </Button>
-              </div>
-            </Card>
-          ))}
-          <p className="px-2 text-center text-[0.68rem] text-mist-700">
-            Les modèles se gèrent dans Réglages → Modèles de séances.
-          </p>
-        </div>
+        <MySessions
+          onRedo={(tpl) => {
+            const now = new Date()
+            now.setSeconds(0, 0)
+            setAutoPick(false)
+            setEditing(
+              workoutFromTemplate(tpl, { id: uid('w'), day: todayKey(), startedAt: now.toISOString() }, () =>
+                uid('set'),
+              ),
+            )
+            toast.show('Modifie si besoin, puis Enregistrer')
+          }}
+        />
       )}
 
       {tab === 'records' && <Records />}
@@ -323,7 +299,7 @@ function WorkoutRow({
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           <Badge color="var(--accent)">{load.toFixed(1)} / 21</Badge>
           <Button className="px-2.5 py-1.5 text-[0.7rem]" onClick={onDuplicate}>
-            Dupliquer
+            Refaire
           </Button>
         </div>
       </div>
@@ -336,6 +312,85 @@ function WorkoutRow({
         </button>
       )}
     </Card>
+  )
+}
+
+/* ── Mes séances : ce que tu as déjà fait, à refaire en un clic ──────── */
+
+function MySessions({ onRedo }: { onRedo: (tpl: WorkoutTemplate) => void }) {
+  const data = useSoma()
+  const list = useMemo(() => sortTemplates(data.templates), [data.templates])
+  if (!list.length) {
+    return (
+      <Card>
+        <EmptyState
+          title="Aucune séance mémorisée"
+          hint="Enregistre une séance avec un titre (ex. « Pull lourd ») : elle apparaîtra ici, prête à être refaite."
+        />
+      </Card>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {list.map((t) => {
+        const lines = t.items.map((i) => {
+          const ex = data.exercises.find((e) => e.id === i.exerciseId)
+          return {
+            id: i.exerciseId,
+            name: ex?.name ?? 'Exercice',
+            line: summarizeSets(ex, templateItemSets(i, () => 'x')).line,
+          }
+        })
+        const ago = t.lastDoneAt ? agoLabel((Date.now() - new Date(t.lastDoneAt).getTime()) / 3_600_000) : null
+        return (
+          <Card key={t.id}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-mist-100">{t.name}</div>
+                <div className="text-[0.68rem] text-mist-700">
+                  {WORKOUT_KIND_LABEL[t.kind]}
+                  {t.durationMin ? ` · ${t.durationMin} min` : ''}
+                  {t.rpe ? ` · RPE ${t.rpe}` : ''}
+                  {ago ? ` · faite ${ago}` : ' · modèle de départ'}
+                </div>
+                {lines.length > 0 && (
+                  <ul className="mt-1.5 space-y-0.5">
+                    {lines.map((l) => (
+                      <li key={l.id} className="text-[0.72rem] leading-snug text-mist-500">
+                        <span className="text-mist-300">{l.name}</span> — {l.line}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {t.run?.distanceM ? (
+                  <div className="mt-1 text-[0.72rem] text-mist-500">
+                    {(t.run.distanceM / 1000).toFixed(1)} km · {RUN_TYPE_LABEL[t.run.runType]}
+                  </div>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1.5">
+                <Button variant="primary" className="px-3 py-1.5 text-xs" onClick={() => onRedo(t)}>
+                  Refaire
+                </Button>
+                <button
+                  onClick={async () => {
+                    if (window.confirm(`Oublier « ${t.name} » ? Tes séances passées restent dans le journal.`))
+                      await deleteTemplate(t.id)
+                  }}
+                  className="text-[0.66rem] text-mist-700 hover:text-mist-300"
+                >
+                  oublier
+                </button>
+              </div>
+            </div>
+          </Card>
+        )
+      })}
+      <p className="px-2 text-center text-[0.68rem] text-mist-700">
+        Chaque séance enregistrée avec un titre est gardée ici. « Refaire » l’ouvre pour aujourd’hui : modifie
+        les reps ou le lest, puis Enregistrer.
+      </p>
+    </div>
   )
 }
 
@@ -453,6 +508,14 @@ function WorkoutEditor({
   const data = useSoma()
   const [w, setW] = useState<Workout>(workout)
   const patch = (p: Partial<Workout>) => setW((prev) => ({ ...prev, ...p }))
+  /* Une séance vierge propose de reprendre une séance déjà faite. */
+  const [fresh, setFresh] = useState(
+    () => !workout.title && !workout.sets?.length && !workout.run && !workout.cardio,
+  )
+  const recent = useMemo(
+    () => sortTemplates(data.templates).filter((t) => t.items.length || t.run || t.cardio).slice(0, 8),
+    [data.templates],
+  )
 
   const kindOptions = useMemo(
     () => [
@@ -483,7 +546,8 @@ function WorkoutEditor({
   }
 
   const save = async () => {
-    await saveWorkout(w)
+    const saved = await saveWorkout(w)
+    await rememberWorkout(saved)
     onSaved()
     onClose()
   }
@@ -513,6 +577,33 @@ function WorkoutEditor({
       }
     >
       <div className="space-y-3 pb-2">
+        {fresh && recent.length > 0 && (
+          <div className="rounded-xl bg-accent/6 p-3 hairline">
+            <div className="mb-2 text-[0.68rem] tracking-wider text-mist-500 uppercase">
+              Refaire une séance
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {recent.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  onClick={() => {
+                    setW((prev) =>
+                      workoutFromTemplate(
+                        tpl,
+                        { id: prev.id, day: prev.day, startedAt: prev.startedAt },
+                        () => uid('set'),
+                      ),
+                    )
+                    setFresh(false)
+                  }}
+                  className="rounded-lg bg-white/6 px-3 py-2 text-sm text-mist-100 hairline transition active:scale-95 hover:bg-white/10"
+                >
+                  {tpl.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Type de séance">
             <Select
@@ -527,11 +618,18 @@ function WorkoutEditor({
               options={kindOptions}
             />
           </Field>
-          <Field label="Titre" optional>
+          <Field
+            label="Titre"
+            hint={
+              w.title?.trim()
+                ? 'Gardée dans « Mes séances » pour la refaire en un clic.'
+                : 'Donne un titre pour la retrouver dans « Mes séances ».'
+            }
+          >
             <TextInput
               value={w.title ?? ''}
               onChange={(e) => patch({ title: e.target.value })}
-              placeholder="Pull, Push, Fractionné 10×400…"
+              placeholder="Pull lourd, Push, Fractionné 10×400…"
             />
           </Field>
           <Field label="Date">
@@ -646,6 +744,75 @@ function WorkoutEditor({
 
 const REST_CHOICES = [30, 45, 60, 90, 120, 180]
 
+const restLabel = (r: number) => (r < 60 ? `${r} s` : r % 60 === 0 ? `${r / 60} min` : `${(r / 60).toFixed(1)} min`)
+
+/**
+ * Champ numérique qu'on peut vider pour retaper (la valeur n'est validée que
+ * si elle est un nombre), au lieu de revenir à 0 à chaque effacement.
+ */
+function NumField({
+  value,
+  onCommit,
+  min = 0,
+  max = 9999,
+  allowEmpty,
+  label,
+  suffix,
+  prefix,
+  placeholder,
+  warn,
+  big,
+}: {
+  value: number | undefined
+  onCommit: (v: number | undefined) => void
+  min?: number
+  max?: number
+  allowEmpty?: boolean
+  label: string
+  suffix?: string
+  prefix?: string
+  placeholder?: string
+  warn?: boolean
+  big?: boolean
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const shown = draft ?? (value === undefined ? '' : String(value))
+  return (
+    <label
+      className={`flex min-w-0 items-center gap-1 rounded-lg bg-ink-900/70 px-2.5 hairline focus-within:ring-1 focus-within:ring-[var(--accent)] ${
+        big ? 'py-2.5' : 'py-1.5'
+      } ${warn ? 'ring-1 ring-[#ffc24b88]' : ''}`}
+    >
+      {prefix && <span className="text-[0.7rem] text-mist-700">{prefix}</span>}
+      <input
+        type="number"
+        inputMode="decimal"
+        value={shown}
+        placeholder={placeholder}
+        aria-label={label}
+        onChange={(e) => {
+          const raw = e.target.value
+          setDraft(raw)
+          if (raw === '') {
+            if (allowEmpty) onCommit(undefined)
+            return
+          }
+          const n = Number(raw)
+          if (Number.isFinite(n)) onCommit(Math.min(max, Math.max(min, n)))
+        }}
+        onBlur={() => setDraft(null)}
+        className={`w-full min-w-0 bg-transparent text-mist-100 tnum outline-none placeholder:text-mist-700 ${
+          big ? 'text-base font-medium' : 'text-sm'
+        }`}
+      />
+      {suffix && <span className="shrink-0 text-[0.66rem] text-mist-700">{suffix}</span>}
+    </label>
+  )
+}
+
+const sameValues = (a: SetEntry, b: SetEntry) =>
+  a.reps === b.reps && a.loadKg === b.loadKg && a.holdSec === b.holdSec && a.restSec === b.restSec
+
 function SetsEditor({
   w,
   patch,
@@ -658,6 +825,7 @@ function SetsEditor({
   const data = useSoma()
   const [picker, setPicker] = useState(Boolean(autoPick))
   const [loadShown, setLoadShown] = useState<Set<string>>(new Set())
+  const [detailOpen, setDetailOpen] = useState<Set<string>>(new Set())
   const sets = w.sets ?? []
 
   const groups = useMemo(
@@ -669,226 +837,295 @@ function SetsEditor({
     [sets, data.exercises],
   )
 
+  const toggle = (setter: typeof setDetailOpen, id: string) =>
+    setter((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
   const update = (id: string, p: Partial<SetEntry>) =>
     patch({ sets: sets.map((s) => (s.id === id ? { ...s, ...p } : s)) })
+  const updateGroup = (exerciseId: string, p: Partial<SetEntry>) =>
+    patch({ sets: sets.map((s) => (s.exerciseId === exerciseId ? { ...s, ...p } : s)) })
   const removeSet = (id: string) => patch({ sets: sets.filter((s) => s.id !== id) })
-  const removeGroup = (exerciseId: string) =>
-    patch({ sets: sets.filter((s) => s.exerciseId !== exerciseId) })
-  const setRestFor = (exerciseId: string, rest: number) =>
-    patch({ sets: sets.map((s) => (s.exerciseId === exerciseId ? { ...s, restSec: rest } : s)) })
+  const removeGroup = (exerciseId: string) => patch({ sets: sets.filter((s) => s.exerciseId !== exerciseId) })
 
-  const addSet = (exerciseId: string, copyFrom?: SetEntry) => {
-    const ex = data.exercises.find((e) => e.id === exerciseId)
-    const base: SetEntry = copyFrom
-      ? { ...copyFrom, id: uid('set'), failure: false }
-      : {
-          id: uid('set'),
-          exerciseId,
-          reps: ex?.kind === 'static' ? undefined : 10,
-          holdSec: ex?.kind === 'static' ? 30 : undefined,
-          restSec: 90,
-        }
-    /* La nouvelle série se range à la fin de son exercice. */
-    const lastIdx = sets.map((s) => s.exerciseId).lastIndexOf(exerciseId)
+  /** Règle le nombre de séries d'un exercice : ajoute des copies de la dernière, ou retire depuis la fin. */
+  const setSeriesCount = (exerciseId: string, count: number) => {
+    const ids = sets.filter((s) => s.exerciseId === exerciseId).map((s) => s.id)
+    const n = Math.max(1, Math.min(30, Math.round(count)))
+    if (n === ids.length || !ids.length) return
+    if (n < ids.length) {
+      const drop = new Set(ids.slice(n))
+      patch({ sets: sets.filter((s) => !drop.has(s.id)) })
+      return
+    }
+    const last = sets.find((s) => s.id === ids[ids.length - 1])!
+    const copies = Array.from({ length: n - ids.length }, () => ({ ...last, id: uid('set'), failure: false }))
+    const lastIdx = sets.findIndex((s) => s.id === last.id)
     const next = [...sets]
-    next.splice(lastIdx < 0 ? next.length : lastIdx + 1, 0, base)
+    next.splice(lastIdx + 1, 0, ...copies)
     patch({ sets: next })
   }
 
-  const field =
-    'flex items-center gap-1 rounded-lg bg-ink-900/70 px-2 py-1.5 hairline focus-within:ring-1 focus-within:ring-[var(--accent)]'
-  const input = 'w-full min-w-0 bg-transparent text-sm text-mist-100 tnum outline-none placeholder:text-mist-700'
+  /** Nouvel exercice : 3 séries d'emblée, repos 90 s. */
+  const addExercise = (exerciseId: string) => {
+    const ex = data.exercises.find((e) => e.id === exerciseId)
+    const isStatic = ex?.kind === 'static'
+    const fresh = Array.from({ length: 3 }, () => ({
+      id: uid('set'),
+      exerciseId,
+      reps: isStatic ? undefined : 10,
+      holdSec: isStatic ? 30 : undefined,
+      restSec: DEFAULT_REST_SEC,
+    }))
+    patch({ sets: [...sets, ...fresh] })
+  }
+
+  const label = 'text-[0.6rem] tracking-wide text-mist-500 uppercase'
 
   return (
     <Card title="Exercices & séries" action={<Button onClick={() => setPicker(true)}>+ Exercice</Button>}>
       <div className="mt-3 space-y-3">
         {!groups.length && (
-          <p className="py-3 text-center text-xs text-mist-700">
-            Ajoute un exercice depuis la bibliothèque.
-          </p>
+          <p className="py-3 text-center text-xs text-mist-700">Ajoute un exercice depuis la bibliothèque.</p>
         )}
         {groups.map((g) => {
           const ex = g.exercise
           const isStatic = ex?.kind === 'static'
+          const first = g.sets[0]
+          const uniform = g.sets.every((s) => sameValues(s, first))
+          const detail = !uniform || detailOpen.has(g.exerciseId)
           const summary = summarizeSets(ex, g.sets)
-          const loadFriendly = !isStatic && (ex?.kind === 'weighted' || /lest/i.test(ex?.name ?? ''))
-          const rests = g.sets.map((s) => s.restSec)
-          const sameRest = rests.every((r) => r === rests[0]) ? rests[0] : undefined
-          const lastSet = g.sets[g.sets.length - 1]
+          const showLoad =
+            !isStatic &&
+            (ex?.kind === 'weighted' ||
+              /lest/i.test(ex?.name ?? '') ||
+              loadShown.has(g.exerciseId) ||
+              g.sets.some((x) => x.loadKg !== undefined))
 
           return (
             <div key={g.exerciseId} className="rounded-xl bg-white/4 p-3 hairline">
-              <div className="mb-2 flex items-start justify-between gap-2">
+              <div className="mb-2.5 flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate text-sm text-mist-100">{ex?.name ?? 'Exercice'}</div>
                   <div className="text-[0.72rem] font-medium text-accent tnum">{summary.line}</div>
                 </div>
-                <div className="flex shrink-0 gap-1.5">
-                  <Button
-                    className="px-2.5 py-1.5 text-[0.7rem]"
-                    onClick={() => addSet(g.exerciseId, lastSet)}
-                  >
-                    + Série
-                  </Button>
-                  <IconButton
-                    label="Retirer l’exercice"
-                    className="h-8 w-8"
-                    onClick={() => removeGroup(g.exerciseId)}
-                  >
-                    <svg viewBox="0 0 20 20" className="h-3.5 w-3.5">
-                      <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.7" fill="none" />
-                    </svg>
-                  </IconButton>
+                <IconButton label="Retirer l’exercice" className="h-8 w-8" onClick={() => removeGroup(g.exerciseId)}>
+                  <svg viewBox="0 0 20 20" className="h-3.5 w-3.5">
+                    <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.7" fill="none" />
+                  </svg>
+                </IconButton>
+              </div>
+
+              {!detail ? (
+                /* ── Saisie rapide : 3 × 5 à +25 kg, repos 90 s ── */
+                <div className={`grid gap-1.5 ${showLoad ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                  <span className={label}>Séries</span>
+                  <span className={label}>{isStatic ? 'Temps' : '× Reps'}</span>
+                  {showLoad && <span className={label}>Lest</span>}
+                  <span className={label}>Repos</span>
+                  <NumField
+                    big
+                    label="Nombre de séries"
+                    value={g.sets.length}
+                    min={1}
+                    max={30}
+                    onCommit={(v) => v !== undefined && setSeriesCount(g.exerciseId, v)}
+                  />
+                  {isStatic ? (
+                    <NumField
+                      big
+                      label="Temps tenu par série en secondes"
+                      value={first.holdSec}
+                      min={0}
+                      max={3600}
+                      suffix="s"
+                      onCommit={(v) => updateGroup(g.exerciseId, { holdSec: v ?? 0 })}
+                    />
+                  ) : (
+                    <NumField
+                      big
+                      label="Répétitions par série"
+                      value={first.reps}
+                      min={0}
+                      max={1000}
+                      onCommit={(v) => updateGroup(g.exerciseId, { reps: v ?? 0 })}
+                    />
+                  )}
+                  {showLoad && (
+                    <NumField
+                      big
+                      allowEmpty
+                      label="Lest ajouté en kilos"
+                      value={first.loadKg}
+                      min={-100}
+                      max={500}
+                      prefix="+"
+                      suffix="kg"
+                      placeholder="0"
+                      onCommit={(v) => updateGroup(g.exerciseId, { loadKg: v })}
+                    />
+                  )}
+                  <NumField
+                    big
+                    allowEmpty
+                    label="Repos entre séries en secondes"
+                    value={first.restSec}
+                    min={0}
+                    max={1800}
+                    suffix="s"
+                    placeholder="?"
+                    warn={!first.restSec}
+                    onCommit={(v) => updateGroup(g.exerciseId, { restSec: v })}
+                  />
                 </div>
-              </div>
-
-              {/* Repos : toujours demandé, car il donne l'intensité */}
-              <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                <span className="text-[0.68rem] text-mist-500">Repos entre séries</span>
-                {REST_CHOICES.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setRestFor(g.exerciseId, r)}
-                    className={`rounded-lg px-2 py-1 text-[0.68rem] tnum transition ${
-                      sameRest === r
-                        ? 'bg-accent/20 text-accent shadow-[inset_0_0_0_1px_var(--accent-soft)]'
-                        : 'bg-white/5 text-mist-500 hairline'
-                    }`}
-                  >
-                    {r >= 60 ? `${r / 60 >= 1 && r % 60 === 0 ? r / 60 : (r / 60).toFixed(1)} min` : `${r} s`}
-                  </button>
-                ))}
-              </div>
-
-              {(() => {
-                const showLoadCol =
-                  !isStatic &&
-                  (loadFriendly || loadShown.has(g.exerciseId) || g.sets.some((x) => x.loadKg !== undefined))
-                const cols = showLoadCol ? 'grid-cols-3' : 'grid-cols-2'
-                return (
-                  <>
-                    <div className="mb-1 flex items-center gap-1.5">
-                      <span className="w-5 shrink-0" />
-                      <div className={`grid flex-1 gap-1.5 ${cols} text-[0.62rem] tracking-wide text-mist-500 uppercase`}>
-                        <span>{isStatic ? 'Temps tenu' : 'Reps'}</span>
-                        {showLoadCol && <span>Lest ajouté</span>}
-                        <span>Repos</span>
+              ) : (
+                /* ── Détail série par série ── */
+                <div className="space-y-2">
+                  <div className={`grid gap-1.5 pl-6 ${showLoad ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                    <span className={label}>{isStatic ? 'Temps' : 'Reps'}</span>
+                    {showLoad && <span className={label}>Lest</span>}
+                    <span className={label}>Repos</span>
+                  </div>
+                  {g.sets.map((st, i) => (
+                    <div key={st.id}>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-4.5 shrink-0 text-[0.7rem] text-mist-700 tnum">{i + 1}</span>
+                        <div className={`grid min-w-0 flex-1 gap-1.5 ${showLoad ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                          {isStatic ? (
+                            <NumField
+                              label={`Série ${i + 1} : temps tenu en secondes`}
+                              value={st.holdSec}
+                              max={3600}
+                              suffix="s"
+                              onCommit={(v) => update(st.id, { holdSec: v ?? 0 })}
+                            />
+                          ) : (
+                            <NumField
+                              label={`Série ${i + 1} : répétitions`}
+                              value={st.reps}
+                              max={1000}
+                              onCommit={(v) => update(st.id, { reps: v ?? 0 })}
+                            />
+                          )}
+                          {showLoad && (
+                            <NumField
+                              allowEmpty
+                              label={`Série ${i + 1} : lest en kilos`}
+                              value={st.loadKg}
+                              min={-100}
+                              max={500}
+                              prefix="+"
+                              suffix="kg"
+                              placeholder="0"
+                              onCommit={(v) => update(st.id, { loadKg: v })}
+                            />
+                          )}
+                          <NumField
+                            allowEmpty
+                            label={`Série ${i + 1} : repos en secondes`}
+                            value={st.restSec}
+                            max={1800}
+                            suffix="s"
+                            placeholder="?"
+                            warn={!st.restSec}
+                            onCommit={(v) => update(st.id, { restSec: v })}
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-1 flex items-center gap-2 pl-6">
+                        {!isStatic && (
+                          <button
+                            onClick={() => update(st.id, { failure: !st.failure })}
+                            className={`rounded-md px-2 py-0.5 text-[0.66rem] transition ${
+                              st.failure
+                                ? 'bg-[#ff8f451f] text-[#ff8f45] shadow-[inset_0_0_0_1px_#ff8f4533]'
+                                : 'bg-white/5 text-mist-700 hairline'
+                            }`}
+                            title="Série menée à l’échec"
+                          >
+                            échec
+                          </button>
+                        )}
+                        {ex && !isStatic && (st.reps ?? 0) > 0 && (st.loadKg ?? 0) > 0 && (
+                          <span className="text-[0.62rem] text-mist-700 tnum">
+                            1RM ≈ {Math.round(set1RM(ex, st, data.bodyWeightKg))} kg
+                          </span>
+                        )}
+                        <button
+                          onClick={() => removeSet(st.id)}
+                          className="ml-auto text-[0.66rem] text-mist-700 hover:text-mist-300"
+                        >
+                          retirer
+                        </button>
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      {g.sets.map((s, i) => {
-                        const noRest = !s.restSec
-                        return (
-                          <div key={s.id}>
-                            <div className="flex items-center gap-1.5">
-                              <span className="w-5 shrink-0 text-[0.7rem] text-mist-700 tnum">{i + 1}</span>
-                              <div className={`grid min-w-0 flex-1 gap-1.5 ${cols}`}>
-                                {isStatic ? (
-                                  <label className={field}>
-                                    <input
-                                      type="number"
-                                      inputMode="numeric"
-                                      value={s.holdSec ?? ''}
-                                      onChange={(e) => update(s.id, { holdSec: Number(e.target.value) })}
-                                      className={input}
-                                      aria-label="Temps tenu en secondes"
-                                    />
-                                    <span className="text-[0.65rem] text-mist-700">s</span>
-                                  </label>
-                                ) : (
-                                  <label className={field}>
-                                    <input
-                                      type="number"
-                                      inputMode="numeric"
-                                      value={s.reps ?? ''}
-                                      onChange={(e) => update(s.id, { reps: Number(e.target.value) })}
-                                      className={input}
-                                      aria-label="Répétitions"
-                                    />
-                                    <span className="text-[0.65rem] text-mist-700">×</span>
-                                  </label>
-                                )}
-                                {showLoadCol && (
-                                  <label className={field}>
-                                    <span className="text-[0.65rem] text-mist-700">+</span>
-                                    <input
-                                      type="number"
-                                      inputMode="decimal"
-                                      value={s.loadKg ?? ''}
-                                      placeholder="0"
-                                      onChange={(e) =>
-                                        update(s.id, {
-                                          loadKg: e.target.value === '' ? undefined : Number(e.target.value),
-                                        })
-                                      }
-                                      className={input}
-                                      aria-label="Lest ajouté en kilos"
-                                    />
-                                    <span className="text-[0.65rem] text-mist-700">kg</span>
-                                  </label>
-                                )}
-                                <label
-                                  className={`${field} ${noRest ? 'ring-1 ring-[#ffc24b88]' : ''}`}
-                                  title={noRest ? 'Indique ton repos : il sert à mesurer l’intensité' : undefined}
-                                >
-                                  <input
-                                    type="number"
-                                    inputMode="numeric"
-                                    value={s.restSec ?? ''}
-                                    placeholder="?"
-                                    onChange={(e) =>
-                                      update(s.id, {
-                                        restSec: e.target.value === '' ? undefined : Number(e.target.value),
-                                      })
-                                    }
-                                    className={input}
-                                    aria-label="Repos en secondes"
-                                  />
-                                  <span className="text-[0.65rem] text-mist-700">s</span>
-                                </label>
-                              </div>
-                            </div>
-                            <div className="mt-1 flex items-center gap-2 pl-6.5">
-                              {!isStatic && (
-                                <button
-                                  onClick={() => update(s.id, { failure: !s.failure })}
-                                  className={`rounded-md px-2 py-0.5 text-[0.66rem] transition ${
-                                    s.failure
-                                      ? 'bg-[#ff8f451f] text-[#ff8f45] shadow-[inset_0_0_0_1px_#ff8f4533]'
-                                      : 'bg-white/5 text-mist-700 hairline'
-                                  }`}
-                                  title="Série menée à l’échec"
-                                >
-                                  échec
-                                </button>
-                              )}
-                              {ex && !isStatic && (s.reps ?? 0) > 0 && (s.loadKg ?? 0) > 0 && (
-                                <span className="text-[0.62rem] text-mist-700 tnum">
-                                  1RM ≈ {Math.round(set1RM(ex, s, data.bodyWeightKg))} kg
-                                </span>
-                              )}
-                              <button
-                                onClick={() => removeSet(s.id)}
-                                className="ml-auto text-[0.66rem] text-mist-700 underline-offset-2 hover:underline"
-                              >
-                                retirer
-                              </button>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                    {!isStatic && !showLoadCol && (
-                      <button
-                        onClick={() => setLoadShown((prev) => new Set(prev).add(g.exerciseId))}
-                        className="mt-2 rounded-lg bg-white/5 px-2.5 py-1.5 text-[0.7rem] text-mist-300 hairline"
-                      >
-                        + Ajouter du lest (kg)
-                      </button>
-                    )}
-                  </>
-                )
-              })()}
+                  ))}
+                </div>
+              )}
+
+              {/* Repos en un clic, pour tout l'exercice */}
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                {REST_CHOICES.map((r) => {
+                  const active = g.sets.every((x) => x.restSec === r)
+                  return (
+                    <button
+                      key={r}
+                      onClick={() => updateGroup(g.exerciseId, { restSec: r })}
+                      className={`rounded-lg px-2 py-1 text-[0.66rem] tnum transition ${
+                        active
+                          ? 'bg-accent/20 text-accent shadow-[inset_0_0_0_1px_var(--accent-soft)]'
+                          : 'bg-white/5 text-mist-500 hairline'
+                      }`}
+                    >
+                      {restLabel(r)}
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {!isStatic && !showLoad && (
+                  <button
+                    onClick={() => toggle(setLoadShown, g.exerciseId)}
+                    className="rounded-lg bg-white/5 px-2.5 py-1.5 text-[0.7rem] text-mist-300 hairline"
+                  >
+                    + Lest (kg)
+                  </button>
+                )}
+                {detail ? (
+                  <button
+                    onClick={() => {
+                      /* Revenir à la saisie rapide : toutes les séries prennent les valeurs de la première. */
+                      updateGroup(g.exerciseId, {
+                        reps: first.reps,
+                        loadKg: first.loadKg,
+                        holdSec: first.holdSec,
+                        restSec: first.restSec,
+                      })
+                      setDetailOpen((prev) => {
+                        const next = new Set(prev)
+                        next.delete(g.exerciseId)
+                        return next
+                      })
+                    }}
+                    className="rounded-lg bg-white/5 px-2.5 py-1.5 text-[0.7rem] text-mist-300 hairline"
+                    title="Toutes les séries reprennent les valeurs de la première"
+                  >
+                    Mêmes valeurs partout
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => toggle(setDetailOpen, g.exerciseId)}
+                    className="rounded-lg bg-white/5 px-2.5 py-1.5 text-[0.7rem] text-mist-300 hairline"
+                  >
+                    Détailler série par série
+                  </button>
+                )}
+              </div>
             </div>
           )
         })}
@@ -897,7 +1134,7 @@ function SetsEditor({
       <Sheet open={picker} onClose={() => setPicker(false)} title="Bibliothèque d’exercices">
         <ExercisePicker
           onPick={(id) => {
-            addSet(id)
+            addExercise(id)
             setPicker(false)
           }}
         />

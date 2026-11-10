@@ -185,11 +185,40 @@ export interface Workout {
   deleted?: boolean
 }
 
+export interface TemplateSet {
+  reps?: number
+  loadKg?: number
+  holdSec?: number
+  restSec?: number
+  failure?: boolean
+}
+
+export interface TemplateItem {
+  exerciseId: Id
+  sets: number
+  reps?: number
+  loadKg?: number
+  holdSec?: number
+  restSec?: number
+  /** Détail exact série par série, si elles diffèrent (ex. 10 + 8 + 6). */
+  setList?: TemplateSet[]
+}
+
+/** Une « séance mémorisée » : ce que tu as déjà fait, prêt à être refait. */
 export interface WorkoutTemplate {
   id: Id
   name: string
   kind: WorkoutKind
-  items: { exerciseId: Id; sets: number; reps?: number; loadKg?: number; holdSec?: number }[]
+  items: TemplateItem[]
+  customTypeId?: Id
+  durationMin?: number
+  rpe?: number
+  run?: RunDetail
+  cardio?: CardioDetail
+  /** Dernière fois que la séance a été faite. */
+  lastDoneAt?: Iso
+  /** Créée automatiquement à l'enregistrement d'une séance. */
+  auto?: boolean
   updatedAt: Iso
 }
 
