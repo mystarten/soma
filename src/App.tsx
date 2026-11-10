@@ -7,10 +7,12 @@ import { useRoute } from './lib/router'
 import { useSoma } from './hooks/useSoma'
 import { SYNC_CONFIGURED } from './sync/supabase'
 import Home from './screens/Home'
+import Vie from './screens/Vie'
 import BodyScreen from './screens/BodyScreen'
 import CheckInScreen from './screens/CheckInScreen'
 
 const Workouts = lazy(() => import('./screens/Workouts'))
+const TasksScreen = lazy(() => import('./screens/TasksScreen'))
 const CalendarScreen = lazy(() => import('./screens/CalendarScreen'))
 const Goals = lazy(() => import('./screens/Goals'))
 const Analysis = lazy(() => import('./screens/Analysis'))
@@ -19,7 +21,9 @@ const WhoopImport = lazy(() => import('./screens/WhoopImport'))
 const SettingsScreen = lazy(() => import('./screens/SettingsScreen'))
 
 const TITLES: Record<string, string> = {
-  accueil: 'Accueil',
+  accueil: 'Vie',
+  sport: 'Sport',
+  taches: 'Tâches & échéances',
   corps: 'Corps',
   checkin: 'Check-in du matin',
   seances: 'Séances',
@@ -92,7 +96,9 @@ export default function App() {
               <div className="py-16 text-center text-sm text-mist-700">Chargement…</div>
             }
           >
-            {route === 'accueil' && <Home />}
+            {route === 'accueil' && <Vie />}
+            {route === 'sport' && <Home />}
+            {route === 'taches' && <TasksScreen />}
             {route === 'corps' && <BodyScreen />}
             {route === 'checkin' && <CheckInScreen day={param} />}
             {route === 'seances' && <Workouts focusId={param} />}

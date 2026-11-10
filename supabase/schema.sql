@@ -18,6 +18,9 @@ create extension if not exists "pgcrypto";
 
 -- ── Table principale : lignes synchronisées ──────────────────────────────
 
+-- Pour un projet déjà créé avec l'ancienne liste de tables :
+alter table if exists public.soma_rows drop constraint if exists soma_rows_table_name_check;
+
 create table if not exists public.soma_rows (
   user_id     uuid        not null references auth.users (id) on delete cascade,
   table_name  text        not null,
@@ -30,7 +33,8 @@ create table if not exists public.soma_rows (
   constraint soma_rows_table_name_check check (
     table_name in (
       'checkins', 'workouts', 'exercises', 'goals',
-      'metrics', 'templates', 'workoutTypes', 'settings'
+      'metrics', 'templates', 'workoutTypes', 'settings',
+      'tasks', 'deadlines'
     )
   ),
   constraint soma_rows_row_id_len check (char_length(row_id) between 1 and 128)
@@ -40,6 +44,15 @@ comment on table public.soma_rows is
   'Lignes synchronisées de Soma. Une ligne par entité et par utilisateur.';
 
 -- Index : la synchronisation incrémentale lit « tout ce qui a changé depuis X ».
+alter table public.soma_rows drop constraint if exists soma_rows_table_name_check;
+alter table public.soma_rows add constraint soma_rows_table_name_check check (
+  table_name in (
+    'checkins', 'workouts', 'exercises', 'goals',
+    'metrics', 'templates', 'workoutTypes', 'settings',
+    'tasks', 'deadlines'
+  )
+);
+
 create index if not exists soma_rows_user_updated_idx
   on public.soma_rows (user_id, updated_at desc);
 

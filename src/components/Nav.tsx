@@ -50,6 +50,15 @@ const I = {
       <path d="M12 2.8v2.4M12 18.8v2.4M4.6 7.3l2 1.2M17.4 15.5l2 1.2M4.6 16.7l2-1.2M17.4 8.5l2-1.2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </>
   ),
+  check: (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="4" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M8.5 12.2l2.4 2.4 4.8-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  pulse: (
+    <path d="M3 12h4l2.5-6 4 12 2.5-6H21" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  ),
   dots: (
     <>
       <circle cx="6" cy="12" r="1.6" fill="currentColor" />
@@ -68,7 +77,9 @@ function Icon({ children }: { children: ReactNode }) {
 }
 
 export const NAV_ITEMS: { route: Route; label: string; icon: ReactNode }[] = [
-  { route: 'accueil', label: 'Accueil', icon: I.home },
+  { route: 'accueil', label: 'Vie', icon: I.home },
+  { route: 'taches', label: 'Tâches', icon: I.check },
+  { route: 'sport', label: 'Sport', icon: I.pulse },
   { route: 'corps', label: 'Corps', icon: I.body },
   { route: 'checkin', label: 'Check-in', icon: I.plus },
   { route: 'seances', label: 'Séances', icon: I.dumbbell },
@@ -80,7 +91,7 @@ export const NAV_ITEMS: { route: Route; label: string; icon: ReactNode }[] = [
   { route: 'reglages', label: 'Réglages', icon: I.gear },
 ]
 
-const MOBILE_ROUTES: Route[] = ['accueil', 'corps', 'checkin', 'seances', 'calendrier']
+const MOBILE_ROUTES: Route[] = ['accueil', 'taches', 'checkin', 'seances']
 
 export function BottomNav({
   current,

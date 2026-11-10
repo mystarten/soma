@@ -263,3 +263,38 @@ input[type='number'] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* ── Scène héros du bonhomme : halo et balayage très discret ── */
+.hero-stage {
+  background:
+    radial-gradient(60% 55% at 50% 42%, color-mix(in srgb, var(--accent) 9%, transparent) 0%, transparent 70%),
+    linear-gradient(168deg, #ffffff0b 0%, #ffffff03 45%, #ffffff01 100%);
+}
+.hero-scan {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.hero-scan::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 70px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 5%, transparent) 70%,
+    color-mix(in srgb, var(--accent) 38%, transparent) 99%,
+    var(--accent) 100%
+  );
+  opacity: 0.35;
+  animation: soma-scan 8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@keyframes soma-scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(1200%); }
+}

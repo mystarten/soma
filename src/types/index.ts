@@ -501,7 +501,17 @@ export interface Settings {
 
 /* ── Sync ─────────────────────────────────────────────────────────────── */
 
-export type SyncTable = 'checkins' | 'workouts' | 'exercises' | 'goals' | 'metrics' | 'templates' | 'workoutTypes' | 'settings'
+export type SyncTable =
+  | 'checkins'
+  | 'workouts'
+  | 'exercises'
+  | 'goals'
+  | 'metrics'
+  | 'templates'
+  | 'workoutTypes'
+  | 'settings'
+  | 'tasks'
+  | 'deadlines'
 
 export interface SyncOp {
   id?: number
@@ -539,4 +549,49 @@ export interface WhoopImport {
   dayCount: number
   workoutCount: number
   nightCount: number
+}
+
+
+/* ── Vie : tâches & échéances ─────────────────────────────────────────── */
+
+export type TaskPriority = 'haute' | 'normale' | 'basse'
+export type TaskCategory = 'ecole' | 'business' | 'sport' | 'perso'
+export type TaskStatus = 'a_faire' | 'en_cours' | 'fait'
+
+export interface TaskSource {
+  kind: 'mail' | 'event'
+  ref: string
+  url?: string
+  label?: string
+}
+
+export interface Task {
+  id: Id
+  title: string
+  due?: DayKey
+  /** Heure facultative `HH:MM`. */
+  dueTime?: string
+  priority: TaskPriority
+  category: TaskCategory
+  status: TaskStatus
+  notes?: string
+  source?: TaskSource
+  createdAt: Iso
+  completedAt?: Iso
+  updatedAt: Iso
+  deleted?: boolean
+}
+
+export type DeadlineKind = 'rendu' | 'oral' | 'concours' | 'business' | 'autre'
+
+export interface Deadline {
+  id: Id
+  title: string
+  date: DayKey
+  kind: DeadlineKind
+  category?: TaskCategory
+  notes?: string
+  done?: boolean
+  updatedAt: Iso
+  deleted?: boolean
 }

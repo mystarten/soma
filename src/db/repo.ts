@@ -1,10 +1,12 @@
 import type {
   CheckIn,
   CustomMetric,
+  Deadline,
   ExerciseDef,
   Goal,
   Settings,
   SyncTable,
+  Task,
   WhoopImport,
   Workout,
   WorkoutTemplate,
@@ -145,6 +147,36 @@ export async function saveSettings(patch: Partial<Settings>) {
   return next
 }
 
+export async function saveTask(row: Task) {
+  const next = stamp(row)
+  await db.tasks.put(next)
+  await enqueue('tasks', next.id, next, 'upsert')
+  return next
+}
+
+export async function deleteTask(id: string) {
+  const prev = await db.tasks.get(id)
+  if (!prev) return
+  const next = stamp({ ...prev, deleted: true })
+  await db.tasks.put(next)
+  await enqueue('tasks', id, next, 'delete')
+}
+
+export async function saveDeadline(row: Deadline) {
+  const next = stamp(row)
+  await db.deadlines.put(next)
+  await enqueue('deadlines', next.id, next, 'upsert')
+  return next
+}
+
+export async function deleteDeadline(id: string) {
+  const prev = await db.deadlines.get(id)
+  if (!prev) return
+  const next = stamp({ ...prev, deleted: true })
+  await db.deadlines.put(next)
+  await enqueue('deadlines', id, next, 'delete')
+}
+
 export async function recordImport(row: WhoopImport) {
   await db.imports.put(row)
 }
@@ -163,10 +195,12 @@ export interface SomaBackup {
   goals: Goal[]
   metrics: CustomMetric[]
   settings: Settings
+  tasks?: Task[]
+  deadlines?: Deadline[]
 }
 
 export async function exportBackup(): Promise<SomaBackup> {
-  const [checkins, workouts, exercises, templates, workoutTypes, goals, metrics, settings] =
+  const [checkins, workouts, exercises, templates, workoutTypes, goals, metrics, settings, tasks, deadlines] =
     await Promise.all([
       db.checkins.toArray(),
       db.workouts.toArray(),
@@ -176,6 +210,8 @@ export async function exportBackup(): Promise<SomaBackup> {
       db.goals.toArray(),
       db.metrics.toArray(),
       getSettings(),
+      db.tasks.toArray(),
+      db.deadlines.toArray(),
     ])
   return {
     app: 'soma',
@@ -189,6 +225,8 @@ export async function exportBackup(): Promise<SomaBackup> {
     goals,
     metrics,
     settings,
+    tasks,
+    deadlines,
   }
 }
 
@@ -198,7 +236,18 @@ export async function importBackup(data: unknown, mode: 'merge' | 'replace' = 'm
   if (mode === 'replace') await wipeData()
   await db.transaction(
     'rw',
-    [db.checkins, db.workouts, db.exercises, db.templates, db.workoutTypes, db.goals, db.metrics, db.settings],
+    [
+      db.checkins,
+      db.workouts,
+      db.exercises,
+      db.templates,
+      db.workoutTypes,
+      db.goals,
+      db.metrics,
+      db.settings,
+      db.tasks,
+      db.deadlines,
+    ],
     async () => {
       if (b.checkins?.length) await db.checkins.bulkPut(b.checkins.map((c) => ({ ...c, id: c.day })))
       if (b.workouts?.length) await db.workouts.bulkPut(b.workouts)
@@ -208,6 +257,8 @@ export async function importBackup(data: unknown, mode: 'merge' | 'replace' = 'm
       if (b.goals?.length) await db.goals.bulkPut(b.goals)
       if (b.metrics?.length) await db.metrics.bulkPut(b.metrics)
       if (b.settings) await db.settings.put({ ...b.settings, id: 'settings' })
+      if (b.tasks?.length) await db.tasks.bulkPut(b.tasks)
+      if (b.deadlines?.length) await db.deadlines.bulkPut(b.deadlines)
     },
   )
   return {
@@ -339,8 +390,10 @@ export function workoutsToCsv(rows: Workout[], exercises: ExerciseDef[]): string
 export async function wipeData() {
   await db.transaction(
     'rw',
-    [db.checkins, db.workouts, db.goals, db.metrics, db.imports, db.syncQueue],
+    [db.checkins, db.workouts, db.goals, db.metrics, db.imports, db.syncQueue, db.tasks, db.deadlines],
     async () => {
+      await db.tasks.clear()
+      await db.deadlines.clear()
       await db.checkins.clear()
       await db.workouts.clear()
       await db.goals.clear()

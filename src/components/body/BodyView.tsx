@@ -45,7 +45,14 @@ const HORIZONS = [
 const LEG_ZONES: MuscleZone[] = ['quadriceps', 'ischios', 'fessiers', 'mollets', 'tibias', 'adducteurs']
 const JOINTS_LIST: Joint[] = ['epaules', 'coudes', 'poignets', 'genoux', 'chevilles']
 
-export default function BodyView({ compact = false }: { compact?: boolean }) {
+export default function BodyView({
+  compact = false,
+  hero = false,
+}: {
+  compact?: boolean
+  /** Élément central de l'accueil : très grand, contrôles réduits au minimum. */
+  hero?: boolean
+}) {
   const data = useSoma()
   const [layer, setLayer] = useState<BodyLayer>('tout')
   const [selected, setSelected] = useState<Selection>(null)
@@ -65,6 +72,7 @@ export default function BodyView({ compact = false }: { compact?: boolean }) {
     const t = window.setTimeout(() => setRender3d(true), compact ? 350 : 60)
     return () => window.clearTimeout(t)
   }, [compact])
+
 
   /* Lecture animée de la dernière semaine. */
   useEffect(() => {
@@ -133,13 +141,13 @@ export default function BodyView({ compact = false }: { compact?: boolean }) {
   return (
     <div
       className={
-        compact
+        compact || hero
           ? 'flex flex-col gap-3'
           : 'grid gap-3 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-start'
       }
     >
       {/* ── Modèle, avec le score en surimpression ── */}
-      <Card padded={false} className="relative">
+      <Card padded={false} className={`relative ${hero ? 'hero-stage' : ''}`}>
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 p-4">
           <div>
             <div className="text-[0.62rem] tracking-[0.18em] text-mist-500 uppercase">
@@ -163,8 +171,11 @@ export default function BodyView({ compact = false }: { compact?: boolean }) {
 
         <div
           className="relative w-full"
-          style={{ height: compact ? 300 : 'clamp(340px, 56vh, 560px)' }}
+          style={{
+            height: hero ? 'clamp(400px, 66vh, 780px)' : compact ? 300 : 'clamp(340px, 56vh, 560px)',
+          }}
         >
+          {hero && <div className="hero-scan" aria-hidden />}
           {use3d ? (
             render3d ? (
               <Suspense
@@ -229,6 +240,8 @@ export default function BodyView({ compact = false }: { compact?: boolean }) {
           )}
         </div>
 
+        {!hero && (
+          <>
         {/* ── Contrôles temporels ── */}
         <div className="flex flex-col gap-2 border-t border-white/8 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -270,8 +283,12 @@ export default function BodyView({ compact = false }: { compact?: boolean }) {
             </span>
           </label>
         </div>
+          </>
+        )}
       </Card>
 
+      {!hero && (
+        <>
       {/* ── Résumé & détails ── */}
       <div className="flex flex-col gap-3">
       <Card>
@@ -336,6 +353,8 @@ export default function BodyView({ compact = false }: { compact?: boolean }) {
         </>
       )}
       </div>
+        </>
+      )}
 
       <DetailSheet
         selection={selected}

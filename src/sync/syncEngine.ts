@@ -17,6 +17,8 @@ const TABLES: SyncTable[] = [
   'templates',
   'workoutTypes',
   'settings',
+  'tasks',
+  'deadlines',
 ]
 
 const LAST_SYNC_KEY = 'last_sync_at'
@@ -67,6 +69,10 @@ function localTable(table: SyncTable) {
       return db.workoutTypes
     case 'settings':
       return db.settings
+    case 'tasks':
+      return db.tasks
+    case 'deadlines':
+      return db.deadlines
   }
 }
 
@@ -153,7 +159,7 @@ export async function syncNow(): Promise<void> {
         continue /* La version locale est plus récente : on la garde. */
       }
       if (row.deleted) {
-        if (table === 'checkins' || table === 'workouts' || table === 'goals') {
+        if (['checkins', 'workouts', 'goals', 'tasks', 'deadlines'].includes(table)) {
           if (incoming) await store.put({ ...incoming, id, deleted: true } as never)
         } else {
           await store.delete(id as never)

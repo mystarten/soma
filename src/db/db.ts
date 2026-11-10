@@ -2,10 +2,12 @@ import Dexie, { type EntityTable } from 'dexie'
 import type {
   CheckIn,
   CustomMetric,
+  Deadline,
   ExerciseDef,
   Goal,
   Settings,
   SyncOp,
+  Task,
   WhoopImport,
   Workout,
   WorkoutTemplate,
@@ -36,6 +38,8 @@ export class SomaDb extends Dexie {
   syncQueue!: EntityTable<SyncOp, 'id'>
   imports!: EntityTable<WhoopImport, 'id'>
   meta!: EntityTable<MetaRow, 'key'>
+  tasks!: EntityTable<Task, 'id'>
+  deadlines!: EntityTable<Deadline, 'id'>
 
   constructor(name = 'soma') {
     super(name)
@@ -69,6 +73,12 @@ export class SomaDb extends Dexie {
             if (w.planned === undefined) w.planned = false
           })
       })
+
+    /* v3 — module Vie : tâches et échéances (tables nouvelles, rien n'est touché). */
+    this.version(3).stores({
+      tasks: 'id, due, status, priority, category, updatedAt',
+      deadlines: 'id, date, kind, updatedAt',
+    })
   }
 }
 
