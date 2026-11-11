@@ -16,17 +16,22 @@ export interface AxeInfo {
 
 /* Aucun nom d'axe n'est codé en dur : les axes viennent de tes fiches. Couleur et position
    dans le cerveau sont attribuées dans l'ordre alphabétique des axes présents. */
-const PALETTE = ['#35e3ff', '#ff8f45', '#41e08a', '#9b7bff', '#ffc24b', '#ff6fa8', '#8fb4ff', '#c8ef5a']
-const ANCHORS: [number, number, number][] = [
-  [0.85, 0.55, 0.3],
-  [0, 0.15, -0.95],
-  [-0.75, -0.45, -0.2],
-  [-0.85, 0.55, 0.3],
-  [0.75, -0.45, -0.2],
-  [0, 0.9, 0.1],
-  [0, -0.8, 0.5],
-  [0.1, 0.1, 0.95],
-]
+const PALETTE = ['#35e3ff', '#ff8f45', '#41e08a', '#9b7bff', '#ffc24b', '#ff6fa8', '#8fb4ff', '#c8ef5a', '#27e0c0', '#e0a3ff', '#ffd9a0', '#7fd8ff']
+
+function colorFor(i: number): string {
+  if (i < PALETTE.length) return PALETTE[i]
+  /* Au-delà : teintes réparties par l'angle d'or, pour rester distinctes. */
+  return `hsl(${Math.round((i * 137.508) % 360)} 78% 64%)`
+}
+
+/** Répartition régulière sur une sphère (spirale de Fibonacci), aplatie comme un cerveau. */
+function anchorFor(i: number, n: number): [number, number, number] {
+  if (n <= 1) return [0.8, 0.3, 0.3]
+  const y = 1 - ((i + 0.5) * 2) / n
+  const r = Math.sqrt(Math.max(0, 1 - y * y))
+  const t = i * 2.399963
+  return [r * Math.cos(t) * 0.92, y * 0.72, r * Math.sin(t) * 0.92]
+}
 
 export const GENERAL_AXE: AxeInfo = { slug: '', label: 'Général', color: '#9fb6d6', anchor: [0, -0.1, 0.8] }
 
@@ -44,8 +49,8 @@ export function axePalette(notes: KnowledgeNote[]): Map<string, AxeInfo> {
       {
         slug,
         label: live.find((n) => n.kind === 'hub' && n.axe === slug)?.title ?? prettyAxe(slug),
-        color: PALETTE[i % PALETTE.length],
-        anchor: ANCHORS[i % ANCHORS.length],
+        color: colorFor(i),
+        anchor: anchorFor(i, slugs.length),
       },
     ]),
   )
@@ -90,12 +95,14 @@ export const normTitle = (s: string) =>
     .replace(/\s+/g, ' ')
     .trim()
 
-/** Identifiant stable dérivé du titre : un ré-import retrouve la même fiche. */
-export function noteIdFor(title: string): string {
-  const slug = normTitle(title)
+export const slugify = (s: string) =>
+  normTitle(s)
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-  return `kn_${slug || 'sans-titre'}`
+
+/** Identifiant stable dérivé du titre : un ré-import retrouve la même fiche. */
+export function noteIdFor(title: string): string {
+  return `kn_${slugify(title) || 'sans-titre'}`
 }
 
 /* ── Liens et tags ────────────────────────────────────────────────────── */
@@ -221,6 +228,154 @@ export function parseClaudeMemory(text: string): ParseResult {
   return { notes: [...byKey.values()], warnings }
 }
 
+/* ── Format « plan » : rubriques et puces imbriquées ──────────────────── */
+
+const BULLET_LINE = /^(\s*)[*•\-–]\s+(.*)$/
+const MONTHS = /^(janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout|septembre|octobre|novembre|décembre|decembre)\b/i
+/** Mots trop généraux pour relier deux fiches juste parce qu'ils sont cités. */
+const GENERIC = new Set(
+  'sport business projets projet course voyage voyages études etudes famille identité identite programme programmes records objectifs stage boxe natation tractions pompes dips'.split(' '),
+)
+
+/** Titre d'une puce : le libellé avant « : », sinon le début de la phrase. */
+export function splitBullet(raw: string): { title: string; rest: string } {
+  const clean = raw.replace(/\*\*/g, '').trim()
+  const colon = /^(.{2,70}?)\s*:\s+(.*)$/.exec(clean) ?? /^(.{2,70}?)\s*:\s*$/.exec(clean)
+  if (colon && colon[1].split(/\s+/).length <= 9 && !/[.!?]/.test(colon[1])) {
+    return { title: colon[1].trim(), rest: (colon[2] ?? '').trim() }
+  }
+  const clause = /^(.{8,60}?)(?:\.\s|,\s|\s[—–]\s|;\s)/.exec(clean)
+  if (clause) return { title: clause[1].trim(), rest: clean }
+  const words = clean.split(/\s+/)
+  return { title: words.length > 8 ? `${words.slice(0, 7).join(' ')}…` : clean.replace(/[.\s]+$/, ''), rest: clean }
+}
+
+const isVerifyHeading = (h: string) => /contredit|verifier|vérifier/.test(normTitle(h))
+
+export function parseOutline(text: string): ParseResult {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n')
+  const warnings: string[] = []
+  const notes: ParsedNote[] = []
+  const used = new Map<string, number>()
+
+  const uniqueTitle = (title: string, category: string) => {
+    let t = title
+    if (used.has(normTitle(t))) t = `${title} (${category})`
+    let n = 2
+    while (used.has(normTitle(t))) t = `${title} (${category} ${n++})`
+    used.set(normTitle(t), 1)
+    return t
+  }
+
+  let category: { title: string; slug: string; verify: boolean } | null = null
+  let verifyNote: ParsedNote | null = null
+  let indents: number[] = []
+  let top: ParsedNote | null = null
+  let child: ParsedNote | null = null
+
+  const addLink = (a: ParsedNote, b: ParsedNote) => {
+    if (!a.links.includes(b.title)) a.links.push(b.title)
+    if (!b.links.includes(a.title)) b.links.push(a.title)
+  }
+
+  for (const [i, line] of lines.entries()) {
+    if (!line.trim()) continue
+    const b = BULLET_LINE.exec(line)
+    if (!b) {
+      /* Rubrique : une ligne courte sans puce. */
+      const heading = line.replace(/^#+\s*/, '').replace(/\*\*/g, '').replace(/[:：]\s*$/, '').trim()
+      if (heading.length > 90 || /[.!?]$/.test(heading)) {
+        warnings.push(`Ligne ${i + 1} ignorée : « ${heading.slice(0, 50)} ».`)
+        continue
+      }
+      category = { title: heading, slug: slugify(heading), verify: isVerifyHeading(heading) }
+      indents = []
+      top = null
+      child = null
+      if (category.verify) {
+        verifyNote = verifyNote ?? { title: 'À vérifier', kind: 'topic', axe: undefined, summary: 'Points à trancher', facts: [], links: [] }
+        if (!notes.includes(verifyNote)) {
+          used.set(normTitle(verifyNote.title), 1)
+          notes.push(verifyNote)
+        }
+      } else {
+        used.set(normTitle(heading), 1)
+        notes.push({ title: heading, kind: 'hub', axe: category.slug, summary: '', facts: [], links: [] })
+      }
+      continue
+    }
+    if (!category) {
+      warnings.push(`Ligne ${i + 1} ignorée (avant la première rubrique).`)
+      continue
+    }
+    const indent = b[1].replace(/\t/g, '   ').length
+    while (indents.length && indents[indents.length - 1] > indent) indents.pop()
+    if (!indents.length || indents[indents.length - 1] < indent) indents.push(indent)
+    const level = indents.length
+    const text = b[2].trim()
+    if (!text) continue
+
+    if (category.verify && verifyNote) {
+      verifyNote.facts.push({ text: text.replace(/\*\*/g, ''), status: 'verify' })
+      continue
+    }
+    if (level === 1) {
+      const { title, rest } = splitBullet(text)
+      top = { title: uniqueTitle(title, category.title), kind: 'topic', axe: category.slug, summary: '', facts: rest ? [{ text: rest, status: 'stated' }] : [], links: [] }
+      notes.push(top)
+      child = null
+    } else if (level === 2 && top) {
+      const { title, rest } = splitBullet(text)
+      child = { title: uniqueTitle(title, category.title), kind: 'topic', axe: category.slug, summary: '', facts: rest ? [{ text: rest, status: 'stated' }] : [], links: [] }
+      notes.push(child)
+      addLink(top, child)
+    } else {
+      /* Niveau 3 et plus : détail de la fiche du dessus. */
+      const target = child ?? top
+      if (target) target.facts.push({ text: text.replace(/\*\*/g, ''), status: 'stated' })
+    }
+  }
+  /* Un titre court devient le résumé de sa fiche : première phrase du premier fait. */
+  for (const n of notes) {
+    if (!n.summary && n.facts.length && n.kind !== 'hub') {
+      const f = n.facts[0].text
+      n.summary = f.length > 110 ? `${f.slice(0, 107)}…` : f
+    }
+  }
+  inferLinks(notes)
+  return { notes, warnings }
+}
+
+/**
+ * Relie les fiches qui se citent : si le texte d'une fiche mentionne le titre d'une autre
+ * (nom propre ou expression distincte), on ajoute un lien. Prudent : pas de mot générique.
+ */
+export function inferLinks(notes: ParsedNote[], maxPerNote = 8): void {
+  const targets = notes
+    .filter((n) => n.kind !== 'hub' && n.title.length >= 4 && n.title.length <= 40)
+    .filter((n) => /^\p{Lu}/u.test(n.title) && !MONTHS.test(n.title) && !/^\d/.test(n.title) && !GENERIC.has(normTitle(n.title)))
+    .map((n) => ({ n, key: normTitle(n.title), re: new RegExp(`(^|[^a-z0-9])${normTitle(n.title).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z0-9])`) }))
+  for (const a of notes) {
+    if (a.kind === 'hub') continue
+    const hay = normTitle([a.summary, ...a.facts.map((f) => f.text)].join(' . '))
+    let added = 0
+    for (const t of targets) {
+      if (t.n === a || added >= maxPerNote) continue
+      if (t.re.test(hay) && !a.links.some((l) => normTitle(l) === t.key)) {
+        a.links.push(t.n.title)
+        added += 1
+      }
+    }
+  }
+}
+
+/** Détecte le format : fiches `Titre [type, axe x] — …` ou plan à rubriques et puces. */
+export function parseMemoryText(text: string): ParseResult & { format: 'fiches' | 'plan' } {
+  const headers = text.split(/\r?\n/).filter((l) => !/^\s*[*•\-–]\s/.test(l) && HEADER.test(l.trim())).length
+  if (headers > 0) return { ...parseClaudeMemory(text), format: 'fiches' }
+  return { ...parseOutline(text), format: 'plan' }
+}
+
 /* ── Plan d'import : créer, mettre à jour, ou laisser tes modifications ── */
 
 export interface ImportPlan {
@@ -252,7 +407,20 @@ export function buildImportPlan(parsed: ParsedNote[], existing: KnowledgeNote[],
     } else if (prev.source === 'manual' || prev.edited) {
       kept += 1
     } else {
-      update.push({ ...prev, ...base, updatedAt: now })
+      /* Import additif : on garde ce qui existe et on ajoute le nouveau, sans doublon. */
+      const known = new Set(prev.facts.map((f) => normTitle(f.text)))
+      const facts = [...prev.facts, ...p.facts.filter((f) => !known.has(normTitle(f.text)))]
+      const links = [...prev.links]
+      for (const l of p.links) if (!links.some((x) => normTitle(x) === normTitle(l))) links.push(l)
+      update.push({
+        ...prev,
+        kind: prev.kind === 'topic' && p.kind !== 'topic' ? p.kind : prev.kind,
+        axe: prev.axe ?? p.axe,
+        summary: prev.summary ?? (p.summary || undefined),
+        facts,
+        links,
+        updatedAt: now,
+      })
     }
   }
   const all = new Set([...existing.filter((n) => !n.deleted).map((n) => normTitle(n.title)), ...parsed.map((p) => normTitle(p.title))])

@@ -7,6 +7,7 @@ import {
   buildTaskGraph,
   layoutGraph,
   mergeGraphs,
+  withRoots,
   type NeuralGraph,
   type NeuralNode,
   type Vec3,
@@ -31,6 +32,7 @@ export function useNeuralModel(enabled: boolean) {
   const [mode, setMode] = useState<NeuralMode>('tout')
   const [axes, setAxes] = useState<string[] | null>(null)
   const [cats, setCats] = useState<TaskCategory[]>(CATEGORIES)
+  const [opened, setOpened] = useState({ taches: false, echeances: false })
   const [showDone, setShowDone] = useState(false)
   const [hovered, setHovered] = useState<string | null>(null)
   const [task, setTask] = useState<Task | null>(null)
@@ -59,27 +61,29 @@ export function useNeuralModel(enabled: boolean) {
 
   const graph = useMemo<NeuralGraph>(() => {
     if (!enabled || !ready) return EMPTY
-    const t = buildTaskGraph(data.tasks, data.deadlines, data.today, { categories: cats, showDone })
+    const full = mode === 'taches'
+    const t = withRoots(buildTaskGraph(data.tasks, data.deadlines, data.today, { categories: cats, showDone }), {
+      taches: full || opened.taches,
+      echeances: full || opened.echeances,
+    })
     const k = buildKnowledgeGraph(data.notes, { axes: axes ?? undefined })
     return mode === 'taches' ? t : mode === 'savoir' ? k : mergeGraphs(t, k)
-  }, [enabled, ready, mode, data.tasks, data.deadlines, data.notes, data.today, cats, showDone, axes])
+  }, [enabled, ready, mode, data.tasks, data.deadlines, data.notes, data.today, cats, showDone, axes, opened])
 
   const positions = useMemo(() => (graph.nodes.length ? layoutGraph(graph) : NO_POS), [graph])
 
   const open = data.tasks.filter((t) => t.status !== 'fait')
   const late = open.filter((t) => isOverdue(t, data.today)).length
-  const deadlines = graph.nodes.filter((n) => n.kind === 'deadline').length
+  const deadlines = graph.nodes.find((n) => n.id === 'root:echeances')?.count ?? 0
   const noteCount = graph.nodes.filter((n) => n.kind === 'note').length
 
   /** Étiquettes toujours visibles : le cœur, les grands neurones, et ce qui demande de l'attention. */
   const labelled = useMemo(() => {
     const leaves = graph.nodes.filter((n) => n.kind === 'task' || n.kind === 'deadline' || n.kind === 'note')
     const roomy = typeof window === 'undefined' || window.innerWidth >= 700
-    const important =
-      leaves.length <= (roomy ? 24 : 6)
-        ? leaves
-        : leaves.filter((n) => ['overdue', 'high', 'soon'].includes(n.state)).slice(0, roomy ? 12 : 5)
-    return [...graph.nodes.filter((n) => n.kind === 'hub' || n.kind === 'axe' || n.kind === 'core'), ...important]
+    const rank = (n: NeuralNode) => (['overdue', 'high', 'soon'].includes(n.state) ? 10 : 0) + n.size
+    const important = [...leaves].sort((a, b) => rank(b) - rank(a)).slice(0, roomy ? 70 : 28)
+    return [...graph.nodes.filter((n) => n.kind === 'hub' || n.kind === 'axe' || n.kind === 'core' || n.kind === 'root'), ...important]
   }, [graph])
   const hoveredNode = graph.nodes.find((n) => n.id === hovered)
   const shownLabels = hoveredNode && !labelled.includes(hoveredNode) ? [...labelled, hoveredNode] : labelled
@@ -110,6 +114,9 @@ export function useNeuralModel(enabled: boolean) {
       setReading(n.noteId)
     } else if (n.kind === 'axe' && n.axe) {
       toggleAxe(n.axe, true)
+    } else if (n.kind === 'root') {
+      const key = n.id === 'root:taches' ? 'taches' : 'echeances'
+      setOpened((o) => ({ ...o, [key]: !o[key] }))
     } else if (n.kind === 'hub' && n.category) {
       /* Un clic sur une grande zone de tâches l'isole ; un second clic remet tout. */
       setCats((prev) => (prev.length === 1 && prev[0] === n.category ? CATEGORIES : [n.category!]))

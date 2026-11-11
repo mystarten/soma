@@ -67,7 +67,7 @@ function lineGeometry(data: CurveData) {
 export const nodeColor = (n: NeuralNode) => (n.state === 'overdue' ? '#ffb02e' : n.state === 'done' ? '#4f5f7a' : n.color)
 
 const nodePx = (n: NeuralNode) =>
-  n.kind === 'core' ? 30 : n.kind === 'hub' || n.kind === 'axe' ? 24 : n.kind === 'deadline' ? 15 : n.kind === 'note' ? 9 * n.size : 11 * n.size
+  n.kind === 'core' ? 30 : n.kind === 'hub' || n.kind === 'axe' || n.kind === 'root' ? 24 : n.kind === 'deadline' ? 15 : n.kind === 'note' ? 9 * n.size : 11 * n.size
 
 export interface NeuralLayerProps {
   graph: NeuralGraph
@@ -245,7 +245,7 @@ export default function NeuralLayer(props: NeuralLayerProps) {
       {graph.nodes.map((n) => {
         const p = positions.get(n.id)
         if (!p) return null
-        const r = n.kind === 'core' ? 0.14 : n.kind === 'hub' || n.kind === 'axe' ? 0.12 : 0.075
+        const r = n.kind === 'core' ? 0.14 : n.kind === 'hub' || n.kind === 'axe' || n.kind === 'root' ? 0.12 : 0.075
         return (
           <mesh
             key={n.id}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Deadline, Task } from '../types'
-import { backgroundNet, bridgeAxeFor, buildKnowledgeGraph, buildTaskGraph, insideBrain, layoutGraph, mergeGraphs } from './neural'
+import { backgroundNet, bridgeAxeFor, buildKnowledgeGraph, buildTaskGraph, insideBrain, layoutGraph, mergeGraphs, withRoots } from './neural'
 import { buildImportPlan, parseClaudeMemory } from './knowledge'
 
 const TODAY = '2026-11-10'
@@ -200,5 +200,18 @@ describe('ponts tâches ↔ axes, sans noms codés en dur', () => {
     expect(colorOf(all, 'axe:course')).toBe(colorOf(f, 'axe:course'))
     expect(colorOf(all, 'axe:course')).not.toBe(colorOf(all, 'axe:cuisine'))
     expect(all.nodes.find((n) => n.id === 'axe:course')?.anchor).toEqual(f.nodes.find((n) => n.id === 'axe:course')?.anchor)
+  })
+})
+
+describe('withRoots', () => {
+  const t = { id: 'a', title: 'Tâche', category: 'perso', status: 'a_faire', priority: 'normale', createdAt: '', updatedAt: '' } as never
+  it('replie les tâches sous un neurone Tâches puis les déplie', () => {
+    const g = buildTaskGraph([t], [], '2026-01-01')
+    const closed = withRoots(g, { taches: false, echeances: false })
+    expect(closed.nodes.some((n) => n.kind === 'task')).toBe(false)
+    expect(closed.nodes.find((n) => n.id === 'root:taches')?.count).toBe(1)
+    const open = withRoots(g, { taches: true, echeances: false })
+    expect(open.nodes.some((n) => n.kind === 'task')).toBe(true)
+    expect(open.links.some((l) => l.source === 'root:taches' && l.target === 'hub:perso')).toBe(true)
   })
 })

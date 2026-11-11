@@ -12,6 +12,7 @@ import {
   matchingFact,
   noteIdFor,
   parseClaudeMemory,
+  parseMemoryText,
   resolveLinks,
   searchNotes,
   textToFacts,
@@ -193,5 +194,41 @@ describe('liens, recherche et classement', () => {
     ]
     expect(factsToText(facts)).toBe('sûr\n? douteux')
     expect(textToFacts('sûr\n\n? douteux\n')).toEqual(facts)
+  })
+})
+
+describe('parseMemoryText — plan à puces', () => {
+  const PLAN = `Famille et proches
+- Parents
+  - Maman
+  - Papa
+- Fratrie
+
+Sport
+- Records
+  - 5 km en 25 min
+  - Développé couché 80 kg
+- Programmes
+
+Points où le cerveau se contredit (« À vérifier »)
+- Poids 70 ou 72 kg ?
+`
+  it('détecte le format plan et crée un neurone par rubrique et sous-rubrique', () => {
+    const r = parseMemoryText(PLAN)
+    expect(r.format).toBe('plan')
+    const titles = r.notes.map((n) => n.title)
+    for (const t of ['Famille et proches', 'Parents', 'Maman', 'Papa', 'Fratrie', 'Sport', 'Records', 'Programmes']) {
+      expect(titles).toContain(t)
+    }
+    const parents = r.notes.find((n) => n.title === 'Parents')!
+    expect(parents.links).toContain('Maman')
+  })
+  it('range les contradictions dans une fiche À vérifier', () => {
+    const r = parseMemoryText(PLAN)
+    const v = r.notes.find((n) => /vérifier/i.test(n.title))!
+    expect(v.facts.some((f) => f.status === 'verify')).toBe(true)
+  })
+  it('garde le format fiches quand il y a des en-têtes [type, axe]', () => {
+    expect(parseMemoryText('A [topic, axe x] — d\n* (stated) un').format).toBe('fiches')
   })
 })

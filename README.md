@@ -230,3 +230,9 @@ supabase/schema.sql
 ## Licence
 
 Usage personnel.
+
+
+### Neurones principaux et import en plan
+
+- Dans le cerveau, les tâches sont regroupées sous un neurone **Tâches** (et les échéances sous **Échéances**) : un clic sur ce neurone les déplie ou les replie.
+- **Savoir → Importer** accepte maintenant aussi un texte en *plan* (titres et puces imbriquées) : chaque rubrique et sous-rubrique devient un neurone, et la partie « À vérifier » est rangée à part. Les imports se fusionnent par titre, sans rien écraser.

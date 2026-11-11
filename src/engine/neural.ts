@@ -7,7 +7,7 @@ import { CATEGORY_COLOR, CATEGORY_LABEL, isOverdue } from './tasks'
    Construction + placement 3D par forces, déterministe, sans React.
    ────────────────────────────────────────────────────────────────────────── */
 
-export type NeuralKind = 'core' | 'hub' | 'axe' | 'task' | 'deadline' | 'note'
+export type NeuralKind = 'core' | 'root' | 'hub' | 'axe' | 'task' | 'deadline' | 'note'
 export type NeuralState = 'normal' | 'high' | 'overdue' | 'done' | 'soon'
 
 export interface NeuralNode {
@@ -25,6 +25,9 @@ export interface NeuralNode {
   axe?: string
   /** Fiche de connaissance liée (neurone « note », axe ou cœur). */
   noteId?: string
+  /** Neurone principal replié (« Tâches », « Échéances ») : nombre d'éléments cachés dedans. */
+  count?: number
+  expanded?: boolean
   /** Direction de départ imposée pour le placement 3D. */
   anchor?: Vec3
 }
@@ -270,6 +273,35 @@ export function bridgeAxeFor(category: TaskCategory, axeSlugs: string[]): string
   return axeSlugs.find((s) => BRIDGE_WORDS[category].test(normTitle(s)))
 }
 
+/**
+ * Regroupe les tâches sous un neurone principal « Tâches » et les échéances sous « Échéances ».
+ * Replié, seul le neurone principal reste ; déplié, tout son contenu apparaît autour de lui.
+ */
+export function withRoots(g: NeuralGraph, open: { taches: boolean; echeances: boolean }): NeuralGraph {
+  const isTask = (k: NeuralKind) => k === 'task' || k === 'hub'
+  const nT = g.nodes.filter((n) => n.kind === 'task').length
+  const nD = g.nodes.filter((n) => n.kind === 'deadline').length
+  const nodes: NeuralNode[] = g.nodes.filter(
+    (n) => !(isTask(n.kind) && !open.taches) && !(n.kind === 'deadline' && !open.echeances),
+  )
+  nodes.push(
+    { id: 'root:taches', kind: 'root', label: 'Tâches', color: '#7fd6ff', size: 1.9, state: 'normal', count: nT, expanded: open.taches, anchor: [-0.15, 0.85, 0.15] },
+    { id: 'root:echeances', kind: 'root', label: 'Échéances', color: '#ffc24b', size: 1.7, state: 'normal', count: nD, expanded: open.echeances, anchor: [0.15, -0.8, 0.35] },
+  )
+  const ids = new Set(nodes.map((n) => n.id))
+  const links: NeuralLink[] = [
+    { source: 'core', target: 'root:taches', kind: 'core', rest: 1.0 },
+    { source: 'core', target: 'root:echeances', kind: 'core', rest: 1.0 },
+  ]
+  for (const l of g.links) {
+    if (!ids.has(l.source) || !ids.has(l.target)) continue
+    if (l.kind === 'core' && l.target.startsWith('hub:')) links.push({ ...l, source: 'root:taches' })
+    else if (l.kind === 'deadline') links.push({ ...l, source: 'root:echeances' })
+    else links.push(l)
+  }
+  return { nodes, links }
+}
+
 export function mergeGraphs(tasks: NeuralGraph, knowledge: NeuralGraph): NeuralGraph {
   const nodes = new Map<string, NeuralNode>()
   for (const n of [...tasks.nodes, ...knowledge.nodes]) {
@@ -325,7 +357,7 @@ export function layoutGraph(graph: NeuralGraph, iterations = 240): Map<string, V
       const a = HUB_ANCHOR[n.category]
       return [a[0] * 0.7, a[1] * 0.7, a[2] * 0.7]
     }
-    if (n.kind === 'axe' && n.anchor) return [n.anchor[0] * 0.95, n.anchor[1] * 0.95, n.anchor[2] * 0.95]
+    if ((n.kind === 'axe' || n.kind === 'root') && n.anchor) return [n.anchor[0] * 0.95, n.anchor[1] * 0.95, n.anchor[2] * 0.95]
     const a = n.anchor ?? (n.category ? HUB_ANCHOR[n.category] : ([0, 0.2, 0] as Vec3))
     return [a[0] + j(0.6), a[1] + j(0.6), a[2] + j(0.6)]
   })
@@ -381,7 +413,7 @@ export function layoutGraph(graph: NeuralGraph, iterations = 240): Map<string, V
         F[i][1] += (a[1] * 0.7 - P[i][1]) * 0.08
         F[i][2] += (a[2] * 0.7 - P[i][2]) * 0.08
       }
-      if (n.kind === 'axe' && n.anchor) {
+      if ((n.kind === 'axe' || n.kind === 'root') && n.anchor) {
         F[i][0] += (n.anchor[0] * 0.95 - P[i][0]) * 0.08
         F[i][1] += (n.anchor[1] * 0.95 - P[i][1]) * 0.08
         F[i][2] += (n.anchor[2] * 0.95 - P[i][2]) * 0.08

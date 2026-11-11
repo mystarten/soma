@@ -47,16 +47,17 @@ export function NeuralHud({ model: m, deep, onBack }: { model: NeuralModel; deep
             className="absolute top-0 left-0 max-w-[220px] truncate rounded-md px-2 py-0.5 text-[11px] leading-tight whitespace-nowrap"
             style={{
               opacity: 0,
-              color: n.kind === 'hub' || n.kind === 'axe' ? n.color : n.state === 'overdue' ? '#ffb02e' : '#eaf2ff',
+              color: n.kind === 'hub' || n.kind === 'axe' || n.kind === 'root' ? n.color : n.state === 'overdue' ? '#ffb02e' : '#eaf2ff',
               background: m.hovered === n.id ? '#0b1626ee' : '#06101ccc',
-              boxShadow: `0 0 0 1px ${n.kind === 'hub' || n.kind === 'axe' ? `${n.color}55` : '#ffffff18'}`,
-              fontWeight: n.kind === 'hub' || n.kind === 'axe' || n.kind === 'core' ? 600 : 400,
-              letterSpacing: n.kind === 'hub' || n.kind === 'axe' ? '0.08em' : undefined,
-              textTransform: n.kind === 'hub' || n.kind === 'axe' ? 'uppercase' : undefined,
+              boxShadow: `0 0 0 1px ${n.kind === 'hub' || n.kind === 'axe' || n.kind === 'root' ? `${n.color}55` : '#ffffff18'}`,
+              fontWeight: n.kind === 'hub' || n.kind === 'axe' || n.kind === 'root' || n.kind === 'core' ? 600 : 400,
+              letterSpacing: n.kind === 'hub' || n.kind === 'axe' || n.kind === 'root' ? '0.08em' : undefined,
+              textTransform: n.kind === 'hub' || n.kind === 'axe' || n.kind === 'root' ? 'uppercase' : undefined,
             }}
           >
             {n.kind === 'deadline' ? '◆ ' : ''}
             {n.label}
+            {n.kind === 'root' ? ` · ${n.count ?? 0}${n.expanded ? ' ▾' : ' ▸'}` : ''}
           </div>
         ))}
       </div>

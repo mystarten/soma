@@ -10,7 +10,7 @@ import {
   buildImportPlan,
   groupNotes,
   matchingFact,
-  parseClaudeMemory,
+  parseMemoryText,
   searchNotes,
   verifyItems,
 } from '../engine/knowledge'
@@ -198,7 +198,7 @@ function ImportSheet({ onClose, onDone }: { onClose: () => void; onDone: (create
   const [busy, setBusy] = useState(false)
   const [tip, setTip] = useState(false)
 
-  const parsed = useMemo(() => (text.trim() ? parseClaudeMemory(text) : null), [text])
+  const parsed = useMemo(() => (text.trim() ? parseMemoryText(text) : null), [text])
   const plan = useMemo(() => (parsed ? buildImportPlan(parsed.notes, data.notes) : null), [parsed, data.notes])
   const summary = useMemo(() => {
     if (!parsed) return null
