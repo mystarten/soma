@@ -230,11 +230,12 @@ export function TextInput({
 
 export function TextArea({
   className = '',
+  rows = 3,
   ...rest
-}: InputHTMLAttributes<HTMLTextAreaElement>) {
+}: InputHTMLAttributes<HTMLTextAreaElement> & { rows?: number }) {
   return (
     <textarea
-      rows={3}
+      rows={rows}
       className={`w-full resize-y rounded-xl bg-ink-900/70 px-3.5 py-2.5 text-sm text-mist-100 transition hairline outline-none placeholder:text-mist-700 focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)] ${className}`}
       {...(rest as object)}
     />

@@ -541,6 +541,7 @@ export type SyncTable =
   | 'settings'
   | 'tasks'
   | 'deadlines'
+  | 'notes'
 
 export interface SyncOp {
   id?: number
@@ -621,6 +622,38 @@ export interface Deadline {
   category?: TaskCategory
   notes?: string
   done?: boolean
+  updatedAt: Iso
+  deleted?: boolean
+}
+
+
+/* ── Base de connaissances ───────────────────────────────────────────── */
+
+export type KnowledgeKind = 'profile' | 'hub' | 'area' | 'project' | 'topic' | 'person' | 'note' | 'doc'
+
+export interface KnowledgeFact {
+  text: string
+  /** `verify` : incohérence ou doute, à trancher. */
+  status: 'stated' | 'verify'
+}
+
+export interface KnowledgeNote {
+  id: Id
+  title: string
+  kind: KnowledgeKind
+  /** Axe de vie (identifiant court en minuscules, ex. `sport`). */
+  axe?: string
+  summary?: string
+  facts: KnowledgeFact[]
+  /** Texte libre (Markdown léger) avec [[liens]] et #tags. */
+  body?: string
+  /** Titres des fiches citées. */
+  links: string[]
+  tags: string[]
+  source: 'claude' | 'manual'
+  /** Modifiée à la main : un ré-import ne l'écrase plus. */
+  edited?: boolean
+  createdAt: Iso
   updatedAt: Iso
   deleted?: boolean
 }

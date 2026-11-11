@@ -2,13 +2,24 @@ import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSoma } from '../../hooks/useSoma'
 import type { Deadline, Task, TaskCategory } from '../../types'
-import { CATEGORIES, buildTaskGraph, layoutGraph, type NeuralNode } from '../../engine/neural'
+import {
+  CATEGORIES,
+  buildKnowledgeGraph,
+  buildTaskGraph,
+  layoutGraph,
+  mergeGraphs,
+  type NeuralGraph,
+  type NeuralNode,
+} from '../../engine/neural'
+import { axeOf, axePalette } from '../../engine/knowledge'
 import { CATEGORY_COLOR, CATEGORY_LABEL, isOverdue, parseQuickAdd } from '../../engine/tasks'
 import { isLowPower } from '../../engine/body'
 import { saveTask } from '../../db/repo'
 import { uid } from '../../db/db'
 import { TaskEditor } from '../vie/TodoPanel'
 import { DeadlineEditor } from '../vie/DeadlinesPanel'
+import { NoteEditor, NoteReader } from '../knowledge/NoteViews'
+import type { KnowledgeNote } from '../../types'
 
 const NeuralScene = lazy(() => import('./NeuralScene'))
 
@@ -18,6 +29,11 @@ const NeuralScene = lazy(() => import('./NeuralScene'))
  */
 export default function NeuralOverlay({ onClose }: { onClose: () => void }) {
   const data = useSoma()
+  type Mode = 'taches' | 'savoir' | 'tout'
+  const [mode, setMode] = useState<Mode>(() => (data.notes.length ? 'tout' : 'taches'))
+  const [axes, setAxes] = useState<string[] | null>(null)
+  const [reading, setReading] = useState<string | null>(null)
+  const [editingNote, setEditingNote] = useState<KnowledgeNote | null>(null)
   const [cats, setCats] = useState<TaskCategory[]>(CATEGORIES)
   const [showDone, setShowDone] = useState(false)
   const [hovered, setHovered] = useState<string | null>(null)
@@ -27,15 +43,22 @@ export default function NeuralOverlay({ onClose }: { onClose: () => void }) {
   const [visible, setVisible] = useState(false)
   const low = useMemo(() => isLowPower(), [])
 
-  const graph = useMemo(
-    () => buildTaskGraph(data.tasks, data.deadlines, data.today, { categories: cats, showDone }),
-    [data.tasks, data.deadlines, data.today, cats, showDone],
-  )
+  const palette = useMemo(() => axePalette(data.notes), [data.notes])
+  const allAxes = useMemo(() => [...palette.keys()], [palette])
+
+  const graph = useMemo<NeuralGraph>(() => {
+    const t = buildTaskGraph(data.tasks, data.deadlines, data.today, { categories: cats, showDone })
+    const k = buildKnowledgeGraph(data.notes, { axes: axes ?? undefined })
+    if (mode === 'taches') return t
+    if (mode === 'savoir') return k
+    return mergeGraphs(t, k)
+  }, [mode, data.tasks, data.deadlines, data.notes, data.today, cats, showDone, axes])
   const positions = useMemo(() => layoutGraph(graph), [graph])
 
   const open = data.tasks.filter((t) => t.status !== 'fait')
   const late = open.filter((t) => isOverdue(t, data.today)).length
   const deadlines = graph.nodes.filter((n) => n.kind === 'deadline').length
+  const noteCount = graph.nodes.filter((n) => n.kind === 'note').length
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setVisible(true))
@@ -53,7 +76,7 @@ export default function NeuralOverlay({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !task && !deadline) close()
+      if (e.key === 'Escape' && !task && !deadline && !reading && !editingNote) close()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -71,6 +94,10 @@ export default function NeuralOverlay({ onClose }: { onClose: () => void }) {
     } else if (n.kind === 'deadline') {
       const d = data.deadlines.find((x) => x.id === n.ref)
       if (d) setDeadline(d)
+    } else if ((n.kind === 'note' || n.kind === 'axe' || n.kind === 'core') && n.noteId) {
+      setReading(n.noteId)
+    } else if (n.kind === 'axe' && n.axe) {
+      toggleAxe(n.axe, true)
     } else if (n.kind === 'hub' && n.category) {
       /* Un clic sur une grande zone l'isole ; un second clic remet tout. */
       setCats((prev) => (prev.length === 1 && prev[0] === n.category ? CATEGORIES : [n.category!]))
@@ -84,6 +111,19 @@ export default function NeuralOverlay({ onClose }: { onClose: () => void }) {
     if (!cats.includes(p.category)) setCats((c) => [...c, p.category])
     const now = new Date().toISOString()
     await saveTask({ id: uid('task'), ...p, status: 'a_faire', createdAt: now, updatedAt: now })
+  }
+
+  /**
+   * Pastille d'axe : quand tout est affiché, un clic isole cet axe ; ensuite chaque clic
+   * ajoute ou retire un axe. Un second clic sur l'axe seul remet tout.
+   */
+  function toggleAxe(slug: string, isolate = false) {
+    setAxes((prev) => {
+      if (prev === null || isolate) return prev && prev.length === 1 && prev[0] === slug ? null : [slug]
+      if (prev.length === 1 && prev[0] === slug) return null
+      const next = prev.includes(slug) ? prev.filter((x) => x !== slug) : [...prev, slug]
+      return next.length === 0 || next.length === allAxes.length ? null : next
+    })
   }
 
   const toggleCat = (c: TaskCategory) =>
@@ -121,42 +161,94 @@ export default function NeuralOverlay({ onClose }: { onClose: () => void }) {
       >
         <div className="pointer-events-auto">
           <div className="text-[0.62rem] tracking-[0.22em] text-mist-500 uppercase">Cerveau · réseau</div>
-          <h2 className="text-lg font-semibold text-mist-100 sm:text-xl">Tes tâches</h2>
+          <h2 className="text-lg font-semibold text-mist-100 sm:text-xl">
+            {mode === 'taches' ? 'Tes tâches' : mode === 'savoir' ? 'Ce que tu sais' : 'Tout ton cerveau'}
+          </h2>
           <p className="text-xs text-mist-500">
-            {open.length} ouverte{open.length > 1 ? 's' : ''}
-            {late ? <span style={{ color: '#ffb02e' }}> · {late} en retard</span> : null}
-            {deadlines ? ` · ${deadlines} échéance${deadlines > 1 ? 's' : ''}` : ''}
+            {mode !== 'savoir' && (
+              <>
+                {open.length} tâche{open.length > 1 ? 's' : ''}
+                {late ? <span style={{ color: '#ffb02e' }}> ({late} en retard)</span> : null}
+              </>
+            )}
+            {mode !== 'savoir' && noteCount > 0 ? ' · ' : ''}
+            {mode !== 'taches' && `${noteCount} fiche${noteCount > 1 ? 's' : ''}`}
+            {mode !== 'savoir' && deadlines ? ` · ${deadlines} échéance${deadlines > 1 ? 's' : ''}` : ''}
           </p>
+          <div className="mt-2 inline-flex gap-0.5 rounded-xl bg-white/5 p-0.5 hairline" role="tablist" aria-label="Contenu du réseau">
+            {(
+              [
+                ['tout', 'Tout'],
+                ['taches', 'Tâches'],
+                ['savoir', 'Savoir'],
+              ] as const
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                role="tab"
+                aria-selected={mode === m}
+                onClick={() => setMode(m)}
+                className={`rounded-lg px-3 py-1 text-xs transition ${
+                  mode === m ? 'bg-accent/18 text-accent' : 'text-mist-500 hover:text-mist-300'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {CATEGORIES.map((c) => {
-              const on = cats.includes(c)
-              return (
-                <button
-                  key={c}
-                  onClick={() => toggleCat(c)}
-                  className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] transition"
-                  style={{
-                    color: on ? CATEGORY_COLOR[c] : '#4f5f7a',
-                    background: on ? `${CATEGORY_COLOR[c]}18` : '#ffffff06',
-                    boxShadow: `inset 0 0 0 1px ${on ? `${CATEGORY_COLOR[c]}44` : '#ffffff12'}`,
-                  }}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: on ? CATEGORY_COLOR[c] : '#4f5f7a' }} />
-                  {CATEGORY_LABEL[c]}
-                </button>
-              )
-            })}
-            <button
-              onClick={() => setShowDone((v) => !v)}
-              className="rounded-full px-2.5 py-1 text-[0.7rem] transition"
-              style={{
-                color: showDone ? '#b9c8e0' : '#4f5f7a',
-                boxShadow: 'inset 0 0 0 1px #ffffff14',
-                background: showDone ? '#ffffff10' : '#ffffff06',
-              }}
-            >
-              faites aujourd’hui
-            </button>
+            {mode === 'taches' &&
+              CATEGORIES.map((c) => {
+                const on = cats.includes(c)
+                return (
+                  <button
+                    key={c}
+                    onClick={() => toggleCat(c)}
+                    className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] transition"
+                    style={{
+                      color: on ? CATEGORY_COLOR[c] : '#4f5f7a',
+                      background: on ? `${CATEGORY_COLOR[c]}18` : '#ffffff06',
+                      boxShadow: `inset 0 0 0 1px ${on ? `${CATEGORY_COLOR[c]}44` : '#ffffff12'}`,
+                    }}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: on ? CATEGORY_COLOR[c] : '#4f5f7a' }} />
+                    {CATEGORY_LABEL[c]}
+                  </button>
+                )
+              })}
+            {mode !== 'taches' &&
+              allAxes.map((slug) => {
+                const info = axeOf(palette, slug)
+                const on = axes === null || axes.includes(slug)
+                return (
+                  <button
+                    key={slug}
+                    onClick={() => toggleAxe(slug)}
+                    className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] transition"
+                    style={{
+                      color: on ? info.color : '#4f5f7a',
+                      background: on ? `${info.color}18` : '#ffffff06',
+                      boxShadow: `inset 0 0 0 1px ${on ? `${info.color}44` : '#ffffff12'}`,
+                    }}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: on ? info.color : '#4f5f7a' }} />
+                    {info.label}
+                  </button>
+                )
+              })}
+            {mode !== 'savoir' && (
+              <button
+                onClick={() => setShowDone((v) => !v)}
+                className="rounded-full px-2.5 py-1 text-[0.7rem] transition"
+                style={{
+                  color: showDone ? '#b9c8e0' : '#4f5f7a',
+                  boxShadow: 'inset 0 0 0 1px #ffffff14',
+                  background: showDone ? '#ffffff10' : '#ffffff06',
+                }}
+              >
+                faites aujourd’hui
+              </button>
+            )}
           </div>
         </div>
         <button
@@ -195,6 +287,23 @@ export default function NeuralOverlay({ onClose }: { onClose: () => void }) {
 
       {task && <TaskEditor task={task} onClose={() => setTask(null)} />}
       {deadline && <DeadlineEditor deadline={deadline} onClose={() => setDeadline(null)} />}
+      {reading && (
+        <NoteReader
+          noteId={reading}
+          onClose={() => setReading(null)}
+          onOpen={setReading}
+          onIsolate={(slug) => {
+            toggleAxe(slug, true)
+            setReading(null)
+            if (mode === 'taches') setMode('savoir')
+          }}
+          onEdit={(n) => {
+            setReading(null)
+            setEditingNote(n)
+          }}
+        />
+      )}
+      {editingNote && <NoteEditor note={editingNote} onClose={() => setEditingNote(null)} />}
     </div>,
     document.body,
   )

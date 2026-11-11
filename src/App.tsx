@@ -13,6 +13,7 @@ import CheckInScreen from './screens/CheckInScreen'
 
 const Workouts = lazy(() => import('./screens/Workouts'))
 const TasksScreen = lazy(() => import('./screens/TasksScreen'))
+const Knowledge = lazy(() => import('./screens/Knowledge'))
 const CalendarScreen = lazy(() => import('./screens/CalendarScreen'))
 const Goals = lazy(() => import('./screens/Goals'))
 const Analysis = lazy(() => import('./screens/Analysis'))
@@ -24,6 +25,7 @@ const TITLES: Record<string, string> = {
   accueil: 'Vie',
   sport: 'Sport',
   taches: 'Tâches & échéances',
+  savoir: 'Savoir',
   corps: 'Corps',
   checkin: 'Check-in du matin',
   seances: 'Séances',
@@ -99,6 +101,7 @@ export default function App() {
             {route === 'accueil' && <Vie />}
             {route === 'sport' && <Home />}
             {route === 'taches' && <TasksScreen />}
+            {route === 'savoir' && <Knowledge />}
             {route === 'corps' && <BodyScreen />}
             {route === 'checkin' && <CheckInScreen day={param} />}
             {route === 'seances' && <Workouts focusId={param} />}

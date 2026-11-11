@@ -63,7 +63,7 @@ const nodeColor = (n: NeuralNode) =>
   n.state === 'overdue' ? '#ffb02e' : n.state === 'done' ? '#4f5f7a' : n.color
 
 const nodePx = (n: NeuralNode) =>
-  n.kind === 'core' ? 30 : n.kind === 'hub' ? 24 : n.kind === 'deadline' ? 15 : 11 * n.size
+  n.kind === 'core' ? 30 : n.kind === 'hub' || n.kind === 'axe' ? 24 : n.kind === 'deadline' ? 15 : n.kind === 'note' ? 9 * n.size : 11 * n.size
 
 /* ── Maillage de fond + filaments du graphe ─────────────────────────────── */
 
@@ -136,7 +136,7 @@ function Network({
       const nearest = net.points
         .map((q, i) => [i, (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2 + (q[2] - p[2]) ** 2] as const)
         .sort((x, y) => x[1] - y[1])
-        .slice(0, 2)
+        .slice(0, graph.nodes.length > 80 ? 1 : 2)
       for (const [i] of nearest) {
         pushCurve(data, p, net.points[i], new THREE.Color(nodeColor(n)), new THREE.Color('#35e3ff'), (hashString(n.id + i) % 1000) / 1000, 0.3)
       }
@@ -232,7 +232,7 @@ function Pickers({
       {graph.nodes.map((n) => {
         const p = positions.get(n.id)
         if (!p) return null
-        const r = n.kind === 'core' ? 0.14 : n.kind === 'hub' ? 0.12 : 0.075
+        const r = n.kind === 'core' ? 0.14 : n.kind === 'hub' || n.kind === 'axe' ? 0.12 : 0.075
         return (
           <group key={n.id} position={p}>
             <mesh
@@ -344,13 +344,13 @@ export default function NeuralScene(props: NeuralSceneProps) {
 
   /* Étiquettes permanentes : cœur, zones, et ce qui demande de l'attention (max 10). */
   const labelled = useMemo(() => {
-    const leaves = props.graph.nodes.filter((n) => n.kind === 'task' || n.kind === 'deadline')
+    const leaves = props.graph.nodes.filter((n) => n.kind === 'task' || n.kind === 'deadline' || n.kind === 'note')
     const roomy = window.innerWidth >= 700
     const important =
       leaves.length <= (roomy ? 24 : 6)
         ? leaves
         : leaves.filter((n) => ['overdue', 'high', 'soon'].includes(n.state)).slice(0, roomy ? 12 : 5)
-    return [...props.graph.nodes.filter((n) => n.kind === 'hub' || n.kind === 'core'), ...important]
+    return [...props.graph.nodes.filter((n) => n.kind === 'hub' || n.kind === 'axe' || n.kind === 'core'), ...important]
   }, [props.graph])
   const hoveredNode = props.graph.nodes.find((n) => n.id === props.hovered)
   const shown = hoveredNode && !labelled.includes(hoveredNode) ? [...labelled, hoveredNode] : labelled
@@ -412,12 +412,12 @@ export default function NeuralScene(props: NeuralSceneProps) {
             className="absolute top-0 left-0 max-w-[220px] truncate rounded-md px-2 py-0.5 text-[11px] leading-tight whitespace-nowrap transition-[opacity] duration-200"
             style={{
               opacity: 0,
-              color: n.kind === 'hub' ? n.color : n.state === 'overdue' ? '#ffb02e' : '#eaf2ff',
+              color: n.kind === 'hub' || n.kind === 'axe' ? n.color : n.state === 'overdue' ? '#ffb02e' : '#eaf2ff',
               background: props.hovered === n.id ? '#0b1626ee' : '#06101ccc',
-              boxShadow: `0 0 0 1px ${n.kind === 'hub' ? `${n.color}55` : '#ffffff18'}`,
-              fontWeight: n.kind === 'hub' || n.kind === 'core' ? 600 : 400,
-              letterSpacing: n.kind === 'hub' ? '0.08em' : undefined,
-              textTransform: n.kind === 'hub' ? 'uppercase' : undefined,
+              boxShadow: `0 0 0 1px ${n.kind === 'hub' || n.kind === 'axe' ? `${n.color}55` : '#ffffff18'}`,
+              fontWeight: n.kind === 'hub' || n.kind === 'axe' || n.kind === 'core' ? 600 : 400,
+              letterSpacing: n.kind === 'hub' || n.kind === 'axe' ? '0.08em' : undefined,
+              textTransform: n.kind === 'hub' || n.kind === 'axe' ? 'uppercase' : undefined,
             }}
           >
             {n.kind === 'deadline' ? '◆ ' : ''}

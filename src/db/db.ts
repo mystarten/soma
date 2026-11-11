@@ -5,6 +5,7 @@ import type {
   Deadline,
   ExerciseDef,
   Goal,
+  KnowledgeNote,
   Settings,
   SyncOp,
   Task,
@@ -40,6 +41,7 @@ export class SomaDb extends Dexie {
   meta!: EntityTable<MetaRow, 'key'>
   tasks!: EntityTable<Task, 'id'>
   deadlines!: EntityTable<Deadline, 'id'>
+  notes!: EntityTable<KnowledgeNote, 'id'>
 
   constructor(name = 'soma') {
     super(name)
@@ -78,6 +80,11 @@ export class SomaDb extends Dexie {
     this.version(3).stores({
       tasks: 'id, due, status, priority, category, updatedAt',
       deadlines: 'id, date, kind, updatedAt',
+    })
+
+    /* v4 — base de connaissances (table nouvelle, rien n'est touché). */
+    this.version(4).stores({
+      notes: 'id, title, kind, axe, updatedAt',
     })
   }
 }

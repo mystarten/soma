@@ -1,4 +1,5 @@
-import type { DayKey, Deadline, Task, TaskCategory } from '../types'
+import type { DayKey, Deadline, KnowledgeNote, Task, TaskCategory } from '../types'
+import { axeOf, axePalette, normTitle } from './knowledge'
 import { CATEGORY_COLOR, CATEGORY_LABEL, isOverdue } from './tasks'
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -6,7 +7,7 @@ import { CATEGORY_COLOR, CATEGORY_LABEL, isOverdue } from './tasks'
    Construction + placement 3D par forces, déterministe, sans React.
    ────────────────────────────────────────────────────────────────────────── */
 
-export type NeuralKind = 'core' | 'hub' | 'task' | 'deadline'
+export type NeuralKind = 'core' | 'hub' | 'axe' | 'task' | 'deadline' | 'note'
 export type NeuralState = 'normal' | 'high' | 'overdue' | 'done' | 'soon'
 
 export interface NeuralNode {
@@ -20,12 +21,18 @@ export interface NeuralNode {
   category?: TaskCategory
   /** Identifiant de la tâche ou de l'échéance d'origine. */
   ref?: string
+  /** Axe de vie (fiches et grands axes). */
+  axe?: string
+  /** Fiche de connaissance liée (neurone « note », axe ou cœur). */
+  noteId?: string
+  /** Direction de départ imposée pour le placement 3D. */
+  anchor?: Vec3
 }
 
 export interface NeuralLink {
   source: string
   target: string
-  kind: 'core' | 'hub' | 'day' | 'deadline'
+  kind: 'core' | 'hub' | 'day' | 'deadline' | 'axe' | 'link' | 'bridge'
   /** Longueur de repos du ressort. */
   rest: number
 }
@@ -157,6 +164,132 @@ export function buildTaskGraph(
   return { nodes, links }
 }
 
+/* ── Graphe des connaissances ─────────────────────────────────────────── */
+
+export interface KnowledgeFilter {
+  /** Axes affichés ; `undefined` = tous. */
+  axes?: string[]
+}
+
+const NOTE_SIZE: Record<string, number> = { area: 1.45, project: 1.25, person: 1.15, topic: 0.9, note: 0.9, doc: 1, hub: 1.7, profile: 2.2 }
+
+/**
+ * Chaque fiche est un neurone. La fiche « axe » d'un domaine (type hub) devient le grand
+ * neurone de cet axe, la fiche « profil » devient le cœur, et les [[liens]] sont des synapses.
+ */
+export function buildKnowledgeGraph(notes: KnowledgeNote[], filter: KnowledgeFilter = {}): NeuralGraph {
+  const live = notes.filter((n) => !n.deleted)
+  const profile = live.find((n) => n.kind === 'profile')
+  const nodes: NeuralNode[] = [
+    { id: 'core', kind: 'core', label: 'Toi', color: '#eaf2ff', size: 2.2, state: 'normal', noteId: profile?.id },
+  ]
+  const links: NeuralLink[] = []
+
+  /* Palette calculée sur toutes les fiches : filtrer ne change ni couleurs ni positions. */
+  const palette = axePalette(live)
+  const allAxes = [...palette.keys()]
+  const shown = filter.axes ? allAxes.filter((a) => filter.axes!.includes(a)) : allAxes
+
+  /* Quelle fiche est représentée par quel neurone (pour résoudre les liens). */
+  const nodeOf = new Map<string, string>()
+  if (profile) nodeOf.set(profile.id, 'core')
+
+  for (const slug of shown) {
+    const info = axeOf(palette, slug)
+    const hubNote = live.find((n) => n.kind === 'hub' && n.axe === slug)
+    nodes.push({
+      id: `axe:${slug}`,
+      kind: 'axe',
+      label: hubNote?.title ?? info.label,
+      color: info.color,
+      size: 1.7,
+      state: 'normal',
+      axe: slug,
+      noteId: hubNote?.id,
+      anchor: info.anchor,
+    })
+    links.push({ source: 'core', target: `axe:${slug}`, kind: 'axe', rest: 1.0 })
+    if (hubNote) nodeOf.set(hubNote.id, `axe:${slug}`)
+  }
+
+  for (const n of live) {
+    if (n.kind === 'profile' || nodeOf.has(n.id)) continue
+    if (n.axe && !shown.includes(n.axe)) continue
+    if (!n.axe && filter.axes) continue
+    const info = axeOf(palette, n.axe)
+    const verify = n.facts.some((f) => f.status === 'verify')
+    nodes.push({
+      id: `note:${n.id}`,
+      kind: 'note',
+      label: n.title,
+      color: n.axe ? info.color : '#9fb6d6',
+      size: NOTE_SIZE[n.kind] ?? 1,
+      state: verify ? 'soon' : n.kind === 'area' ? 'high' : 'normal',
+      axe: n.axe,
+      noteId: n.id,
+      anchor: n.axe ? info.anchor : undefined,
+    })
+    nodeOf.set(n.id, `note:${n.id}`)
+    links.push({
+      source: n.axe ? `axe:${n.axe}` : 'core',
+      target: `note:${n.id}`,
+      kind: 'axe',
+      rest: n.kind === 'area' ? 0.7 : 0.6,
+    })
+  }
+
+  /* Synapses : les liens [[...]] entre fiches, une seule fois par paire. */
+  const byTitle = new Map(live.map((n) => [normTitle(n.title), n]))
+  const seen = new Set<string>()
+  for (const n of live) {
+    const a = nodeOf.get(n.id)
+    if (!a) continue
+    for (const l of n.links) {
+      const t = byTitle.get(normTitle(l))
+      const b = t ? nodeOf.get(t.id) : undefined
+      if (!t || !b || a === b) continue
+      const key = a < b ? `${a}|${b}` : `${b}|${a}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      links.push({ source: a, target: b, kind: 'link', rest: 0.95 })
+    }
+  }
+  return { nodes, links }
+}
+
+/** Mots (français et anglais courants) qui rapprochent une catégorie de tâches d'un axe. */
+const BRIDGE_WORDS: Record<TaskCategory, RegExp> = {
+  ecole: /\b(?:etude|ecole|school|cours\b|scolar|univers|campus)/,
+  business: /\b(?:entrepren|business|travail|pro\b|profession|carriere|work)/,
+  sport: /\b(?:sport|fitness|training|entrainement|physique)/,
+  perso: /\b(?:perso|personnel|famille|loisir|voyage|bien-etre)/,
+}
+
+/** L'axe qui correspond à une catégorie de tâches, s'il y en a un. */
+export function bridgeAxeFor(category: TaskCategory, axeSlugs: string[]): string | undefined {
+  return axeSlugs.find((s) => BRIDGE_WORDS[category].test(normTitle(s)))
+}
+
+export function mergeGraphs(tasks: NeuralGraph, knowledge: NeuralGraph): NeuralGraph {
+  const nodes = new Map<string, NeuralNode>()
+  for (const n of [...tasks.nodes, ...knowledge.nodes]) {
+    const prev = nodes.get(n.id)
+    /* Le cœur garde la fiche « profil » si elle existe. */
+    nodes.set(n.id, prev ? { ...prev, ...n, noteId: n.noteId ?? prev.noteId } : n)
+  }
+  const links = [...tasks.links, ...knowledge.links]
+  const axeSlugs = knowledge.nodes.filter((n) => n.kind === 'axe' && n.axe).map((n) => n.axe!)
+  const taken = new Set<string>()
+  for (const cat of CATEGORIES) {
+    const axe = bridgeAxeFor(cat, axeSlugs.filter((s) => !taken.has(s)))
+    if (axe && nodes.has(`hub:${cat}`) && nodes.has(`axe:${axe}`)) {
+      taken.add(axe)
+      links.push({ source: `hub:${cat}`, target: `axe:${axe}`, kind: 'bridge', rest: 0.8 })
+    }
+  }
+  return { nodes: [...nodes.values()], links }
+}
+
 /* ── Hasard déterministe ──────────────────────────────────────────────── */
 
 export function hashString(s: string): number {
@@ -192,7 +325,8 @@ export function layoutGraph(graph: NeuralGraph, iterations = 240): Map<string, V
       const a = HUB_ANCHOR[n.category]
       return [a[0] * 0.7, a[1] * 0.7, a[2] * 0.7]
     }
-    const a = n.category ? HUB_ANCHOR[n.category] : ([0, 0.2, 0] as Vec3)
+    if (n.kind === 'axe' && n.anchor) return [n.anchor[0] * 0.95, n.anchor[1] * 0.95, n.anchor[2] * 0.95]
+    const a = n.anchor ?? (n.category ? HUB_ANCHOR[n.category] : ([0, 0.2, 0] as Vec3))
     return [a[0] + j(0.6), a[1] + j(0.6), a[2] + j(0.6)]
   })
   const V: Vec3[] = P.map(() => [0, 0, 0])
@@ -246,6 +380,11 @@ export function layoutGraph(graph: NeuralGraph, iterations = 240): Map<string, V
         F[i][0] += (a[0] * 0.7 - P[i][0]) * 0.08
         F[i][1] += (a[1] * 0.7 - P[i][1]) * 0.08
         F[i][2] += (a[2] * 0.7 - P[i][2]) * 0.08
+      }
+      if (n.kind === 'axe' && n.anchor) {
+        F[i][0] += (n.anchor[0] * 0.95 - P[i][0]) * 0.08
+        F[i][1] += (n.anchor[1] * 0.95 - P[i][1]) * 0.08
+        F[i][2] += (n.anchor[2] * 0.95 - P[i][2]) * 0.08
       }
       if (!insideBrain(P[i], 0.92)) {
         F[i][0] -= P[i][0] * 0.05

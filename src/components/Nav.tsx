@@ -56,6 +56,12 @@ const I = {
       <path d="M8.5 12.2l2.4 2.4 4.8-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </>
   ),
+  book: (
+    <>
+      <path d="M5 4.5h10a2 2 0 0 1 2 2V20H7a2 2 0 0 1-2-2V4.5Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M9 8.5h5M9 11.5h5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </>
+  ),
   pulse: (
     <path d="M3 12h4l2.5-6 4 12 2.5-6H21" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
   ),
@@ -79,6 +85,7 @@ function Icon({ children }: { children: ReactNode }) {
 export const NAV_ITEMS: { route: Route; label: string; icon: ReactNode }[] = [
   { route: 'accueil', label: 'Vie', icon: I.home },
   { route: 'taches', label: 'Tâches', icon: I.check },
+  { route: 'savoir', label: 'Savoir', icon: I.book },
   { route: 'sport', label: 'Sport', icon: I.pulse },
   { route: 'corps', label: 'Corps', icon: I.body },
   { route: 'checkin', label: 'Check-in', icon: I.plus },

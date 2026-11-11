@@ -6,6 +6,7 @@ export type Route =
   | 'accueil'
   | 'sport'
   | 'taches'
+  | 'savoir'
   | 'corps'
   | 'checkin'
   | 'seances'
@@ -20,6 +21,7 @@ export const ROUTES: Route[] = [
   'accueil',
   'sport',
   'taches',
+  'savoir',
   'corps',
   'checkin',
   'seances',
