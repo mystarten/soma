@@ -13,13 +13,14 @@ import {
   type Part,
 } from './bodyParts'
 import { createJarvisMaterial } from './jarvisMaterial'
+import { Skeleton } from './bodySkeleton'
 import { HEART_POS, HeartDetail, JointDetail, MuscleDetail, type Lod } from './bodyDetail'
 import NeuralLayer, { BRAIN_POS } from '../neural/NeuralLayer'
 import type { NeuralGraph, NeuralNode, Vec3 } from '../../engine/neural'
 import { fatigueColor } from '../../engine/fatigueConfig'
 import { clamp } from '../../engine/stats'
 
-export type BodyLayer = 'muscles' | 'organes' | 'articulations' | 'tout'
+export type BodyLayer = 'muscles' | 'organes' | 'articulations' | 'squelette' | 'tout'
 
 export interface Body3DProps {
   body: BodyFatigue
@@ -525,6 +526,7 @@ function Rig({
   onFocus,
   onZoomed,
   lod,
+  dprIdle,
 }: {
   azimuth: number
   drag: React.RefObject<number>
@@ -537,8 +539,11 @@ function Rig({
   onFocus?: (focus: number) => void
   onZoomed?: (zoomed: boolean) => void
   lod: React.RefObject<Lod>
+  dprIdle: number
 }) {
   const group = useRef<THREE.Group>(null)
+  const setDpr = useThree((st) => st.setDpr)
+  const lowRes = useRef(false)
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera
   const size = useThree((s) => s.size)
   const look = useMemo(() => new THREE.Vector3(), [])
@@ -621,6 +626,12 @@ function Rig({
     const heartGate = smoothstep(0.5, 0.2, dist) * (1 - smoothstep(0.05, 0.13, near)) * (1 - smoothstep(0.02, 0.2, d.focus))
     lod.current.gate = gate
     lod.current.heart = heartGate
+    /* Pendant un zoom en mouvement, on affiche en définition réduite : bien plus fluide, net dès l'arrêt. */
+    const moving = (Math.abs(d.target - d.focus) > 0.003 && d.focus > 0.02) || Math.abs(d.bzTarget - d.bz) > 0.003
+    if (moving !== lowRes.current) {
+      lowRes.current = moving
+      setDpr(moving ? Math.min(1, dprIdle) : dprIdle)
+    }
     const zoomed = zoomedFlag.current ? d.bz > 0.02 : d.bz > 0.05
     if (zoomed !== zoomedFlag.current) {
       zoomedFlag.current = zoomed
@@ -770,6 +781,7 @@ export default function Body3D(props: Body3DProps) {
   const showMuscles = layer === 'muscles' || layer === 'tout'
   const showOrgans = layer === 'organes' || layer === 'tout'
   const showJoints = layer === 'articulations' || layer === 'tout'
+  const showSkeleton = layer === 'squelette' || layer === 'tout'
   const muscleOpacity = layer === 'muscles' ? 0.8 : 0.55
 
   const clickGuard = () => (pointer.current?.moved ?? 99) < 9
@@ -866,6 +878,7 @@ export default function Body3D(props: Body3DProps) {
         onFocus={(f) => onFocusProp.current?.(f)}
         onZoomed={setZoomed}
         lod={lod}
+        dprIdle={quality === 'high' ? Math.min(2, window.devicePixelRatio || 1) : 1}
       >
         <group ref={bodyRef}>
         <Shell seg={seg} opacity={layer === 'organes' ? 0.22 : 0.3} lod={lod} />
@@ -880,6 +893,7 @@ export default function Body3D(props: Body3DProps) {
             lod={lod}
           />
         )}
+        {showSkeleton && <Skeleton lod={lod} always={layer === 'squelette'} seg={seg} />}
         {showMuscles && <MuscleDetail body={props.body} lod={lod} seg={Math.max(12, seg)} />}
         {(showJoints || showMuscles) && <JointDetail jointLoad={props.jointLoad} lod={lod} seg={seg} />}
         {showOrgans && (

@@ -34,6 +34,7 @@ const LAYERS: { value: BodyLayer; label: string }[] = [
   { value: 'muscles', label: 'Muscles' },
   { value: 'organes', label: 'Organes' },
   { value: 'articulations', label: 'Articul.' },
+  { value: 'squelette', label: 'Os & nerfs' },
   { value: 'tout', label: 'Tout' },
 ]
 
@@ -100,12 +101,12 @@ export default function BodyView({
     const stage = stageRef.current
     const ctrl = ctrlRef.current
     if (!card || !slot || !stage) return
-    const x = Math.max(0, Math.min(1, (f - 0.5) / 0.48))
+    const x = Math.max(0, Math.min(1, (f - 0.45) / 0.35))
     const t = x * x * (3 - 2 * x)
     if (t <= 0.001) {
       if (fsBase.current) {
         fsBase.current = null
-        for (const k of ['position', 'zIndex', 'left', 'top', 'width', 'height', 'borderRadius', 'background'] as const) card.style[k] = ''
+        for (const k of ['position', 'zIndex', 'left', 'top', 'width', 'height', 'borderRadius', 'background', 'backdropFilter'] as const) card.style[k] = ''
         card.style.removeProperty('--stage-h')
         slot.style.height = ''
         if (ctrl) {
@@ -138,6 +139,8 @@ export default function BodyView({
     card.style.width = `${o.width + (vw - o.width) * t}px`
     card.style.height = `${h}px`
     card.style.borderRadius = `${(1 - t) * 24}px`
+    /* Le flou de fond coûte cher sur un grand écran qui bouge : inutile, le fond est opaque. */
+    card.style.backdropFilter = 'none'
     /* Le fond devient opaque : on ne voit plus la page derrière, seulement le réseau. */
     card.style.background = `color-mix(in srgb, #03060c ${Math.round(Math.min(1, t * 1.6) * 100)}%, transparent)`
     card.style.setProperty('--stage-h', `${Math.max(120, h - ch - extra * (1 - t))}px`)

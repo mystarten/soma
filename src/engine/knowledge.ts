@@ -87,8 +87,11 @@ export const KIND_ORDER: KnowledgeKind[] = ['profile', 'hub', 'area', 'project',
 
 const KINDS = new Set<string>(KIND_ORDER)
 
+/** Titre sans les « ## » de Markdown ni espaces en trop. */
+export const cleanTitle = (s: string) => s.replace(/^\s*#+\s*/, '').trim()
+
 export const normTitle = (s: string) =>
-  s
+  cleanTitle(s)
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
@@ -177,7 +180,7 @@ export function parseClaudeMemory(text: string): ParseResult {
     const isBullet = /^\s*[*•-]\s/.test(line)
     const h = !isBullet ? HEADER.exec(line.trim()) : null
     if (h) {
-      const title = h[1].trim()
+      const title = h[1].replace(/^#+\s*/, '').trim()
       const parts = h[2].split(',').map((p) => p.trim())
       let kind = parts[0].toLowerCase() as KnowledgeKind
       if (!KINDS.has(kind)) {

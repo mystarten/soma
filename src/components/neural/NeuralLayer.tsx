@@ -91,6 +91,16 @@ export default function NeuralLayer(props: NeuralLayerProps) {
   const { graph, positions, quality, hovered, dive } = props
   const group = useRef<THREE.Group>(null)
   const fade = useRef(0)
+  const widths = useRef(new WeakMap<HTMLDivElement, number>())
+  /* Importance d'un neurone pour l'affichage de son nom : le survolé passe toujours devant. */
+  const priority = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const n of graph.nodes) {
+      const kindPri = n.kind === 'core' ? 500 : n.kind === 'root' ? 450 : n.kind === 'axe' ? 400 : n.kind === 'hub' ? 350 : 0
+      m.set(n.id, kindPri + n.size * 10 + (['overdue', 'high', 'soon'].includes(n.state) ? 25 : 0) + (n.id === hovered ? 2000 : 0))
+    }
+    return m
+  }, [graph, hovered])
   const gl = useThree((s) => s.gl)
   const camera = useThree((s) => s.camera)
   const size = useThree((s) => s.size)
@@ -222,17 +232,44 @@ export default function NeuralLayer(props: NeuralLayerProps) {
       m.uniforms.uFade.value = fade.current
     }
     g.updateMatrixWorld()
+    /* Étiquettes : on les place par ordre d'importance et on masque celles qui en chevauchent
+       une déjà placée, pour que ça reste lisible même avec une centaine de neurones. */
+    const micro = Math.max(0, Math.min(1, ((dive.current?.focus ?? 0) - 1) / 0.6))
+    const items: { el: HTMLDivElement; x: number; y: number; op: number; pri: number; w: number }[] = []
     for (const [id, el] of props.labels.current ?? []) {
       const p = positions.get(id)
       if (!p) continue
       v.set(p[0], p[1], p[2]).applyMatrix4(g.matrixWorld).project(camera)
+      if (v.z > 1) {
+        el.style.opacity = '0'
+        continue
+      }
+      let w = widths.current.get(el)
+      if (!w) {
+        w = el.offsetWidth || 60
+        widths.current.set(el, w)
+      }
       const x = (v.x * 0.5 + 0.5) * size.width
       const y = (-v.y * 0.5 + 0.5) * size.height
-      el.style.transform = `translate(-50%, -100%) translate(${x.toFixed(1)}px, ${(y - 10).toFixed(1)}px)`
-      /* Au second palier de zoom, chaque élément porte son nom : on les examine un par un. */
-      const micro = Math.max(0, Math.min(1, ((dive.current?.focus ?? 0) - 1) / 0.6))
       const base = Math.max(0.2, Math.min(1, 1.5 - v.z * 25))
-      el.style.opacity = v.z > 1 ? '0' : String(Math.max(base, micro) * fade.current)
+      items.push({ el, x, y, op: Math.max(base, micro) * fade.current, pri: priority.get(id) ?? 0, w })
+    }
+    items.sort((a, b) => b.pri - a.pri)
+    const placed: [number, number, number, number][] = []
+    for (const it of items) {
+      const l = it.x - it.w / 2
+      const r = it.x + it.w / 2
+      const t0 = it.y - 30
+      const b0 = it.y - 10
+      const offscreen = r < 0 || l > size.width || b0 < 0 || t0 > size.height
+      const clash = placed.some((q) => l < q[2] && r > q[0] && t0 < q[3] && b0 > q[1])
+      if (offscreen || (clash && it.pri < 1000)) {
+        it.el.style.opacity = '0'
+        continue
+      }
+      placed.push([l, t0, r, b0])
+      it.el.style.transform = `translate(-50%, -100%) translate(${it.x.toFixed(1)}px, ${(it.y - 10).toFixed(1)}px)`
+      it.el.style.opacity = String(it.op)
     }
   })
 

@@ -48,6 +48,8 @@ export const MUSCLE_DETAIL: DetailPart[] = [
   sph('pectoraux', [0.06, 1.3, 0.052], [0.02, 0.055, 0.022], [0, 0, -1.7]),
   /* Deltoïde (faisceau latéral ; les faisceaux avant et arrière existent déjà) */
   sph('deltoides_ant', [0.178, 1.415, 0.0], [0.026, 0.052, 0.04]),
+  sph('deltoides_post', [0.17, 1.418, -0.03], [0.024, 0.05, 0.026]),
+  sph('deltoides_post', [0.15, 1.395, -0.05], [0.02, 0.03, 0.016], [0, 0, -0.6]),
   /* Biceps : chef long, chef court, brachial */
   cap('biceps', [0.187, 1.285, 0.03], [0.016, 0.11]),
   cap('biceps', [0.196, 1.28, 0.018], [0.014, 0.105]),
@@ -105,6 +107,18 @@ export const MUSCLE_DETAIL: DetailPart[] = [
   cap('mollets', [0.092, 0.375, -0.028], [0.018, 0.09]),
   cap('mollets', [0.078, 0.3, -0.022], [0.016, 0.15]),
   cap('mollets', [0.078, 0.175, -0.02], [0.006, 0.09]),
+  /* Cou : sterno-cléido-mastoïdien, élévateur de la scapula */
+  sph('trapezes', [0.03, 1.515, 0.03], [0.009, 0.048, 0.009], [0, 0, -0.31]),
+  sph('trapezes', [0.04, 1.5, -0.02], [0.01, 0.035, 0.01], [0, 0, -0.3]),
+  /* Coiffe des rotateurs : sus-épineux */
+  sph('haut_dos', [0.1, 1.41, -0.04], [0.03, 0.014, 0.016], [0, 0, -1.4]),
+  /* Hanche : psoas-iliaque, tenseur du fascia lata */
+  sph('quadriceps', [0.05, 0.96, 0.03], [0.014, 0.05, 0.016], [0, 0, 0.2]),
+  sph('fessiers', [0.115, 0.9, 0.02], [0.014, 0.045, 0.016]),
+  /* Jambe : extenseur des orteils ; pied et main */
+  cap('tibias', [0.083, 0.3, 0.018], [0.01, 0.18]),
+  sph('tibias', [0.078, 0.03, 0.05], [0.025, 0.015, 0.07], [Math.PI / 2, 0, 0]),
+  sph('avantbras', [0.208, 0.8, 0.0], [0.014, 0.035, 0.01]),
   /* Avant-bras : fléchisseurs, extenseurs, long supinateur */
   cap('avantbras', [0.205, 0.98, 0.016], [0.016, 0.14]),
   cap('avantbras', [0.208, 0.98, -0.016], [0.015, 0.14]),

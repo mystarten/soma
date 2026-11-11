@@ -30,6 +30,7 @@ import { computeSleepScore } from '../engine/sleep'
 import { computeCardioScore } from '../engine/cardio'
 import { loadBalance, type LoadContext } from '../engine/load'
 import { todayKey } from '../engine/time'
+import { cleanTitle } from '../engine/knowledge'
 import { onSyncState, startSync } from '../sync/syncEngine'
 
 export interface SomaData {
@@ -177,7 +178,9 @@ export function SomaProvider({ children }: { children: ReactNode }) {
       metrics: metrics ?? [],
       tasks: (tasks ?? []).filter((t) => !t.deleted),
       deadlines: (deadlines ?? []).filter((d) => !d.deleted),
-      notes: (notes ?? []).filter((n) => !n.deleted),
+      notes: (notes ?? [])
+        .filter((n) => !n.deleted)
+        .map((n) => (/^\s*#/.test(n.title) || n.links.some((l) => /^\s*#/.test(l)) ? { ...n, title: cleanTitle(n.title), links: n.links.map(cleanTitle) } : n)),
       program: (programs ?? []).find((p) => !p.deleted) ?? null,
       reviews: (reviews ?? []).filter((r) => !r.deleted),
       checkinByDay,

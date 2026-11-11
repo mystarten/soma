@@ -295,22 +295,48 @@ export function Stepper({
   precision?: number
 }) {
   const v = value ?? 0
-  const set = (n: number) => onChange(Math.min(max, Math.max(min, Number(n.toFixed(precision)))))
+  const clampN = (n: number) => Math.min(max, Math.max(min, Number(n.toFixed(precision))))
+  const set = (n: number) => onChange(clampN(n))
+  /* On garde ce que tu tapes tel quel : « 7 » en route vers « 75 » ne doit pas être ramené au minimum.
+     La valeur est enregistrée dès qu'elle est valide, et corrigée en sortant du champ. */
+  const [text, setText] = useState<string | null>(null)
+  const shown = text ?? (value === undefined ? '' : String(value))
   return (
     <div className="flex w-full min-w-0 items-center gap-1 rounded-xl bg-ink-900/70 p-1 hairline">
       <button
         type="button"
         aria-label="Diminuer"
-        onClick={() => set(v - step)}
+        onClick={() => {
+          setText(null)
+          set(v - step)
+        }}
         className="h-11 w-11 shrink-0 rounded-lg text-lg text-mist-300 transition active:scale-95 hover:bg-white/6"
       >
         −
       </button>
       <input
-        type="number"
+        type="text"
         inputMode="decimal"
-        value={value ?? ''}
-        onChange={(e) => (e.target.value === '' ? onChange(min) : set(Number(e.target.value)))}
+        value={shown}
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => {
+          const raw = e.target.value.replace(',', '.')
+          if (!/^-?\d*\.?\d*$/.test(raw)) return
+          setText(raw)
+          const n = Number(raw)
+          if (raw !== '' && raw !== '-' && raw !== '.' && Number.isFinite(n) && n >= min && n <= max) onChange(Number(n.toFixed(precision)))
+        }}
+        onBlur={() => {
+          if (text !== null) {
+            const n = Number(text)
+            if (text !== '' && Number.isFinite(n)) set(n)
+            else if (value !== undefined) set(value)
+          }
+          setText(null)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+        }}
         className="w-0 min-w-0 flex-1 bg-transparent text-center text-base font-medium text-mist-100 tnum outline-none"
       />
       {suffix && <span className="pr-1 text-xs text-mist-500">{suffix}</span>}
