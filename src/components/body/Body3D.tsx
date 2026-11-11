@@ -13,6 +13,7 @@ import {
   type Part,
 } from './bodyParts'
 import { createJarvisMaterial } from './jarvisMaterial'
+import { HEART_POS, HeartDetail, JointDetail, MuscleDetail, type Lod } from './bodyDetail'
 import NeuralLayer, { BRAIN_POS } from '../neural/NeuralLayer'
 import type { NeuralGraph, NeuralNode, Vec3 } from '../../engine/neural'
 import { fatigueColor } from '../../engine/fatigueConfig'
@@ -50,6 +51,8 @@ export interface Body3DProps {
   onDeep?: (deep: boolean) => void
   /** Avancement continu de la plongée, pour agrandir la carte en douceur jusqu'au plein écran. */
   onFocus?: (focus: number) => void
+  /** Va voir une région du corps de près : point dans le repère du corps, niveau de zoom 0 → 1 (0 = corps entier). */
+  regionCommand?: { x: number; y: number; zoom: number; nonce: number }
 }
 
 /** État partagé de la plongée vers le cerveau. */
@@ -63,6 +66,16 @@ interface DiveState {
   headX: number
   headY: number
   headR: number
+  /** Zoom sur une région du corps (0 = corps entier, 1 = au plus près), lissé et demandé. */
+  bz: number
+  bzTarget: number
+  /** Point visé, dans le repère du corps. */
+  fx: number
+  fy: number
+  /** Point à viser au prochain tour (position du curseur en coordonnées écran normalisées). */
+  pick: { nx: number; ny: number; blend: number } | null
+  /** Demi-largeur du corps à l'écran, en pixels. */
+  bodyHalfW: number
 }
 
 const HEAD_Y = BRAIN_POS[1]
@@ -72,6 +85,8 @@ const DEEP_HALF_H = 0.07
 /** Au-delà de « dans le crâne », un second palier de zoom va jusqu'au neurone près de soi. */
 export const DIVE_MAX = 1.6
 const MICRO_MIN = 0.35
+/** Distance minimale de la caméra quand on zoome sur le corps. */
+const BODY_MIN_DIST = 0.3
 
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
@@ -134,6 +149,7 @@ function Muscles({
   onSelect,
   seg,
   clickGuard,
+  lod,
 }: {
   body: BodyFatigue
   opacity: number
@@ -141,6 +157,7 @@ function Muscles({
   onSelect: Body3DProps['onSelect']
   seg: number
   clickGuard: () => boolean
+  lod: React.RefObject<Lod>
 }) {
   const materials = useMemo(() => {
     const m = new Map<MuscleZone, THREE.ShaderMaterial>()
@@ -173,6 +190,9 @@ function Muscles({
       mat.uniforms.uPulse.value = z.value >= 75 && z.hasHistory ? 1 : 0
       mat.uniforms.uSelected.value = selected === zone ? 1 : 0
       mat.uniforms.uGain.value = z.hasHistory ? 1 : 0.6
+      /* De près, la forme d'ensemble s'efface pour laisser voir les chefs musculaires ; sur la poitrine, elle laisse voir le cœur. */
+      const l = lod.current
+      mat.uniforms.uDim.value = Math.min(0.95, l.gate * 0.78 + (zone === 'pectoraux' ? l.heart * 0.95 : 0))
     }
   })
 
@@ -199,7 +219,7 @@ function Muscles({
 
 /* ── Coque ────────────────────────────────────────────────────────────── */
 
-function Shell({ seg, opacity }: { seg: number; opacity: number }) {
+function Shell({ seg, opacity, lod }: { seg: number; opacity: number; lod: React.RefObject<Lod> }) {
   const material = useMemo(
     () =>
       createJarvisMaterial({
@@ -215,6 +235,8 @@ function Shell({ seg, opacity }: { seg: number; opacity: number }) {
   useEffect(() => () => material.dispose(), [material])
   useFrame((s) => {
     material.uniforms.uTime.value = s.clock.elapsedTime
+    /* De près, la coque s'efface pour ne pas masquer les muscles et les os. */
+    material.uniforms.uGate.value = 1 - lod.current.gate * 0.88
   })
   return (
     <group>
@@ -338,6 +360,7 @@ function Heart({
   onSelect,
   seg,
   clickGuard,
+  lod,
 }: {
   score: number
   restingHr: number | null
@@ -345,6 +368,7 @@ function Heart({
   onSelect: () => void
   seg: number
   clickGuard: () => boolean
+  lod: React.RefObject<Lod>
 }) {
   const material = useMemo(
     () => createJarvisMaterial({ opacity: 1, grid: 0.2, gridScale: 16, gain: 1.6 }),
@@ -370,7 +394,10 @@ function Heart({
     ;(material.uniforms.uColor.value as THREE.Color).lerp(new THREE.Color(color), 0.06)
     material.uniforms.uTime.value = s.clock.elapsedTime
     material.uniforms.uSelected.value = selected ? 1 : 0
+    /* Le cœur détaillé prend le relais quand on s'approche. */
+    material.uniforms.uGate.value = 1 - lod.current.heart
     lungMaterial.uniforms.uTime.value = s.clock.elapsedTime
+    lungMaterial.uniforms.uGate.value = 1 - lod.current.heart * 0.7
     /* Battement visuel proportionnel à la FC de repos. */
     const phase = (s.clock.elapsedTime * bpm) / 60
     const beat = Math.pow(Math.max(0, Math.sin(phase * Math.PI * 2)), 6)
@@ -410,11 +437,13 @@ function Joints({
   selected,
   onSelect,
   clickGuard,
+  lod,
 }: {
   jointLoad: Body3DProps['jointLoad']
   selected: Body3DProps['selected']
   onSelect: Body3DProps['onSelect']
   clickGuard: () => boolean
+  lod: React.RefObject<Lod>
 }) {
   const sphere = useMemo(() => new THREE.SphereGeometry(1, 10, 8), [])
   const materials = useMemo(() => {
@@ -432,6 +461,7 @@ function Joints({
       ;(mat.uniforms.uColor.value as THREE.Color).lerp(new THREE.Color(info.color), 0.08)
       mat.uniforms.uTime.value = s.clock.elapsedTime
       mat.uniforms.uSelected.value = selected === joint ? 1 : 0
+      mat.uniforms.uGate.value = 1 - lod.current.gate * 0.85
     }
   })
 
@@ -493,6 +523,8 @@ function Rig({
   bodyRef,
   onDeep,
   onFocus,
+  onZoomed,
+  lod,
 }: {
   azimuth: number
   drag: React.RefObject<number>
@@ -503,6 +535,8 @@ function Rig({
   bodyRef: React.RefObject<THREE.Group | null>
   onDeep?: (deep: boolean) => void
   onFocus?: (focus: number) => void
+  onZoomed?: (zoomed: boolean) => void
+  lod: React.RefObject<Lod>
 }) {
   const group = useRef<THREE.Group>(null)
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera
@@ -513,6 +547,10 @@ function Rig({
   const lastFade = useRef(-1)
   const deepFlag = useRef(false)
   const sentFocus = useRef(-1)
+  const zoomedFlag = useRef(false)
+  const ray = useMemo(() => new THREE.Raycaster(), [])
+  const inv = useMemo(() => new THREE.Matrix4(), [])
+  const heartWorld = useMemo(() => new THREE.Vector3(), [])
 
   useFrame(() => {
     if (!group.current) return
@@ -537,14 +575,62 @@ function Rig({
     if (Math.abs(d.target - d.focus) < 0.0004) d.focus = d.target
     const p = Math.min(1, d.focus)
     const e = p * p * (3 - 2 * p)
-    const lookY = BODY_CENTER_Y + (HEAD_Y - BODY_CENTER_Y) * Math.min(1, e * 1.5)
+    let lookY = BODY_CENTER_Y + (HEAD_Y - BODY_CENTER_Y) * Math.min(1, e * 1.5)
     /* Second palier : on s'approche encore, jusqu'à pouvoir examiner un neurone de près. */
     const m = Math.max(0, Math.min(1, (d.focus - 1) / (DIVE_MAX - 1)))
-    const dist = base * Math.pow(deep / base, e) * Math.pow(MICRO_MIN, m * m * (3 - 2 * m))
-    want.set(0, lookY, dist)
+    let dist = base * Math.pow(deep / base, e) * Math.pow(MICRO_MIN, m * m * (3 - 2 * m))
+    let lookX = 0
+
+    /* Zoom sur le corps : on vise le point sous le curseur et on s'en approche. Le point
+       reste centré même si le corps tourne. Incompatible avec la plongée dans la tête. */
+    if (d.focus > 0.001) d.bzTarget = 0
+    d.bz += (d.bzTarget - d.bz) * 0.14
+    if (Math.abs(d.bzTarget - d.bz) < 0.0004) d.bz = d.bzTarget
+    group.current.updateMatrixWorld()
+    if (d.pick) {
+      /* Rayon de la caméra à travers le curseur, ramené dans le repère du corps. */
+      ray.setFromCamera(new THREE.Vector2(d.pick.nx, d.pick.ny), camera)
+      inv.copy(group.current.matrixWorld).invert()
+      const o = ray.ray.origin.clone().applyMatrix4(inv)
+      const dir = ray.ray.direction.clone().transformDirection(inv)
+      if (Math.abs(dir.z) > 1e-4) {
+        const t = -o.z / dir.z
+        const hx = o.x + dir.x * t
+        const hy = o.y + dir.y * t
+        d.fx += (clamp(hx, -0.34, 0.34) - d.fx) * d.pick.blend
+        d.fy += (clamp(hy, 0.04, 1.74) - d.fy) * d.pick.blend
+      }
+      d.pick = null
+    }
+    if (d.bz > 0.0005) {
+      const zb = d.bz * d.bz * (3 - 2 * d.bz)
+      look.set(d.fx, d.fy, 0).applyMatrix4(group.current.matrixWorld)
+      lookX = look.x * zb
+      lookY = BODY_CENTER_Y + (look.y - BODY_CENTER_Y) * zb
+      dist = base * Math.pow(BODY_MIN_DIST / base, zb)
+    }
+    want.set(lookX, lookY, dist)
     camera.position.lerp(want, 0.3)
-    look.set(0, lookY, 0)
+    look.set(lookX, lookY, 0)
     camera.lookAt(look)
+
+    /* Niveau de détail : plus la caméra est près, plus on voit de muscles, d'os et d'organes. */
+    const gate = smoothstep(1.25, 0.5, dist) * (1 - smoothstep(0.02, 0.2, d.focus))
+    heartWorld.set(HEART_POS[0], HEART_POS[1], HEART_POS[2]).applyMatrix4(group.current.matrixWorld)
+    const near = Math.hypot(heartWorld.x - lookX, heartWorld.y - lookY)
+    const heartGate = smoothstep(0.5, 0.2, dist) * (1 - smoothstep(0.05, 0.13, near)) * (1 - smoothstep(0.02, 0.2, d.focus))
+    lod.current.gate = gate
+    lod.current.heart = heartGate
+    const zoomed = zoomedFlag.current ? d.bz > 0.02 : d.bz > 0.05
+    if (zoomed !== zoomedFlag.current) {
+      zoomedFlag.current = zoomed
+      onZoomed?.(zoomed)
+    }
+    /* Demi-largeur du corps à l'écran : sert à savoir si la molette vise le corps. */
+    probe.set(BODY_HALF_WIDTH, BODY_CENTER_Y, 0).project(camera)
+    const rx = (probe.x * 0.5 + 0.5) * size.width
+    probe.set(-BODY_HALF_WIDTH, BODY_CENTER_Y, 0).project(camera)
+    d.bodyHalfW = Math.abs(rx - (probe.x * 0.5 + 0.5) * size.width) / 2
 
     /* Le corps s'estompe pendant que les neurones apparaissent (voir NeuralLayer). */
     const bodyFade = 1 - smoothstep(0.28, 0.7, d.focus)
@@ -595,7 +681,22 @@ export default function Body3D(props: Body3DProps) {
   const drag = useRef(0)
   const zoom = useRef(1)
   const pointer = useRef<{ x: number; y: number; moved: number } | null>(null)
-  const dive = useRef<DiveState>({ focus: 0, target: 0, tilt: 0, headX: 0, headY: 0, headR: 40 })
+  const dive = useRef<DiveState>({
+    focus: 0,
+    target: 0,
+    tilt: 0,
+    headX: 0,
+    headY: 0,
+    headR: 40,
+    bz: 0,
+    bzTarget: 0,
+    fx: 0,
+    fy: BODY_CENTER_Y,
+    pick: null,
+    bodyHalfW: 80,
+  })
+  const lod = useRef<Lod>({ gate: 0, heart: 0 })
+  const [zoomed, setZoomed] = useState(false)
   const bodyRef = useRef<THREE.Group>(null)
   const [deep, setDeep] = useState(false)
   const onDeepProp = useRef(props.onDeep)
@@ -613,8 +714,22 @@ export default function Body3D(props: Body3DProps) {
 
   /* Ordre de zoom venant d'un bouton : même trajectoire continue que la molette. */
   useEffect(() => {
-    if (props.diveCommand) dive.current.target = clamp(props.diveCommand.to, 0, DIVE_MAX)
+    if (props.diveCommand) {
+      dive.current.target = clamp(props.diveCommand.to, 0, DIVE_MAX)
+      if (props.diveCommand.to > 0) dive.current.bzTarget = 0
+    }
   }, [props.diveCommand])
+
+  /* Raccourci vers une région : on vise le point, puis on s'en approche. */
+  useEffect(() => {
+    const c = props.regionCommand
+    if (!c) return
+    const d = dive.current
+    d.target = 0
+    d.fx = c.x
+    d.fy = c.y
+    d.bzTarget = clamp(c.zoom, 0, 1)
+  }, [props.regionCommand])
 
   /* Molette : au-dessus de la tête → plongée ; ailleurs → zoom (ou défilement sur l'accueil). */
   useEffect(() => {
@@ -627,12 +742,22 @@ export default function Body3D(props: Body3DProps) {
       const y = e.clientY - rect.top
       const near = Math.hypot(x - d.headX, y - d.headY) < Math.max(60, d.headR * 2.4)
       const step = Math.max(-0.45, Math.min(0.45, -e.deltaY / 340))
-      if (step > 0 && canDive.current && (near || d.target > 0.02)) {
+      /* Le curseur est-il sur le corps (colonne centrale) ? */
+      const overBody = Math.abs(x - rect.width / 2) < Math.max(40, d.bodyHalfW * 1.15)
+      if (step > 0 && canDive.current && d.bzTarget < 0.02 && (near || d.target > 0.02)) {
         e.preventDefault()
         d.target = clamp(d.target + step, 0, DIVE_MAX)
       } else if (step < 0 && d.target > 0.02) {
         e.preventDefault()
         d.target = clamp(d.target + step, 0, DIVE_MAX)
+      } else if (step > 0 && overBody && d.target < 0.02) {
+        /* Zoom sur la région du corps sous le curseur. */
+        e.preventDefault()
+        d.pick = { nx: (x / rect.width) * 2 - 1, ny: -((y / rect.height) * 2 - 1), blend: d.bzTarget < 0.03 ? 1 : 0.35 }
+        d.bzTarget = clamp(d.bzTarget + step * 0.7, 0, 1)
+      } else if (step < 0 && d.bzTarget > 0.02) {
+        e.preventDefault()
+        d.bzTarget = clamp(d.bzTarget + step * 0.7, 0, 1)
       } else if (!heroRef.current) {
         e.preventDefault()
         zoom.current = clamp(zoom.current + e.deltaY * 0.0012, 0.72, 1.6)
@@ -659,8 +784,24 @@ export default function Body3D(props: Body3DProps) {
     if (touches.current.size === 2) {
       const [a, b] = [...touches.current.values()]
       const dist = Math.hypot(a.x - b.x, a.y - b.y)
-      if (pinch.current !== null && canDive.current) {
-        dive.current.target = clamp(dive.current.target + (dist - pinch.current) / 200, 0, DIVE_MAX)
+      if (pinch.current !== null) {
+        const d = dive.current
+        const delta = (dist - pinch.current) / 200
+        const box = wrap.current?.getBoundingClientRect()
+        const mx = (a.x + b.x) / 2
+        const my = (a.y + b.y) / 2
+        const nearHead = !!box && Math.hypot(mx - box.left - d.headX, my - box.top - d.headY) < Math.max(70, d.headR * 2.6)
+        if (canDive.current && d.bzTarget < 0.02 && (nearHead || d.target > 0.02)) {
+          d.target = clamp(d.target + delta, 0, DIVE_MAX)
+        } else if (box && d.target < 0.02) {
+          /* Sinon, le pincement zoome sur la région du corps entre les deux doigts. */
+          d.pick = {
+            nx: ((mx - box.left) / box.width) * 2 - 1,
+            ny: -(((my - box.top) / box.height) * 2 - 1),
+            blend: d.bzTarget < 0.03 ? 1 : 0.35,
+          }
+          d.bzTarget = clamp(d.bzTarget + delta * 1.1, 0, 1)
+        }
       }
       pinch.current = dist
       if (pointer.current) pointer.current.moved = 99
@@ -697,7 +838,7 @@ export default function Body3D(props: Body3DProps) {
         powerPreference: 'high-performance',
         failIfMajorPerformanceCaveat: false,
       }}
-      style={{ touchAction: props.hero && !deep ? 'pan-y' : 'none' }}
+      style={{ touchAction: props.hero && !deep && !zoomed ? 'pan-y' : 'none' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -723,9 +864,11 @@ export default function Body3D(props: Body3DProps) {
           onDeepProp.current?.(v)
         }}
         onFocus={(f) => onFocusProp.current?.(f)}
+        onZoomed={setZoomed}
+        lod={lod}
       >
         <group ref={bodyRef}>
-        <Shell seg={seg} opacity={layer === 'organes' ? 0.22 : 0.3} />
+        <Shell seg={seg} opacity={layer === 'organes' ? 0.22 : 0.3} lod={lod} />
         {showMuscles && (
           <Muscles
             body={props.body}
@@ -734,8 +877,11 @@ export default function Body3D(props: Body3DProps) {
             onSelect={props.onSelect}
             seg={seg}
             clickGuard={clickGuard}
+            lod={lod}
           />
         )}
+        {showMuscles && <MuscleDetail body={props.body} lod={lod} seg={Math.max(12, seg)} />}
+        {(showJoints || showMuscles) && <JointDetail jointLoad={props.jointLoad} lod={lod} seg={seg} />}
         {showOrgans && (
           <>
             <Brain
@@ -753,7 +899,9 @@ export default function Body3D(props: Body3DProps) {
               onSelect={() => props.onSelect('coeur')}
               seg={seg}
               clickGuard={clickGuard}
+              lod={lod}
             />
+            <HeartDetail score={props.cardioScore} restingHr={props.restingHr} lod={lod} seg={Math.max(14, seg)} />
           </>
         )}
         {showJoints && (
@@ -762,6 +910,7 @@ export default function Body3D(props: Body3DProps) {
             selected={props.selected}
             onSelect={props.onSelect}
             clickGuard={clickGuard}
+            lod={lod}
           />
         )}
         <Platform />

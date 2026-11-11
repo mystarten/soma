@@ -44,6 +44,17 @@ const HORIZONS = [
   { value: 48, label: '+48 h' },
 ]
 
+/** Raccourcis « voir de près » : point visé (repère du corps) et niveau de zoom. */
+const REGIONS = [
+  { label: 'Cœur', x: 0.015, y: 1.322, zoom: 1 },
+  { label: 'Épaule', x: 0.168, y: 1.418, zoom: 0.92 },
+  { label: 'Bras', x: 0.195, y: 1.2, zoom: 0.85 },
+  { label: 'Abdos', x: 0, y: 1.15, zoom: 0.88 },
+  { label: 'Cuisse', x: 0.085, y: 0.72, zoom: 0.85 },
+  { label: 'Genou', x: 0.082, y: 0.505, zoom: 0.95 },
+  { label: 'Corps', x: 0, y: 0.88, zoom: 0 },
+]
+
 const LEG_ZONES: MuscleZone[] = ['quadriceps', 'ischios', 'fessiers', 'mollets', 'tibias', 'adducteurs']
 const JOINTS_LIST: Joint[] = ['epaules', 'coudes', 'poignets', 'genoux', 'chevilles']
 
@@ -67,6 +78,10 @@ export default function BodyView({
   const [deep, setDeep] = useState(false)
   const [diveCommand, setDiveCommand] = useState<{ to: number; nonce: number }>()
   const diveTo = (to: number) => setDiveCommand((c) => ({ to, nonce: (c?.nonce ?? 0) + 1 }))
+  /** Va voir une région du corps de près (cœur, épaule, genou…). */
+  const [regionCommand, setRegionCommand] = useState<{ x: number; y: number; zoom: number; nonce: number }>()
+  const goRegion = (x: number, y: number, zoom: number) =>
+    setRegionCommand((c) => ({ x, y, zoom, nonce: (c?.nonce ?? 0) + 1 }))
   const raf = useRef(0)
 
   /* Plein écran progressif : à mesure qu'on plonge dans le cerveau, la carte s'agrandit
@@ -308,6 +323,7 @@ export default function BodyView({
                   diveCommand={diveCommand}
                   onDeep={setDeep}
                   onFocus={onFocus}
+                  regionCommand={regionCommand}
                   neural={
                     compact
                       ? undefined
@@ -345,6 +361,19 @@ export default function BodyView({
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <Segmented value={layer} onChange={setLayer} options={LAYERS} size="sm" />
+            {!compact && use3d && (
+              <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Voir de près">
+                {REGIONS.map((r) => (
+                  <button
+                    key={r.label}
+                    onClick={() => goRegion(r.x, r.y, r.zoom)}
+                    className="rounded-lg bg-white/6 px-2.5 py-1.5 text-xs text-mist-300 hairline transition active:scale-95 hover:text-mist-100"
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            )}
             {!compact && use3d && (
               <button
                 onClick={() => diveTo(deep ? 0 : 1)}

@@ -30,6 +30,11 @@ const fragment = /* glsl */ `
   uniform float uGain;
   /* Fondu global : 1 = visible, 0 = invisible (plongée dans le cerveau). */
   uniform float uFade;
+  /* Détail de près : fibres musculaires, ouverture progressive, atténuation de la forme grossière. */
+  uniform float uFiber;
+  uniform float uFiberN;
+  uniform float uGate;
+  uniform float uDim;
 
   varying vec3 vNormalV;
   varying vec3 vPosV;
@@ -52,12 +57,17 @@ const fragment = /* glsl */ `
     float grid = techGrid(vUv, uGridScale) * uGrid;
 
     float pulse = 0.5 + 0.5 * sin(uTime * 2.3);
-    float intensity = (0.10 + fres * 1.15 + grid * 0.45) * uGain;
+    /* Fibres : des lignes qui suivent la longueur du muscle, légèrement ondulées. */
+    float across = abs(fract(vUv.x * uFiberN) - 0.5) * 2.0;
+    float fib = pow(1.0 - across, 3.0) * (0.7 + 0.3 * sin(vUv.y * 38.0 + vUv.x * uFiberN * 2.7));
+    float intensity = (0.10 + fres * 1.15 + grid * 0.45 + uFiber * fib * 0.55) * uGain;
+    intensity *= mix(1.0, 0.55, uDim);
     intensity *= 1.0 + uPulse * 0.4 * pulse;
     intensity += uSelected * (0.35 + fres * 0.6);
 
-    float alpha = clamp(uOpacity * (0.20 + fres * 0.95 + grid * 0.4) + uSelected * 0.16, 0.0, 1.0);
-    gl_FragColor = vec4(uColor * intensity * uFade, alpha * uFade);
+    float alpha = clamp(uOpacity * (0.20 + fres * 0.95 + grid * 0.4 + uFiber * fib * 0.25) + uSelected * 0.16, 0.0, 1.0);
+    alpha *= (1.0 - uDim) * uGate;
+    gl_FragColor = vec4(uColor * intensity * uFade * uGate, alpha * uFade);
 
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -71,6 +81,9 @@ export interface JarvisOptions {
   gridScale?: number
   rimPower?: number
   gain?: number
+  /** Force des fibres (0 = aucune). */
+  fiber?: number
+  fiberCount?: number
 }
 
 export function createJarvisMaterial(opts: JarvisOptions = {}): THREE.ShaderMaterial {
@@ -92,6 +105,10 @@ export function createJarvisMaterial(opts: JarvisOptions = {}): THREE.ShaderMate
       uRimPower: { value: opts.rimPower ?? 2.2 },
       uGain: { value: opts.gain ?? 1 },
       uFade: { value: 1 },
+      uFiber: { value: opts.fiber ?? 0 },
+      uFiberN: { value: opts.fiberCount ?? 24 },
+      uGate: { value: 1 },
+      uDim: { value: 0 },
     },
   })
 }
