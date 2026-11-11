@@ -11,6 +11,7 @@ import { dayLoad } from '../engine/load'
 import { bodySummary } from '../engine/fatigue'
 import { fatigueColor } from '../engine/fatigueConfig'
 import { zoneList } from '../engine/suggest'
+import { reviewDone, reviewWeekFor } from '../engine/review'
 
 const recoveryColor = (v: number) => (v >= 67 ? '#41e08a' : v >= 34 ? '#ffc24b' : '#ff5a5a')
 
@@ -43,6 +44,24 @@ function DayLine() {
       </p>
       {rest.length > 0 && <p className="text-xs text-mist-500">{rest.join(' · ')}</p>}
     </div>
+  )
+}
+
+/** Un rappel discret le week-end et le lundi, tant que la revue de la semaine n'est pas faite. */
+function ReviewNudge() {
+  const data = useSoma()
+  const dow = new Date().getDay()
+  const target = reviewWeekFor(data.today, data.settings.weekStartsOn)
+  const done = reviewDone(data.reviews.find((r) => r.id === target.start))
+  if (done || !(dow === 0 || dow === 6 || dow === 1)) return null
+  return (
+    <button
+      onClick={() => navigate('revue')}
+      className="flex items-center justify-between gap-2 rounded-xl bg-accent/8 px-3.5 py-2.5 text-left text-sm text-mist-100 hairline"
+    >
+      <span>{target.current ? 'La semaine se termine : ta revue ?' : 'Ta revue de la semaine dernière ?'}</span>
+      <span className="text-accent">Deux minutes →</span>
+    </button>
   )
 }
 
@@ -112,6 +131,7 @@ export default function Vie() {
       {/* Centre : le bonhomme, puis la to-do */}
       <div className="flex min-w-0 flex-col gap-4 lg:row-span-2 xl:col-start-2 xl:row-span-1 xl:row-start-1">
         <DayLine />
+        <ReviewNudge />
         <BodyView hero />
         <TodoPanel initialView="week" />
       </div>

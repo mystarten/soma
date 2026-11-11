@@ -18,6 +18,8 @@ const CalendarScreen = lazy(() => import('./screens/CalendarScreen'))
 const Goals = lazy(() => import('./screens/Goals'))
 const Analysis = lazy(() => import('./screens/Analysis'))
 const Follow = lazy(() => import('./screens/Follow'))
+const Dashboard = lazy(() => import('./screens/Dashboard'))
+const Review = lazy(() => import('./screens/Review'))
 const WhoopImport = lazy(() => import('./screens/WhoopImport'))
 const SettingsScreen = lazy(() => import('./screens/SettingsScreen'))
 
@@ -33,6 +35,8 @@ const TITLES: Record<string, string> = {
   objectifs: 'Objectifs',
   analyses: 'Analyses',
   suivi: 'Suivi de fond',
+  tableau: 'Tableau de bord',
+  revue: 'Revue de la semaine',
   import: 'Import WHOOP',
   reglages: 'Réglages',
 }
@@ -109,6 +113,8 @@ export default function App() {
             {route === 'objectifs' && <Goals />}
             {route === 'analyses' && <Analysis />}
             {route === 'suivi' && <Follow />}
+            {route === 'tableau' && <Dashboard />}
+            {route === 'revue' && <Review />}
             {route === 'import' && <WhoopImport />}
             {route === 'reglages' && <SettingsScreen />}
           </Suspense>

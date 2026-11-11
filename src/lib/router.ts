@@ -14,6 +14,8 @@ export type Route =
   | 'objectifs'
   | 'analyses'
   | 'suivi'
+  | 'tableau'
+  | 'revue'
   | 'import'
   | 'reglages'
 
@@ -29,6 +31,8 @@ export const ROUTES: Route[] = [
   'objectifs',
   'analyses',
   'suivi',
+  'tableau',
+  'revue',
   'import',
   'reglages',
 ]

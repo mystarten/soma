@@ -62,6 +62,9 @@ const I = {
       <path d="M9 8.5h5M9 11.5h5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </>
   ),
+  loop: (
+    <path d="M20 12a8 8 0 1 1-2.5-5.8M20 4v4.2h-4.2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  ),
   pulse: (
     <path d="M3 12h4l2.5-6 4 12 2.5-6H21" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
   ),
@@ -84,6 +87,7 @@ function Icon({ children }: { children: ReactNode }) {
 
 export const NAV_ITEMS: { route: Route; label: string; icon: ReactNode }[] = [
   { route: 'accueil', label: 'Vie', icon: I.home },
+  { route: 'tableau', label: 'Tableau de bord', icon: I.chart },
   { route: 'taches', label: 'Tâches', icon: I.check },
   { route: 'savoir', label: 'Savoir', icon: I.book },
   { route: 'sport', label: 'Sport', icon: I.pulse },
@@ -93,6 +97,7 @@ export const NAV_ITEMS: { route: Route; label: string; icon: ReactNode }[] = [
   { route: 'calendrier', label: 'Calendrier', icon: I.calendar },
   { route: 'objectifs', label: 'Objectifs', icon: I.target },
   { route: 'analyses', label: 'Analyses', icon: I.chart },
+  { route: 'revue', label: 'Revue', icon: I.loop },
   { route: 'suivi', label: 'Suivi', icon: I.eye },
   { route: 'import', label: 'Import WHOOP', icon: I.upload },
   { route: 'reglages', label: 'Réglages', icon: I.gear },
