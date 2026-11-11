@@ -167,3 +167,13 @@ describe('parseur WHOOP', () => {
     expect(p.workouts).toHaveLength(2)
   })
 })
+
+describe('séances supprimées', () => {
+  it('un ré-import ne ressuscite pas une séance supprimée', () => {
+    const csv = 'Workout start time,Workout end time,Duration (min),Activity name,Activity Strain,Average HR (bpm),Max HR (bpm)\n2026-11-10T17:00:00.000Z,2026-11-10T17:50:00.000Z,50,Weightlifting,9,128,170'
+    const first = buildWhoopPreview([{ name: 'workouts.csv', text: csv }], { checkins: [], workouts: [] })
+    expect(first.workouts).toHaveLength(1)
+    const gone = { ...first.workouts[0], deleted: true }
+    expect(buildWhoopPreview([{ name: 'workouts.csv', text: csv }], { checkins: [], workouts: [gone] }).workouts).toHaveLength(0)
+  })
+})

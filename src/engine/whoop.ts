@@ -406,9 +406,8 @@ export function buildWhoopPreview(
   let nights = 0
   let skippedDuplicates = 0
 
-  const existingWorkoutKeys = new Set(
-    existing.workouts.filter((w) => !w.deleted).map((w) => w.externalKey ?? `id:${w.id}`),
-  )
+  /* Les séances supprimées comptent aussi : un ré-import ne doit pas les ressusciter. */
+  const existingWorkoutKeys = new Set(existing.workouts.map((w) => w.externalKey ?? `id:${w.id}`))
   const existingByDay = new Map<DayKey, CheckIn>()
   for (const c of existing.checkins) if (!c.deleted) existingByDay.set(c.day, c)
 

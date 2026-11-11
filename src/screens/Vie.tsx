@@ -3,7 +3,6 @@ import { useSoma } from '../hooks/useSoma'
 import BodyView from '../components/body/BodyView'
 import TodoPanel from '../components/vie/TodoPanel'
 import DeadlinesPanel from '../components/vie/DeadlinesPanel'
-import { AgendaPanel, MailPanel } from '../components/vie/GooglePanels'
 import { Ring } from '../components/ui/Ring'
 import { Button } from '../components/ui/primitives'
 import { navigate } from '../lib/router'
@@ -175,8 +174,6 @@ export default function Vie() {
       {/* Échéances */}
       <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 xl:col-start-1 xl:row-start-1">
         <DeadlinesPanel />
-        <AgendaPanel />
-        <MailPanel />
       </div>
       {/* Sport */}
       <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 xl:col-start-3 xl:row-start-1">

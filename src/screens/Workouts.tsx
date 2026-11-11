@@ -239,6 +239,7 @@ export default function Workouts({ focusId }: { focusId?: string }) {
             if (focusId) navigate('seances')
           }}
           onSaved={() => toast.show('Séance enregistrée')}
+          onDeleted={() => toast.show('Séance supprimée')}
         />
       )}
     </div>
@@ -518,11 +519,13 @@ function WorkoutEditor({
   workout,
   onClose,
   onSaved,
+  onDeleted,
   autoPick,
 }: {
   workout: Workout
   onClose: () => void
   onSaved: () => void
+  onDeleted: () => void
   autoPick?: boolean
 }) {
   const data = useSoma()
@@ -572,8 +575,11 @@ function WorkoutEditor({
     onClose()
   }
 
+  /* Deux temps : un premier tap demande confirmation, le second supprime vraiment. */
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const remove = async () => {
     await deleteWorkout(w.id)
+    onDeleted()
     onClose()
   }
 
@@ -590,9 +596,15 @@ function WorkoutEditor({
           <Button variant="primary" full onClick={save}>
             Enregistrer
           </Button>
-          <Button variant="danger" onClick={remove}>
-            Supprimer
-          </Button>
+          {confirmDelete ? (
+            <Button variant="danger" onClick={() => void remove()}>
+              Oui, supprimer
+            </Button>
+          ) : (
+            <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+              Supprimer
+            </Button>
+          )}
         </div>
       }
     >
