@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Bloom, EffectComposer } from '@react-three/postprocessing'
 import * as THREE from 'three'
@@ -13,6 +13,8 @@ import {
   type Part,
 } from './bodyParts'
 import { createJarvisMaterial } from './jarvisMaterial'
+import NeuralLayer, { BRAIN_POS } from '../neural/NeuralLayer'
+import type { NeuralGraph, NeuralNode, Vec3 } from '../../engine/neural'
 import { fatigueColor } from '../../engine/fatigueConfig'
 import { clamp } from '../../engine/stats'
 
@@ -33,23 +35,43 @@ export interface Body3DProps {
   compact?: boolean
   /** Écran d'accueil : la molette fait défiler la page, sauf au-dessus de la tête. */
   hero?: boolean
-  /** Appelé quand la caméra a plongé dans le cerveau. */
-  onDive?: () => void
-  /** Rendu suspendu (réseau de neurones ouvert par-dessus). */
-  paused?: boolean
+  /** Réseau de neurones logé dans la tête (zoom continu depuis le corps). */
+  neural?: {
+    graph: NeuralGraph
+    positions: Map<string, Vec3>
+    hovered: string | null
+    setHovered: (id: string | null) => void
+    onPick: (n: NeuralNode) => void
+    labels: React.RefObject<Map<string, HTMLDivElement>>
+  }
+  /** Ordre de zoom : 1 = au cœur du cerveau, 0 = vue du corps. */
+  diveCommand?: { to: number; nonce: number }
+  /** Appelé quand on est assez près pour voir les neurones (et inversement). */
+  onDeep?: (deep: boolean) => void
 }
 
 /** État partagé de la plongée vers le cerveau. */
 interface DiveState {
+  /** Profondeur lissée (0 = corps entier, 1 = au cœur du cerveau). */
   focus: number
+  /** Profondeur demandée par la molette, le pincement ou un bouton. */
   target: number
-  fired: boolean
+  /** Inclinaison du réseau (glisser vers le haut ou le bas). */
+  tilt: number
   headX: number
   headY: number
   headR: number
 }
 
-const HEAD_Y = 1.64
+const HEAD_Y = BRAIN_POS[1]
+/** Demi-largeur et demi-hauteur du réseau à l'échelle du crâne, pour cadrer la vue finale. */
+const DEEP_HALF_W = 0.094
+const DEEP_HALF_H = 0.07
+
+const smoothstep = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
+  return t * t * (3 - 2 * t)
+}
 
 /* ── Géométries ───────────────────────────────────────────────────────── */
 
@@ -253,6 +275,7 @@ function Brain({
   const arc = useMemo(() => new THREE.TorusGeometry(0.066, 0.0022, 3, 26, Math.PI * 0.6), [])
 
   const pick = (e: { stopPropagation: () => void }) => {
+    if ((dive.current?.focus ?? 0) > 0.3) return
     e.stopPropagation()
     if (clickGuard()) onSelect()
   }
@@ -462,7 +485,8 @@ function Rig({
   children,
   compact,
   dive,
-  onDive,
+  bodyRef,
+  onDeep,
 }: {
   azimuth: number
   drag: React.RefObject<number>
@@ -470,7 +494,8 @@ function Rig({
   children: React.ReactNode
   compact?: boolean
   dive: React.RefObject<DiveState>
-  onDive?: () => void
+  bodyRef: React.RefObject<THREE.Group | null>
+  onDeep?: (deep: boolean) => void
 }) {
   const group = useRef<THREE.Group>(null)
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera
@@ -478,31 +503,48 @@ function Rig({
   const look = useMemo(() => new THREE.Vector3(), [])
   const want = useMemo(() => new THREE.Vector3(), [])
   const probe = useMemo(() => new THREE.Vector3(), [])
+  const lastFade = useRef(-1)
+  const deepFlag = useRef(false)
 
   useFrame(() => {
     if (!group.current) return
     const d = dive.current
     const wantRot = azimuth + drag.current
+    /* Le réseau dérive lentement quand on est dedans. */
+    drag.current += 0.0011 * smoothstep(0.7, 0.95, d.focus)
     group.current.rotation.y += (wantRot - group.current.rotation.y) * 0.12
 
-    /* Cadrage automatique : le corps entier tient toujours dans le cadre. */
-    const fovRad = (camera.fov * Math.PI) / 180
+    /* Cadrage du corps entier. */
+    const tan = Math.tan((camera.fov * Math.PI) / 360)
     const aspect = Math.max(0.2, size.width / Math.max(1, size.height))
-    const halfH = (BODY_HEIGHT / 2) * (compact ? 1.08 : 1.04)
-    const halfW = BODY_HALF_WIDTH * 1.25
-    const distH = halfH / Math.tan(fovRad / 2)
-    const distW = halfW / (Math.tan(fovRad / 2) * aspect)
-    const base = Math.max(distH, distW) * zoom.current
+    const bodyH = (BODY_HEIGHT / 2) * (compact ? 1.08 : 1.04)
+    const bodyW = BODY_HALF_WIDTH * 1.25
+    const base = Math.max(bodyH / tan, bodyW / (tan * aspect)) * zoom.current
+    /* Cadrage du réseau, une fois dans le crâne. */
+    const deep = Math.max(DEEP_HALF_H / tan, DEEP_HALF_W / (tan * aspect))
 
-    /* Plongée : la caméra glisse vers la tête puis traverse le crâne. */
-    d.focus += (d.target - d.focus) * 0.14
+    /* Une seule trajectoire continue : la caméra descend vers la tête puis dans le cerveau.
+       Interpolation logarithmique : la vitesse de zoom paraît constante du début à la fin. */
+    d.focus += (d.target - d.focus) * 0.16
+    if (Math.abs(d.target - d.focus) < 0.0004) d.focus = d.target
     const e = d.focus * d.focus * (3 - 2 * d.focus)
-    const lookY = BODY_CENTER_Y + (HEAD_Y - BODY_CENTER_Y) * Math.min(1, e * 1.6)
-    const dist = base + (0.16 - base) * e
+    const lookY = BODY_CENTER_Y + (HEAD_Y - BODY_CENTER_Y) * Math.min(1, e * 1.5)
+    const dist = base * Math.pow(deep / base, e)
     want.set(0, lookY, dist)
-    camera.position.lerp(want, 0.2)
+    camera.position.lerp(want, 0.3)
     look.set(0, lookY, 0)
     camera.lookAt(look)
+
+    /* Le corps s'estompe pendant que les neurones apparaissent (voir NeuralLayer). */
+    const bodyFade = 1 - smoothstep(0.28, 0.7, d.focus)
+    if (bodyRef.current && Math.abs(bodyFade - lastFade.current) > 0.002) {
+      lastFade.current = bodyFade
+      bodyRef.current.visible = bodyFade > 0.01
+      bodyRef.current.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined
+        if (m?.uniforms?.uFade) m.uniforms.uFade.value = bodyFade
+      })
+    }
 
     /* Où est la tête à l'écran (pour savoir si la molette vise le cerveau). */
     probe.set(0, HEAD_Y, 0).project(camera)
@@ -511,24 +553,22 @@ function Rig({
     probe.set(0, HEAD_Y + 0.11, 0).project(camera)
     d.headR = Math.abs((-probe.y * 0.5 + 0.5) * size.height - d.headY)
 
-    if (!d.fired && d.focus > 0.96) {
-      d.fired = true
-      d.target = 0
-      onDive?.()
+    const isDeep = deepFlag.current ? d.focus > 0.62 : d.focus > 0.78
+    if (isDeep !== deepFlag.current) {
+      deepFlag.current = isDeep
+      onDeep?.(isDeep)
     }
-    if (d.fired && d.focus < 0.4) d.fired = false
   })
 
   return <group ref={group}>{children}</group>
 }
 
-function Throttle({ fps, paused }: { fps: number; paused?: boolean }) {
+function Throttle({ fps }: { fps: number }) {
   const invalidate = useThree((s) => s.invalidate)
   useEffect(() => {
-    if (paused) return
     const t = window.setInterval(() => invalidate(), 1000 / fps)
     return () => window.clearInterval(t)
-  }, [fps, invalidate, paused])
+  }, [fps, invalidate])
   return null
 }
 
@@ -540,12 +580,24 @@ export default function Body3D(props: Body3DProps) {
   const drag = useRef(0)
   const zoom = useRef(1)
   const pointer = useRef<{ x: number; y: number; moved: number } | null>(null)
-  const dive = useRef<DiveState>({ focus: 0, target: 0, fired: false, headX: 0, headY: 0, headR: 40 })
+  const dive = useRef<DiveState>({ focus: 0, target: 0, tilt: 0, headX: 0, headY: 0, headR: 40 })
+  const bodyRef = useRef<THREE.Group>(null)
+  const [deep, setDeep] = useState(false)
+  const onDeepProp = useRef(props.onDeep)
+  onDeepProp.current = props.onDeep
+  /* Sans réseau (mini-bonhomme), pas de plongée : la tête serait vide. */
+  const canDive = useRef(false)
+  canDive.current = !!props.neural
   const touches = useRef(new Map<number, { x: number; y: number }>())
   const pinch = useRef<number | null>(null)
   const wrap = useRef<HTMLDivElement>(null)
   const heroRef = useRef(props.hero)
   heroRef.current = props.hero
+
+  /* Ordre de zoom venant d'un bouton : même trajectoire continue que la molette. */
+  useEffect(() => {
+    if (props.diveCommand) dive.current.target = clamp(props.diveCommand.to, 0, 1)
+  }, [props.diveCommand])
 
   /* Molette : au-dessus de la tête → plongée ; ailleurs → zoom (ou défilement sur l'accueil). */
   useEffect(() => {
@@ -557,8 +609,8 @@ export default function Body3D(props: Body3DProps) {
       const x = e.clientX - rect.left
       const y = e.clientY - rect.top
       const near = Math.hypot(x - d.headX, y - d.headY) < Math.max(60, d.headR * 2.4)
-      const step = Math.max(-0.4, Math.min(0.4, -e.deltaY / 420))
-      if (step > 0 && (near || d.target > 0.02)) {
+      const step = Math.max(-0.45, Math.min(0.45, -e.deltaY / 340))
+      if (step > 0 && canDive.current && (near || d.target > 0.02)) {
         e.preventDefault()
         d.target = clamp(d.target + step, 0, 1)
       } else if (step < 0 && d.target > 0.02) {
@@ -590,8 +642,8 @@ export default function Body3D(props: Body3DProps) {
     if (touches.current.size === 2) {
       const [a, b] = [...touches.current.values()]
       const dist = Math.hypot(a.x - b.x, a.y - b.y)
-      if (pinch.current !== null) {
-        dive.current.target = clamp(dive.current.target + (dist - pinch.current) / 220, 0, 1)
+      if (pinch.current !== null && canDive.current) {
+        dive.current.target = clamp(dive.current.target + (dist - pinch.current) / 200, 0, 1)
       }
       pinch.current = dist
       if (pointer.current) pointer.current.moved = 99
@@ -601,17 +653,16 @@ export default function Body3D(props: Body3DProps) {
     if (!p || e.buttons === 0) return
     const dx = e.clientX - p.x
     p.moved += Math.abs(dx) + Math.abs(e.clientY - p.y)
+    const dy = e.clientY - p.y
     p.x = e.clientX
     p.y = e.clientY
     drag.current += dx * 0.011
+    /* Dans le cerveau, glisser vers le haut ou le bas incline aussi le réseau. */
+    if (dive.current.focus > 0.5) dive.current.tilt = clamp(dive.current.tilt + dy * 0.006, -0.9, 0.9)
   }
   const onPointerUp = (e: React.PointerEvent) => {
     touches.current.delete(e.pointerId)
-    if (touches.current.size < 2) {
-      pinch.current = null
-      /* Pincement relâché à mi-chemin : on revient doucement au corps. */
-      if (dive.current.target < 0.96) dive.current.target = dive.current.target > 0.6 ? 1 : 0
-    }
+    if (touches.current.size < 2) pinch.current = null
     window.setTimeout(() => {
       pointer.current = null
     }, 0)
@@ -622,14 +673,14 @@ export default function Body3D(props: Body3DProps) {
     <Canvas
       dpr={quality === 'high' ? [1, 2] : [1, 1.5]}
       frameloop="demand"
-      camera={{ position: [0, 0.88, 2.4], fov: 32, near: 0.05, far: 20 }}
+      camera={{ position: [0, 0.88, 2.4], fov: 32, near: 0.01, far: 20 }}
       gl={{
         antialias: quality === 'high',
         alpha: true,
         powerPreference: 'high-performance',
         failIfMajorPerformanceCaveat: false,
       }}
-      style={{ touchAction: props.hero ? 'pan-y' : 'none' }}
+      style={{ touchAction: props.hero && !deep ? 'pan-y' : 'none' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -641,9 +692,21 @@ export default function Body3D(props: Body3DProps) {
         scene.background = null
       }}
     >
-      <Throttle fps={quality === 'high' ? 60 : 30} paused={props.paused} />
+      <Throttle fps={quality === 'high' ? 60 : 30} />
       <ambientLight intensity={0.5} />
-      <Rig azimuth={props.azimuth} drag={drag} zoom={zoom} compact={compact} dive={dive} onDive={props.onDive}>
+      <Rig
+        azimuth={props.azimuth}
+        drag={drag}
+        zoom={zoom}
+        compact={compact}
+        dive={dive}
+        bodyRef={bodyRef}
+        onDeep={(v) => {
+          setDeep(v)
+          onDeepProp.current?.(v)
+        }}
+      >
+        <group ref={bodyRef}>
         <Shell seg={seg} opacity={layer === 'organes' ? 0.22 : 0.3} />
         {showMuscles && (
           <Muscles
@@ -684,6 +747,20 @@ export default function Body3D(props: Body3DProps) {
           />
         )}
         <Platform />
+        </group>
+        {props.neural && (
+          <NeuralLayer
+            graph={props.neural.graph}
+            positions={props.neural.positions}
+            quality={quality}
+            hovered={props.neural.hovered}
+            setHovered={props.neural.setHovered}
+            onPick={props.neural.onPick}
+            dive={dive}
+            labels={props.neural.labels}
+            clickGuard={clickGuard}
+          />
+        )}
       </Rig>
       {quality === 'high' && (
         <EffectComposer enableNormalPass={false}>

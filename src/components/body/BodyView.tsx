@@ -23,9 +23,10 @@ import { Badge, Button, Card, Dot, Segmented, Sheet, Stat } from '../ui/primitiv
 import { Spark } from '../charts/charts'
 import type { BodyLayer } from './Body3D'
 import Body2D from './Body2D'
+import { useNeuralModel } from '../neural/useNeuralModel'
+import { NeuralHud, NeuralModals } from '../neural/NeuralHud'
 
 const Body3D = lazy(() => import('./Body3D'))
-const NeuralOverlay = lazy(() => import('../neural/NeuralOverlay'))
 
 type Selection = MuscleZone | 'cerveau' | 'coeur' | Joint | null
 
@@ -62,9 +63,13 @@ export default function BodyView({
   const [dayOffset, setDayOffset] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [render3d, setRender3d] = useState(false)
-  const [neural, setNeural] = useState(false)
+  /** Vrai quand on est assez près du cerveau pour voir les neurones. */
+  const [deep, setDeep] = useState(false)
+  const [diveCommand, setDiveCommand] = useState<{ to: number; nonce: number }>()
+  const diveTo = (to: number) => setDiveCommand((c) => ({ to, nonce: (c?.nonce ?? 0) + 1 }))
   const raf = useRef(0)
 
+  const neuralModel = useNeuralModel(!compact)
   const webgl = useMemo(() => hasWebGL(), [])
   const low = useMemo(() => isLowPower(), [])
   const use3d = data.settings.bodyRender === '3d' && webgl
@@ -150,7 +155,10 @@ export default function BodyView({
     >
       {/* ── Modèle, avec le score en surimpression ── */}
       <Card padded={false} className={`relative ${hero ? 'hero-stage' : ''}`}>
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 p-4">
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 p-4 transition-opacity duration-300"
+          style={{ opacity: deep ? 0 : 1 }}
+        >
           <div>
             <div className="text-[0.62rem] tracking-[0.18em] text-mist-500 uppercase">
               Disponibilité
@@ -177,11 +185,19 @@ export default function BodyView({
             height: hero ? 'clamp(400px, 66vh, 780px)' : compact ? 300 : 'clamp(340px, 56vh, 560px)',
           }}
         >
-          {hero && <div className="hero-scan" aria-hidden />}
+          {hero && <div className="hero-scan transition-opacity duration-500" style={{ opacity: deep ? 0 : 1 }} aria-hidden />}
           {!compact && use3d && (
-            <p className="pointer-events-none absolute inset-x-0 bottom-2 z-10 text-center text-[0.62rem] tracking-wide text-mist-700">
-              {low ? 'Écarte deux doigts' : 'Zoome à la molette sur la tête'} pour entrer dans le cerveau
-            </p>
+            <>
+              <p
+                className="pointer-events-none absolute inset-x-0 bottom-2 z-10 text-center text-[0.62rem] tracking-wide text-mist-700 transition-opacity duration-300"
+                style={{ opacity: deep ? 0 : 1 }}
+              >
+                {low ? 'Écarte deux doigts' : 'Zoome à la molette sur la tête'} pour entrer dans le cerveau
+              </p>
+              <div className="pointer-events-none absolute inset-0 z-10" data-deep={deep ? 'true' : 'false'}>
+                <NeuralHud model={neuralModel} deep={deep} onBack={() => diveTo(0)} />
+              </div>
+            </>
           )}
           {use3d ? (
             render3d ? (
@@ -205,8 +221,20 @@ export default function BodyView({
                   quality={low ? 'low' : 'high'}
                   compact={compact}
                   hero={hero}
-                  onDive={compact ? undefined : () => setNeural(true)}
-                  paused={neural}
+                  diveCommand={diveCommand}
+                  onDeep={setDeep}
+                  neural={
+                    compact
+                      ? undefined
+                      : {
+                          graph: neuralModel.graph,
+                          positions: neuralModel.positions,
+                          hovered: neuralModel.hovered,
+                          setHovered: neuralModel.setHovered,
+                          onPick: neuralModel.pick,
+                          labels: neuralModel.labels,
+                        }
+                  }
                 />
               </Suspense>
             ) : (
@@ -231,14 +259,14 @@ export default function BodyView({
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <Segmented value={layer} onChange={setLayer} options={LAYERS} size="sm" />
-            {!compact && (
+            {!compact && use3d && (
               <button
-                onClick={() => setNeural(true)}
+                onClick={() => diveTo(deep ? 0 : 1)}
                 className="flex items-center gap-1.5 rounded-xl bg-accent/12 px-3 py-1.5 text-xs text-accent shadow-[inset_0_0_0_1px_var(--accent-soft)] transition active:scale-95"
-                title="Ouvrir le réseau de neurones (ou zoome sur la tête)"
+                title="Zoomer jusqu'aux neurones (ou à la molette sur la tête)"
               >
                 <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_var(--accent)]" />
-                Réseau
+                {deep ? 'Corps' : 'Réseau'}
               </button>
             )}
           </div>
@@ -378,11 +406,7 @@ export default function BodyView({
         </>
       )}
 
-      {neural && (
-        <Suspense fallback={null}>
-          <NeuralOverlay onClose={() => setNeural(false)} />
-        </Suspense>
-      )}
+      {!compact && <NeuralModals model={neuralModel} />}
 
       <DetailSheet
         selection={selected}

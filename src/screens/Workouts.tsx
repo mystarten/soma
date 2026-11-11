@@ -824,18 +824,40 @@ function SetsEditor({
 }) {
   const data = useSoma()
   const [picker, setPicker] = useState(Boolean(autoPick))
-  const [loadShown, setLoadShown] = useState<Set<string>>(new Set())
   const [detailOpen, setDetailOpen] = useState<Set<string>>(new Set())
+  const [justAdded, setJustAdded] = useState<string | null>(null)
   const sets = w.sets ?? []
 
-  const groups = useMemo(
-    () =>
-      groupByExercise(sets).map((g) => ({
-        ...g,
-        exercise: data.exercises.find((e) => e.id === g.exerciseId),
-      })),
-    [sets, data.exercises],
-  )
+  /* Un bloc = une suite de séries du même exercice. Le même exercice peut revenir en bloc séparé. */
+  const groups = useMemo(() => {
+    const out: { key: string; exerciseId: string; ids: string[]; sets: SetEntry[]; exercise: ExerciseDef | undefined }[] = []
+    for (const s of sets) {
+      const key = `${s.exerciseId}|${s.block ?? ''}`
+      const last = out[out.length - 1]
+      if (last && last.key === key) {
+        last.sets.push(s)
+        last.ids.push(s.id)
+      } else {
+        out.push({
+          key,
+          exerciseId: s.exerciseId,
+          ids: [s.id],
+          sets: [s],
+          exercise: data.exercises.find((e) => e.id === s.exerciseId),
+        })
+      }
+    }
+    return out
+  }, [sets, data.exercises])
+
+  /* Le nouveau bloc se place tout seul sous les yeux. */
+  useEffect(() => {
+    if (!justAdded) return
+    const el = document.getElementById(`block-${justAdded}`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const t = window.setTimeout(() => setJustAdded(null), 1600)
+    return () => window.clearTimeout(t)
+  }, [justAdded])
 
   const toggle = (setter: typeof setDetailOpen, id: string) =>
     setter((prev) => {
@@ -847,14 +869,18 @@ function SetsEditor({
 
   const update = (id: string, p: Partial<SetEntry>) =>
     patch({ sets: sets.map((s) => (s.id === id ? { ...s, ...p } : s)) })
-  const updateGroup = (exerciseId: string, p: Partial<SetEntry>) =>
-    patch({ sets: sets.map((s) => (s.exerciseId === exerciseId ? { ...s, ...p } : s)) })
+  const updateGroup = (ids: string[], p: Partial<SetEntry>) => {
+    const set = new Set(ids)
+    patch({ sets: sets.map((s) => (set.has(s.id) ? { ...s, ...p } : s)) })
+  }
   const removeSet = (id: string) => patch({ sets: sets.filter((s) => s.id !== id) })
-  const removeGroup = (exerciseId: string) => patch({ sets: sets.filter((s) => s.exerciseId !== exerciseId) })
+  const removeGroup = (ids: string[]) => {
+    const set = new Set(ids)
+    patch({ sets: sets.filter((s) => !set.has(s.id)) })
+  }
 
-  /** Règle le nombre de séries d'un exercice : ajoute des copies de la dernière, ou retire depuis la fin. */
-  const setSeriesCount = (exerciseId: string, count: number) => {
-    const ids = sets.filter((s) => s.exerciseId === exerciseId).map((s) => s.id)
+  /** Règle le nombre de séries d'un bloc : ajoute des copies de la dernière, ou retire depuis la fin. */
+  const setSeriesCount = (ids: string[], count: number) => {
     const n = Math.max(1, Math.min(30, Math.round(count)))
     if (n === ids.length || !ids.length) return
     if (n < ids.length) {
@@ -870,24 +896,27 @@ function SetsEditor({
     patch({ sets: next })
   }
 
-  /** Nouvel exercice : 3 séries d'emblée, repos 90 s. */
+  /** Nouveau bloc d'exercice : 3 séries d'emblée, repos 90 s, tout en bas de la séance. */
   const addExercise = (exerciseId: string) => {
     const ex = data.exercises.find((e) => e.id === exerciseId)
     const isStatic = ex?.kind === 'static'
+    const block = uid('blk')
     const fresh = Array.from({ length: 3 }, () => ({
       id: uid('set'),
       exerciseId,
+      block,
       reps: isStatic ? undefined : 10,
       holdSec: isStatic ? 30 : undefined,
       restSec: DEFAULT_REST_SEC,
     }))
     patch({ sets: [...sets, ...fresh] })
+    setJustAdded(block)
   }
 
   const label = 'text-[0.6rem] tracking-wide text-mist-500 uppercase'
 
   return (
-    <Card title="Exercices & séries" action={<Button onClick={() => setPicker(true)}>+ Exercice</Button>}>
+    <Card title="Exercices & séries" subtitle={groups.length ? `${groups.length} exercice${groups.length > 1 ? 's' : ''}` : undefined}>
       <div className="mt-3 space-y-3">
         {!groups.length && (
           <p className="py-3 text-center text-xs text-mist-700">Ajoute un exercice depuis la bibliothèque.</p>
@@ -897,23 +926,25 @@ function SetsEditor({
           const isStatic = ex?.kind === 'static'
           const first = g.sets[0]
           const uniform = g.sets.every((s) => sameValues(s, first))
-          const detail = !uniform || detailOpen.has(g.exerciseId)
+          const detail = !uniform || detailOpen.has(g.key)
           const summary = summarizeSets(ex, g.sets)
-          const showLoad =
-            !isStatic &&
-            (ex?.kind === 'weighted' ||
-              /lest/i.test(ex?.name ?? '') ||
-              loadShown.has(g.exerciseId) ||
-              g.sets.some((x) => x.loadKg !== undefined))
+          /* Le lest est toujours proposé (vide = poids du corps), sauf pour les tenues. */
+          const showLoad = !isStatic
 
           return (
-            <div key={g.exerciseId} className="rounded-xl bg-white/4 p-3 hairline">
+            <div
+              key={g.key}
+              id={`block-${g.sets[0].block ?? g.key}`}
+              className={`rounded-xl p-3 transition-colors duration-700 hairline ${
+                justAdded && justAdded === g.sets[0].block ? 'bg-accent/14' : 'bg-white/4'
+              }`}
+            >
               <div className="mb-2.5 flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate text-sm text-mist-100">{ex?.name ?? 'Exercice'}</div>
                   <div className="text-[0.72rem] font-medium text-accent tnum">{summary.line}</div>
                 </div>
-                <IconButton label="Retirer l’exercice" className="h-8 w-8" onClick={() => removeGroup(g.exerciseId)}>
+                <IconButton label="Retirer l’exercice" className="h-8 w-8" onClick={() => removeGroup(g.ids)}>
                   <svg viewBox="0 0 20 20" className="h-3.5 w-3.5">
                     <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.7" fill="none" />
                   </svg>
@@ -933,7 +964,7 @@ function SetsEditor({
                     value={g.sets.length}
                     min={1}
                     max={30}
-                    onCommit={(v) => v !== undefined && setSeriesCount(g.exerciseId, v)}
+                    onCommit={(v) => v !== undefined && setSeriesCount(g.ids, v)}
                   />
                   {isStatic ? (
                     <NumField
@@ -943,7 +974,7 @@ function SetsEditor({
                       min={0}
                       max={3600}
                       suffix="s"
-                      onCommit={(v) => updateGroup(g.exerciseId, { holdSec: v ?? 0 })}
+                      onCommit={(v) => updateGroup(g.ids, { holdSec: v ?? 0 })}
                     />
                   ) : (
                     <NumField
@@ -952,7 +983,7 @@ function SetsEditor({
                       value={first.reps}
                       min={0}
                       max={1000}
-                      onCommit={(v) => updateGroup(g.exerciseId, { reps: v ?? 0 })}
+                      onCommit={(v) => updateGroup(g.ids, { reps: v ?? 0 })}
                     />
                   )}
                   {showLoad && (
@@ -966,7 +997,7 @@ function SetsEditor({
                       prefix="+"
                       suffix="kg"
                       placeholder="0"
-                      onCommit={(v) => updateGroup(g.exerciseId, { loadKg: v })}
+                      onCommit={(v) => updateGroup(g.ids, { loadKg: v })}
                     />
                   )}
                   <NumField
@@ -979,7 +1010,7 @@ function SetsEditor({
                     suffix="s"
                     placeholder="?"
                     warn={!first.restSec}
-                    onCommit={(v) => updateGroup(g.exerciseId, { restSec: v })}
+                    onCommit={(v) => updateGroup(g.ids, { restSec: v })}
                   />
                 </div>
               ) : (
@@ -1074,7 +1105,7 @@ function SetsEditor({
                   return (
                     <button
                       key={r}
-                      onClick={() => updateGroup(g.exerciseId, { restSec: r })}
+                      onClick={() => updateGroup(g.ids, { restSec: r })}
                       className={`rounded-lg px-2 py-1 text-[0.66rem] tnum transition ${
                         active
                           ? 'bg-accent/20 text-accent shadow-[inset_0_0_0_1px_var(--accent-soft)]'
@@ -1088,19 +1119,11 @@ function SetsEditor({
               </div>
 
               <div className="mt-2.5 flex flex-wrap gap-1.5">
-                {!isStatic && !showLoad && (
-                  <button
-                    onClick={() => toggle(setLoadShown, g.exerciseId)}
-                    className="rounded-lg bg-white/5 px-2.5 py-1.5 text-[0.7rem] text-mist-300 hairline"
-                  >
-                    + Lest (kg)
-                  </button>
-                )}
                 {detail ? (
                   <button
                     onClick={() => {
                       /* Revenir à la saisie rapide : toutes les séries prennent les valeurs de la première. */
-                      updateGroup(g.exerciseId, {
+                      updateGroup(g.ids, {
                         reps: first.reps,
                         loadKg: first.loadKg,
                         holdSec: first.holdSec,
@@ -1108,7 +1131,7 @@ function SetsEditor({
                       })
                       setDetailOpen((prev) => {
                         const next = new Set(prev)
-                        next.delete(g.exerciseId)
+                        next.delete(g.key)
                         return next
                       })
                     }}
@@ -1119,7 +1142,7 @@ function SetsEditor({
                   </button>
                 ) : (
                   <button
-                    onClick={() => toggle(setDetailOpen, g.exerciseId)}
+                    onClick={() => toggle(setDetailOpen, g.key)}
                     className="rounded-lg bg-white/5 px-2.5 py-1.5 text-[0.7rem] text-mist-300 hairline"
                   >
                     Détailler série par série
@@ -1130,6 +1153,14 @@ function SetsEditor({
           )
         })}
       </div>
+
+      <button
+        onClick={() => setPicker(true)}
+        className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--accent)]/50 bg-accent/8 py-4 text-sm font-medium text-accent transition active:scale-[0.99] hover:bg-accent/14"
+      >
+        <span className="text-lg leading-none">+</span>
+        {groups.length ? 'Ajouter un autre exercice' : 'Ajouter un exercice'}
+      </button>
 
       <Sheet open={picker} onClose={() => setPicker(false)} title="Bibliothèque d’exercices">
         <ExercisePicker

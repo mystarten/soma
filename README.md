@@ -166,9 +166,10 @@ créent pas de doublons, et tes saisies manuelles ne sont jamais écrasées.
 L'accueil **Vie** met le bonhomme au centre, avec la to-do juste dessous.
 
 - **Entrer dans le cerveau** : molette vers l'avant sur la tête (ou écarter deux doigts sur
-  téléphone, ou bouton « Réseau »). Tes tâches, échéances et fiches de connaissances forment
-  un réseau de neurones 3D. Clic sur un neurone = ouvrir la fiche ou la tâche. Recule à fond,
-  Échap ou « Revenir au corps » pour sortir.
+  téléphone, ou bouton « Réseau »). Le zoom est continu, sans changement d'écran : la caméra
+  descend dans la tête, le corps s'efface et les neurones apparaissent. Tes tâches, échéances et
+  fiches forment un réseau 3D. Clic sur un neurone = ouvrir la fiche ou la tâche. Pour revenir :
+  molette arrière, Échap ou « Revenir au corps » (même trajectoire en sens inverse).
 - **Savoir** : tes fiches, classées par axe puis par type, avec recherche, liens `[[Titre]]`
   façon Obsidian, `#tags` et une section « À trancher » pour les infos qui se contredisent.
 - **Importer ce que Claude sait de toi** : Savoir → Importer, puis colle le texte. Format :

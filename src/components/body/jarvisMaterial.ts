@@ -28,6 +28,8 @@ const fragment = /* glsl */ `
   uniform float uSelected;
   uniform float uRimPower;
   uniform float uGain;
+  /* Fondu global : 1 = visible, 0 = invisible (plongée dans le cerveau). */
+  uniform float uFade;
 
   varying vec3 vNormalV;
   varying vec3 vPosV;
@@ -55,7 +57,7 @@ const fragment = /* glsl */ `
     intensity += uSelected * (0.35 + fres * 0.6);
 
     float alpha = clamp(uOpacity * (0.20 + fres * 0.95 + grid * 0.4) + uSelected * 0.16, 0.0, 1.0);
-    gl_FragColor = vec4(uColor * intensity, alpha);
+    gl_FragColor = vec4(uColor * intensity * uFade, alpha * uFade);
 
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -89,6 +91,7 @@ export function createJarvisMaterial(opts: JarvisOptions = {}): THREE.ShaderMate
       uSelected: { value: 0 },
       uRimPower: { value: opts.rimPower ?? 2.2 },
       uGain: { value: opts.gain ?? 1 },
+      uFade: { value: 1 },
     },
   })
 }

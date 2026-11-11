@@ -101,6 +101,8 @@ export type RunType =
 export interface SetEntry {
   id: Id
   exerciseId: Id
+  /** Bloc d'exercice dans la séance : permet de refaire le même exercice plus tard avec d'autres valeurs. */
+  block?: string
   reps?: number
   loadKg?: number /* lest (peut être négatif : élastique d'assistance) */
   holdSec?: number
