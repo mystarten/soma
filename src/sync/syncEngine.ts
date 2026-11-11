@@ -20,6 +20,8 @@ const TABLES: SyncTable[] = [
   'tasks',
   'deadlines',
   'notes',
+  'programs',
+  'reviews',
 ]
 
 const LAST_SYNC_KEY = 'last_sync_at'
@@ -76,6 +78,10 @@ function localTable(table: SyncTable) {
       return db.deadlines
     case 'notes':
       return db.notes
+    case 'programs':
+      return db.programs
+    case 'reviews':
+      return db.reviews
   }
 }
 

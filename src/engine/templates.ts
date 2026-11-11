@@ -30,9 +30,12 @@ export function findTemplateByName(list: WorkoutTemplate[], name: string): Worko
 const sameSet = (a: SetEntry, b: SetEntry) =>
   a.reps === b.reps && a.loadKg === b.loadKg && a.holdSec === b.holdSec && a.restSec === b.restSec
 
-/** Une séance doit être mémorisée si elle est faite à la main et porte un titre. */
+/**
+ * Une séance doit être mémorisée si elle est faite à la main et porte un titre.
+ * Celles qui viennent du programme sont déjà retrouvables par séance + semaine.
+ */
 export function isRememberable(w: Workout): boolean {
-  return !w.deleted && !w.planned && w.source === 'manual' && !!w.title?.trim()
+  return !w.deleted && !w.planned && w.source === 'manual' && !!w.title?.trim() && !w.program?.length
 }
 
 export function workoutToTemplate(

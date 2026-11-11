@@ -6,9 +6,11 @@ import type {
   ExerciseDef,
   Goal,
   KnowledgeNote,
+  Program,
   Settings,
   SyncOp,
   Task,
+  WeeklyReview,
   WhoopImport,
   Workout,
   WorkoutTemplate,
@@ -42,6 +44,8 @@ export class SomaDb extends Dexie {
   tasks!: EntityTable<Task, 'id'>
   deadlines!: EntityTable<Deadline, 'id'>
   notes!: EntityTable<KnowledgeNote, 'id'>
+  programs!: EntityTable<Program, 'id'>
+  reviews!: EntityTable<WeeklyReview, 'id'>
 
   constructor(name = 'soma') {
     super(name)
@@ -85,6 +89,12 @@ export class SomaDb extends Dexie {
     /* v4 — base de connaissances (table nouvelle, rien n'est touché). */
     this.version(4).stores({
       notes: 'id, title, kind, axe, updatedAt',
+    })
+
+    /* v5 — programme d'entraînement et revues hebdomadaires (tables nouvelles). */
+    this.version(5).stores({
+      programs: 'id, updatedAt',
+      reviews: 'id, weekStart, updatedAt',
     })
   }
 }

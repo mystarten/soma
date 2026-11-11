@@ -30,6 +30,7 @@ import {
   Toggle,
   useToast,
 } from '../components/ui/primitives'
+import ProgramPanel from '../components/program/ProgramPanel'
 import { deleteTemplate, deleteWorkout, rememberWorkout, saveWorkout } from '../db/repo'
 import { uid } from '../db/db'
 import {
@@ -72,7 +73,9 @@ function emptyWorkout(kind: WorkoutKind = 'street'): Workout {
 
 export default function Workouts({ focusId }: { focusId?: string }) {
   const data = useSoma()
-  const [tab, setTab] = useState<'journal' | 'modeles' | 'records'>('journal')
+  const [tab, setTab] = useState<'journal' | 'programme' | 'modeles' | 'records'>(() =>
+    data.program && !focusId ? 'programme' : 'journal',
+  )
   const [editing, setEditing] = useState<Workout | null>(null)
   const [autoPick, setAutoPick] = useState(false)
   const [visibleDays, setVisibleDays] = useState(25)
@@ -115,6 +118,7 @@ export default function Workouts({ focusId }: { focusId?: string }) {
           onChange={setTab}
           options={[
             { value: 'journal', label: 'Journal' },
+            { value: 'programme', label: 'Programme' },
             { value: 'modeles', label: 'Mes séances' },
             { value: 'records', label: 'Records' },
           ]}
@@ -189,6 +193,22 @@ export default function Workouts({ focusId }: { focusId?: string }) {
             </Button>
           )}
         </div>
+      )}
+
+      {tab === 'programme' && (
+        <ProgramPanel
+          onStart={(built) => {
+            const w = emptyWorkout(built.kind)
+            w.title = built.title
+            w.durationMin = built.durationMin
+            w.sets = built.sets
+            w.notes = built.notes
+            w.program = built.program
+            setAutoPick(false)
+            setEditing(w)
+            toast.show('Séance préparée : ajuste ce que tu as vraiment fait, puis Enregistrer')
+          }}
+        />
       )}
 
       {tab === 'modeles' && (

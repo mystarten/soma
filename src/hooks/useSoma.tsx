@@ -8,6 +8,8 @@ import type {
   Deadline,
   KnowledgeNote,
   ExerciseDef,
+  Program,
+  WeeklyReview,
   Goal,
   GoalProgress,
   Observation,
@@ -44,6 +46,8 @@ export interface SomaData {
   tasks: Task[]
   deadlines: Deadline[]
   notes: KnowledgeNote[]
+  program: Program | null
+  reviews: WeeklyReview[]
   checkinByDay: Map<DayKey, CheckIn>
   bodyWeightKg: number
   fatigueCtx: FatigueContext
@@ -92,6 +96,8 @@ export function SomaProvider({ children }: { children: ReactNode }) {
   const tasks = useLiveQuery(() => db.tasks.toArray(), [seeded], [] as Task[])
   const deadlines = useLiveQuery(() => db.deadlines.toArray(), [seeded], [] as Deadline[])
   const notes = useLiveQuery(() => db.notes.toArray(), [seeded], [] as KnowledgeNote[])
+  const programs = useLiveQuery(() => db.programs.toArray(), [seeded], [] as Program[])
+  const reviews = useLiveQuery(() => db.reviews.toArray(), [seeded], [] as WeeklyReview[])
 
   useEffect(() => {
     if (settings?.accent) document.documentElement.style.setProperty('--accent', settings.accent)
@@ -172,6 +178,8 @@ export function SomaProvider({ children }: { children: ReactNode }) {
       tasks: (tasks ?? []).filter((t) => !t.deleted),
       deadlines: (deadlines ?? []).filter((d) => !d.deleted),
       notes: (notes ?? []).filter((n) => !n.deleted),
+      program: (programs ?? []).find((p) => !p.deleted) ?? null,
+      reviews: (reviews ?? []).filter((r) => !r.deleted),
       checkinByDay,
       bodyWeightKg,
       fatigueCtx,
@@ -198,6 +206,8 @@ export function SomaProvider({ children }: { children: ReactNode }) {
     goals,
     metrics,
     tasks,
+    programs,
+    reviews,
     deadlines,
     notes,
     nowMs,

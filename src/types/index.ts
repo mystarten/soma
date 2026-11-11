@@ -154,6 +154,12 @@ export interface CardioDetail {
 /** Minutes passées dans chaque zone de FC (index 0 = zone 1). */
 export type HrZoneMinutes = [number, number, number, number, number]
 
+/** Séance du programme réalisée : quelle séance (T1, A2…) et quelle semaine (1 → 12). */
+export interface ProgramRef {
+  code: string
+  week: number
+}
+
 export interface Workout {
   id: Id
   day: DayKey
@@ -179,6 +185,8 @@ export interface Workout {
   customValues?: Record<string, string | number | boolean>
   /** Répartition musculaire forcée (séance WHOOP sans détail). */
   fallbackMix?: MuscleMix
+  /** Séances du programme couvertes par cette séance (plusieurs possibles le même jour). */
+  program?: ProgramRef[]
   planned?: boolean
   source: DataSource
   /** Clé de dédoublonnage d'import (ex. `whoop:2025-04-02T06:12:00Z`). */
@@ -544,6 +552,8 @@ export type SyncTable =
   | 'tasks'
   | 'deadlines'
   | 'notes'
+  | 'programs'
+  | 'reviews'
 
 export interface SyncOp {
   id?: number
@@ -659,6 +669,67 @@ export interface KnowledgeNote {
   source: 'claude' | 'manual'
   /** Modifiée à la main : un ré-import ne l'écrase plus. */
   edited?: boolean
+  createdAt: Iso
+  updatedAt: Iso
+  deleted?: boolean
+}
+
+
+/* ── Programme d'entraînement (importé) ────────────────────────────────── */
+
+export interface ProgramWeek {
+  n: number
+  /** Libellé des dates, tel qu'écrit dans le programme (« 12-18 oct »). */
+  label: string
+  startDay?: DayKey
+  endDay?: DayKey
+  light?: boolean
+  test?: boolean
+}
+
+export interface ProgramBlock {
+  /** « A. Lestées +25 kg », « Rameur »… */
+  name: string
+  /** Consigne du bloc (repos, tempo, rappel). */
+  note?: string
+  restSec?: number
+  /** Une cellule par semaine, dans l'ordre de `weeks`. */
+  cells: string[]
+}
+
+export interface ProgramSession {
+  code: string
+  title: string
+  meta?: string
+  durationMin?: number
+  weeks: ProgramWeek[]
+  blocks: ProgramBlock[]
+}
+
+/** Le programme complet : chaque séance et chaque semaine sont indépendantes. */
+export interface Program {
+  id: 'program'
+  name: string
+  sessions: ProgramSession[]
+  /** Exercices créés à l'import pour ce programme (id → nom), pour information. */
+  importedAt: Iso
+  updatedAt: Iso
+  deleted?: boolean
+}
+
+/* ── Boucle de revue hebdomadaire ───────────────────────────────────────── */
+
+export interface WeeklyReview {
+  /** Lundi de la semaine revue, `yyyy-MM-dd`. */
+  id: DayKey
+  weekStart: DayKey
+  wentWell?: string
+  heavy?: string
+  nextFocus?: string
+  /** Réponse à la question de la semaine. */
+  answer?: string
+  question?: string
+  rating?: 1 | 2 | 3 | 4 | 5
   createdAt: Iso
   updatedAt: Iso
   deleted?: boolean
