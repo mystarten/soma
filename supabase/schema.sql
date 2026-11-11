@@ -34,7 +34,7 @@ create table if not exists public.soma_rows (
     table_name in (
       'checkins', 'workouts', 'exercises', 'goals',
       'metrics', 'templates', 'workoutTypes', 'settings',
-      'tasks', 'deadlines', 'notes', 'programs', 'reviews'
+      'tasks', 'deadlines', 'notes', 'programs', 'reviews', 'injuries'
     )
   ),
   constraint soma_rows_row_id_len check (char_length(row_id) between 1 and 128)
@@ -49,7 +49,7 @@ alter table public.soma_rows add constraint soma_rows_table_name_check check (
   table_name in (
     'checkins', 'workouts', 'exercises', 'goals',
     'metrics', 'templates', 'workoutTypes', 'settings',
-    'tasks', 'deadlines', 'notes', 'programs', 'reviews'
+    'tasks', 'deadlines', 'notes', 'programs', 'reviews', 'injuries'
   )
 );
 

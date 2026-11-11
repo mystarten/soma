@@ -3,7 +3,9 @@ import { useSoma } from '../../hooks/useSoma'
 import type { Program, ProgramSession } from '../../types'
 import {
   buildFromProgram,
+  matchExercise,
   missingExercises,
+  parseCell,
   parseProgramDocument,
   programDone,
   programSpan,
@@ -16,6 +18,8 @@ import { readDocx } from '../../lib/docx'
 import { deleteProgram, saveExercise, saveProgram } from '../../db/repo'
 import { uid } from '../../db/db'
 import { Button, Card, EmptyState, ProgressBar, useToast } from '../ui/primitives'
+import { applyLight, observed1RM, recommendedLoadKg } from '../../engine/coach'
+import { CoachBanners, ImpactNotice, sessionExercises, useImpact } from './advice'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Mon programme : on l'importe une fois (fichier Word), puis on choisit
@@ -134,6 +138,7 @@ function Chooser({ program, onStart }: { program: Program; onStart: (w: BuiltWor
   const [picks, setPicks] = useState<Record<string, number>>({})
   const [detail, setDetail] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [light, setLight] = useState(false)
 
   const toggle = (code: string, week: number) =>
     setPicks((p) => {
@@ -148,9 +153,10 @@ function Chooser({ program, onStart }: { program: Program; onStart: (w: BuiltWor
   const list: ProgramPick[] = Object.entries(picks).map(([code, week]) => ({ code, week }))
   const start = () => {
     const built = buildFromProgram(program, list, () => uid('set'))
-    if (built) onStart(built)
+    if (built) onStart(light ? { ...built, sets: applyLight(built.sets), title: `${built.title} (légère)` } : built)
     else toast.show('Choisis au moins une séance')
   }
+  const impact = useImpact(list, program.sessions)
   const dateLabel = (d?: string) => (d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '')
 
   return (
@@ -175,6 +181,7 @@ function Chooser({ program, onStart }: { program: Program; onStart: (w: BuiltWor
         </div>
       </Card>
 
+      <CoachBanners light={light} onLight={setLight} />
       <Card
         title="Qu’est-ce que tu fais aujourd’hui ?"
         subtitle="Touche une case (séance × semaine). Tu peux en prendre plusieurs : une séance de tirage + abdos + jambes, par exemple."
@@ -249,10 +256,11 @@ function Chooser({ program, onStart }: { program: Program; onStart: (w: BuiltWor
         </ul>
       </Card>
 
+      <ImpactNotice impact={impact} />
       <div className="sticky bottom-[calc(var(--nav-h)+var(--safe-bottom)+0.5rem)] z-20 flex gap-2 lg:bottom-3">
         <Button variant="primary" full disabled={!list.length} onClick={start}>
           {list.length
-            ? `Préparer : ${list.map((p) => `${p.code} · S${p.week}`).join(' + ')}`
+            ? `Préparer${light ? ' (légère)' : ''} : ${list.map((p) => `${p.code} · S${p.week}`).join(' + ')}`
             : 'Choisis une séance et une semaine'}
         </Button>
       </div>
@@ -277,8 +285,22 @@ function Chooser({ program, onStart }: { program: Program; onStart: (w: BuiltWor
 }
 
 function SessionPreview({ session, week }: { session: ProgramSession; week: number }) {
+  const data = useSoma()
   const wi = session.weeks.findIndex((w) => w.n === week)
+  const exs = sessionExercises(session, data.exercises)
   if (wi < 0) return null
+  /* Charge conseillée : seulement quand la case prévoit un lest et que tu as déjà des séries pour estimer ton 1RM. */
+  const advice = (b: ProgramSession['blocks'][number]) => {
+    const cell = parseCell(b.cells[wi] ?? '')
+    const first = cell.sets[0]
+    if (!first?.loadKg || !first.reps) return null
+    const id = matchExercise(b.name, session.title).id
+    const ex = exs.find((e) => e.id === id)
+    if (!ex) return null
+    const rm = observed1RM(ex, data.workouts, data.bodyWeightKg)
+    const rec = recommendedLoadKg(ex, rm, first.reps, data.bodyWeightKg)
+    return rec === null ? null : { rec, planned: first.loadKg }
+  }
   return (
     <div className="mt-2 rounded-xl bg-white/4 p-2.5 text-xs hairline">
       <div className="mb-1 text-mist-500">
@@ -288,7 +310,13 @@ function SessionPreview({ session, week }: { session: ProgramSession; week: numb
         {session.blocks.map((b) => (
           <li key={b.name} className="flex gap-2">
             <span className="w-1/2 min-w-0 truncate text-mist-300">{b.name}</span>
-            <span className="min-w-0 flex-1 text-mist-100">{b.cells[wi] || '—'}</span>
+            <span className="min-w-0 flex-1 text-mist-100">
+              {b.cells[wi] || '—'}
+              {(() => {
+                const a = advice(b)
+                return a ? <span className="block text-[0.65rem] text-mist-500">d’après tes séries : {a.rec > 0 ? '+' : ''}{a.rec} kg conseillés</span> : null
+              })()}
+            </span>
           </li>
         ))}
       </ul>

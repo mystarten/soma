@@ -5,6 +5,7 @@ import type {
   Deadline,
   ExerciseDef,
   Goal,
+  Injury,
   KnowledgeNote,
   Program,
   Settings,
@@ -46,6 +47,7 @@ export class SomaDb extends Dexie {
   notes!: EntityTable<KnowledgeNote, 'id'>
   programs!: EntityTable<Program, 'id'>
   reviews!: EntityTable<WeeklyReview, 'id'>
+  injuries!: EntityTable<Injury, 'id'>
 
   constructor(name = 'soma') {
     super(name)
@@ -95,6 +97,11 @@ export class SomaDb extends Dexie {
     this.version(5).stores({
       programs: 'id, updatedAt',
       reviews: 'id, weekStart, updatedAt',
+    })
+
+    /* v6 — douleurs et blessures. */
+    this.version(6).stores({
+      injuries: 'id, area, active, updatedAt',
     })
   }
 }

@@ -4,6 +4,7 @@ import type {
   Deadline,
   ExerciseDef,
   Goal,
+  Injury,
   KnowledgeNote,
   Program,
   Settings,
@@ -246,6 +247,21 @@ export async function saveReview(row: WeeklyReview) {
   return next
 }
 
+export async function saveInjury(row: Injury) {
+  const next = stamp(row)
+  await db.injuries.put(next)
+  await enqueue('injuries', next.id, next, 'upsert')
+  return next
+}
+
+export async function deleteInjury(id: string) {
+  const prev = await db.injuries.get(id)
+  if (!prev) return
+  const next = stamp({ ...prev, deleted: true })
+  await db.injuries.put(next)
+  await enqueue('injuries', id, next, 'delete')
+}
+
 export async function recordImport(row: WhoopImport) {
   await db.imports.put(row)
 }
@@ -269,10 +285,11 @@ export interface SomaBackup {
   notes?: KnowledgeNote[]
   programs?: Program[]
   reviews?: WeeklyReview[]
+  injuries?: Injury[]
 }
 
 export async function exportBackup(): Promise<SomaBackup> {
-  const [checkins, workouts, exercises, templates, workoutTypes, goals, metrics, settings, tasks, deadlines, notes, programs, reviews] =
+  const [checkins, workouts, exercises, templates, workoutTypes, goals, metrics, settings, tasks, deadlines, notes, programs, reviews, injuries] =
     await Promise.all([
       db.checkins.toArray(),
       db.workouts.toArray(),
@@ -287,6 +304,7 @@ export async function exportBackup(): Promise<SomaBackup> {
       db.notes.toArray(),
       db.programs.toArray(),
       db.reviews.toArray(),
+      db.injuries.toArray(),
     ])
   return {
     app: 'soma',
@@ -305,6 +323,7 @@ export async function exportBackup(): Promise<SomaBackup> {
     notes,
     programs,
     reviews,
+    injuries,
   }
 }
 
@@ -328,6 +347,7 @@ export async function importBackup(data: unknown, mode: 'merge' | 'replace' = 'm
       db.notes,
       db.programs,
       db.reviews,
+      db.injuries,
     ],
     async () => {
       if (b.checkins?.length) await db.checkins.bulkPut(b.checkins.map((c) => ({ ...c, id: c.day })))
@@ -343,6 +363,7 @@ export async function importBackup(data: unknown, mode: 'merge' | 'replace' = 'm
       if (b.notes?.length) await db.notes.bulkPut(b.notes)
       if (b.programs?.length) await db.programs.bulkPut(b.programs)
       if (b.reviews?.length) await db.reviews.bulkPut(b.reviews)
+      if (b.injuries?.length) await db.injuries.bulkPut(b.injuries)
     },
   )
   return {
@@ -474,8 +495,9 @@ export function workoutsToCsv(rows: Workout[], exercises: ExerciseDef[]): string
 export async function wipeData() {
   await db.transaction(
     'rw',
-    [db.checkins, db.workouts, db.goals, db.metrics, db.imports, db.syncQueue, db.tasks, db.deadlines, db.notes, db.programs, db.reviews],
+    [db.checkins, db.workouts, db.goals, db.metrics, db.imports, db.syncQueue, db.tasks, db.deadlines, db.notes, db.programs, db.reviews, db.injuries],
     async () => {
+      await db.injuries.clear()
       await db.programs.clear()
       await db.reviews.clear()
       await db.notes.clear()

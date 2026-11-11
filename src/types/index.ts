@@ -554,6 +554,7 @@ export type SyncTable =
   | 'notes'
   | 'programs'
   | 'reviews'
+  | 'injuries'
 
 export interface SyncOp {
   id?: number
@@ -740,6 +741,23 @@ export interface WeeklyReview {
   question?: string
   rating?: 1 | 2 | 3 | 4 | 5
   createdAt: Iso
+  updatedAt: Iso
+  deleted?: boolean
+}
+
+
+/* ── Douleurs et blessures ─────────────────────────────────────────────── */
+
+export interface Injury {
+  id: Id
+  /** Articulation ou zone musculaire concernée. */
+  area: Joint | MuscleZone
+  /** 1 = gêne légère, 2 = douleur modérée, 3 = forte douleur. */
+  severity: 1 | 2 | 3
+  note?: string
+  since: DayKey
+  /** Faux une fois guérie : on garde l'historique. */
+  active: boolean
   updatedAt: Iso
   deleted?: boolean
 }

@@ -31,6 +31,7 @@ import {
   useToast,
 } from '../components/ui/primitives'
 import ProgramPanel from '../components/program/ProgramPanel'
+import ProgramQuickPick from '../components/program/ProgramQuickPick'
 import { deleteTemplate, deleteWorkout, rememberWorkout, saveWorkout } from '../db/repo'
 import { uid } from '../db/db'
 import {
@@ -41,6 +42,7 @@ import {
 import { exerciseRecords, runRecords, workoutLoad } from '../engine/load'
 import { fmtClock, fmtPace, parseDay, todayKey } from '../engine/time'
 import { estimated1RM, set1RM } from '../engine/strength'
+import { recommendedLoadKg } from '../engine/coach'
 import { groupByExercise, summarizeSets } from '../engine/sets'
 import {
   DEFAULT_REST_SEC,
@@ -471,6 +473,16 @@ function Records() {
                       unit="kg"
                     />
                     <Stat
+                      label="Lest conseillé"
+                      value={(() => {
+                        const one = r.best1RM || rm
+                        const rec = one && ex.kind !== 'static' ? recommendedLoadKg(ex, one, 6, data.bodyWeightKg) : null
+                        return rec === null ? '—' : `${rec > 0 ? '+' : ''}${rec}`
+                      })()}
+                      unit="kg"
+                      hint="pour 6 reps, 2 en réserve"
+                    />
+                    <Stat
                       label="1RM estimé"
                       value={r.best1RM ? Math.round(r.best1RM) : rm ? Math.round(rm) : '—'}
                       unit="kg"
@@ -635,6 +647,22 @@ function WorkoutEditor({
               ))}
             </div>
           </div>
+        )}
+        {data.program && (
+          <ProgramQuickPick
+            onApply={(b) => {
+              setW((prev) => ({
+                ...prev,
+                title: prev.title?.trim() ? `${prev.title} + ${b.title}` : b.title,
+                kind: prev.sets?.length ? prev.kind : b.kind,
+                durationMin: prev.sets?.length ? prev.durationMin + b.durationMin : b.durationMin,
+                sets: [...(prev.sets ?? []), ...b.sets],
+                notes: [prev.notes, b.notes].filter(Boolean).join('\n'),
+                program: [...(prev.program ?? []), ...b.program],
+              }))
+              setFresh(false)
+            }}
+          />
         )}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Type de séance">

@@ -10,6 +10,9 @@ import { programStats } from '../engine/program'
 import { reviewDone, reviewWeekFor, weekStats } from '../engine/review'
 import { countdownLabel, taskLoad, upcomingDeadlines } from '../engine/tasks'
 import { fatigueColor } from '../engine/fatigueConfig'
+import { loadAlert, lightWeekAdvice } from '../engine/coach'
+import InjuryPanel from '../components/vie/InjuryPanel'
+import { CoachBanners } from '../components/program/advice'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Tableau de bord : l'essentiel de la semaine sur un écran.
@@ -54,6 +57,8 @@ export default function Dashboard() {
   const deadlines = upcomingDeadlines(data.deadlines, today, 4)
   const toReview = reviewWeekFor(today, data.settings.weekStartsOn)
   const reviewed = reviewDone(data.reviews.find((r) => r.id === toReview.start))
+  const alert = loadAlert(data.balance)
+  const lw = lightWeekAdvice(data.checkins, today)
   const goals = [...data.goalProgress].sort((a, b) => a.ratio - b.ratio).slice(0, 4)
 
   return (
@@ -89,6 +94,22 @@ export default function Dashboard() {
           Alignement des objectifs : <span className="text-mist-100 tnum">{Math.round(data.alignment)} %</span>
         </p>
       </Card>
+
+      <Card title="Charge de la semaine" subtitle={alert ? alert.title : 'Pas encore assez de données'} className="md:col-span-2 xl:col-span-1">
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <Cell value={Number(data.balance.acute7.toFixed(1))} unit="7 derniers jours" />
+          <Cell value={Number(data.balance.chronic28.toFixed(1))} unit="moyenne du mois" />
+          <Cell value={data.balance.ratio ? Number(data.balance.ratio.toFixed(2)) : 0} unit="rapport" warn={!!alert && (alert.level === 'high' || alert.level === 'watch')} />
+        </div>
+        {alert && <p className="mt-3 text-xs text-mist-300">{alert.text}</p>}
+        {lw.active && (
+          <div className="mt-3">
+            <CoachBanners />
+          </div>
+        )}
+      </Card>
+
+      <InjuryPanel />
 
       <Card title="Programme" action={<LinkBtn to="seances" label="Ouvrir" />}>
         {prog ? (
