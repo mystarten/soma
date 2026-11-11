@@ -1,4 +1,5 @@
-import { Suspense, lazy, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
+import { whoopHandleReturn } from './integrations/whoop'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { BottomNav, MoreSheetContent, SideRail } from './components/Nav'
@@ -76,6 +77,15 @@ function SyncBanner() {
 export default function App() {
   const { route, param } = useRoute()
   const [more, setMore] = useState(false)
+  const [whoopMsg, setWhoopMsg] = useState<string | null>(null)
+
+  /* Retour de la page d'autorisation WHOOP : le code est dans l'adresse. */
+  useEffect(() => {
+    if (!window.location.search.includes('code=')) return
+    void whoopHandleReturn().then((r) => {
+      if (r !== 'none') setWhoopMsg(r === 'done' ? 'WHOOP est connecté ✓' : r)
+    })
+  }, [])
 
   return (
     <div className="relative z-10 flex min-h-full">
@@ -97,6 +107,12 @@ export default function App() {
             </div>
           </header>
 
+          {whoopMsg && (
+            <div role="status" className="mb-3 rounded-xl bg-accent/10 px-3 py-2 text-sm text-mist-100 hairline">
+              {whoopMsg}{' '}
+              <button className="ml-2 text-accent" onClick={() => setWhoopMsg(null)}>OK</button>
+            </div>
+          )}
           <Suspense
             fallback={
               <div className="py-16 text-center text-sm text-mist-700">Chargement…</div>

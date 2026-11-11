@@ -3,6 +3,7 @@ import { useSoma } from '../hooks/useSoma'
 import BodyView from '../components/body/BodyView'
 import TodoPanel from '../components/vie/TodoPanel'
 import DeadlinesPanel from '../components/vie/DeadlinesPanel'
+import { AgendaPanel, MailPanel } from '../components/vie/GooglePanels'
 import { Ring } from '../components/ui/Ring'
 import { Button } from '../components/ui/primitives'
 import { navigate } from '../lib/router'
@@ -12,6 +13,8 @@ import { bodySummary } from '../engine/fatigue'
 import { fatigueColor } from '../engine/fatigueConfig'
 import { zoneList } from '../engine/suggest'
 import { reviewDone, reviewWeekFor } from '../engine/review'
+import { programDone, weekOfDay } from '../engine/program'
+import { useGoogle } from '../integrations/useGoogle'
 
 const recoveryColor = (v: number) => (v >= 67 ? '#41e08a' : v >= 34 ? '#ffc24b' : '#ff5a5a')
 
@@ -44,6 +47,39 @@ function DayLine() {
       </p>
       {rest.length > 0 && <p className="text-xs text-mist-500">{rest.join(' · ')}</p>}
     </div>
+  )
+}
+
+/** Brief du matin : trois phrases, calculées par des règles simples (pas d'IA externe). */
+function MorningBrief() {
+  const data = useSoma()
+  const g = useGoogle()
+  const lines: string[] = []
+  const rec = data.checkinByDay.get(data.today)?.recovery
+  if (typeof rec === 'number') {
+    lines.push(
+      rec >= 67 ? `Récupération à ${Math.round(rec)} % : bonne journée pour pousser.` : rec >= 34 ? `Récupération à ${Math.round(rec)} % : séance normale, sans forcer.` : `Récupération à ${Math.round(rec)} % : journée légère, mobilité ou marche.`,
+    )
+  } else lines.push('Pas encore de check-in ce matin : deux minutes pour calibrer la journée.')
+  const today = g.agenda.filter((e) => e.day === data.today)
+  if (today.length) lines.push(`Agenda : ${today.length} événement${today.length > 1 ? 's' : ''}, le premier à ${today[0].time ?? 'la journée'} (${today[0].title}).`)
+  if (data.program) {
+    const done = programDone(data.workouts)
+    const next = data.program.sessions
+      .map((s) => ({ s, w: weekOfDay(s, data.today) }))
+      .find((x) => x.w && !done.get(x.s.code)?.has(x.w.n))
+    if (next) lines.push(`Programme : ${next.s.code} · semaine ${next.w!.n}${next.w!.light ? ' (légère)' : ''} t’attend.`)
+  }
+  if (!lines.length) return null
+  return (
+    <ul className="rounded-xl bg-white/4 px-3.5 py-2.5 text-xs text-mist-300 hairline">
+      {lines.map((l) => (
+        <li key={l} className="flex gap-2 py-0.5">
+          <span className="text-accent" aria-hidden>·</span>
+          {l}
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -131,6 +167,7 @@ export default function Vie() {
       {/* Centre : le bonhomme, puis la to-do */}
       <div className="flex min-w-0 flex-col gap-4 lg:row-span-2 xl:col-start-2 xl:row-span-1 xl:row-start-1">
         <DayLine />
+        <MorningBrief />
         <ReviewNudge />
         <BodyView hero />
         <TodoPanel initialView="week" />
@@ -138,6 +175,8 @@ export default function Vie() {
       {/* Échéances */}
       <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 xl:col-start-1 xl:row-start-1">
         <DeadlinesPanel />
+        <AgendaPanel />
+        <MailPanel />
       </div>
       {/* Sport */}
       <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 xl:col-start-3 xl:row-start-1">

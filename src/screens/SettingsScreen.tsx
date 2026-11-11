@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import WhoopSettings from '../components/integrations/WhoopSettings'
+import GoogleSettings from '../components/integrations/GoogleSettings'
 import { useSoma } from '../hooks/useSoma'
 import type {
   CustomMetric,
@@ -544,6 +546,8 @@ export default function SettingsScreen({ param }: { param?: string }) {
 
       {/* ── Sync ── */}
       <SyncSettings param={param} />
+      <WhoopSettings />
+      <GoogleSettings />
 
       {/* ── Données ── */}
       <Card title="Mes données">

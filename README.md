@@ -248,3 +248,8 @@ Usage personnel.
 ## Synchroniser PC et téléphone
 
 Réglages → *Synchronisation entre appareils* t'explique tout pas à pas (compte Supabase gratuit, un texte à coller, deux valeurs à copier). Une fois active sur le PC, « Copier le lien pour mon téléphone » configure le téléphone en un geste. Tout ce qui existe déjà sur un appareil (programme, séances, tâches, connaissances) est envoyé à la première connexion. Tu peux aussi fournir `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY` au build (voir plus haut). Seule la clé publique `anon` est utilisée, jamais la clé `service_role`.
+
+## Google (Agenda + mails) et WHOOP en direct
+
+- **Google** (Réglages → *Google*) : lecture seule de ton Agenda et de tes mails non lus ou importants. Tu crées ton propre accès dans Google Cloud (étapes dans l'app), tu colles l'ID client (public, jamais un secret) et tu te connectes. Seules des requêtes de lecture sont émises (`calendar.readonly`, `gmail.readonly`). La connexion dure environ une heure, puis un tap sur « Se reconnecter ». Agenda et mails restent dans ton navigateur.
+- **WHOOP** (Réglages → *WHOOP*) : connexion à l'API officielle via la petite fonction `supabase/functions/whoop`, car l'API exige un secret qui ne doit jamais être dans un navigateur. Prérequis : la synchronisation Supabase active, la table de `supabase/whoop.sql`, la fonction déployée et les secrets `WHOOP_CLIENT_ID` / `WHOOP_CLIENT_SECRET` côté Supabase. Les données récupérées passent par le même import que l'export CSV : pas de doublons, tes saisies ne sont jamais écrasées.

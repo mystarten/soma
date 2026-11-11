@@ -40,6 +40,10 @@ export default function Dashboard() {
     return typeof v === 'number' ? [{ day: d, value: v }] : []
   })
   const loadSeries = loads.map((l) => ({ day: l.day, value: l.load }))
+  const weightSeries = lastDays(today, 60).flatMap((d) => {
+    const v = data.checkinByDay.get(d)?.weightKg
+    return typeof v === 'number' ? [{ day: d, value: v }] : []
+  })
 
   const stats = useMemo(
     () => weekStats(week.start, { workouts: data.workouts, checkins: data.checkins, tasks: data.tasks }),
@@ -129,6 +133,7 @@ export default function Dashboard() {
         <Trend label="Récupération" suffix=" %" series={recSeries} color="#41e08a" />
         <Trend label="Sommeil" suffix=" h" series={sleepSeries} color="#9b7bff" digits={1} />
         <Trend label="Charge" suffix=" /21" series={loadSeries} color="var(--accent)" digits={1} />
+        {weightSeries.length > 1 && <Trend label="Poids · 60 jours" suffix=" kg" series={weightSeries} color="#ffc24b" digits={1} />}
       </Card>
 
       <Card title="Échéances" action={<LinkBtn to="taches" label="Tout voir" />}>
