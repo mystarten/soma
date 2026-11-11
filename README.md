@@ -253,3 +253,7 @@ Réglages → *Synchronisation entre appareils* t'explique tout pas à pas (comp
 
 - **Google** (Réglages → *Google*) : lecture seule de ton Agenda et de tes mails non lus ou importants. Tu crées ton propre accès dans Google Cloud (étapes dans l'app), tu colles l'ID client (public, jamais un secret) et tu te connectes. Seules des requêtes de lecture sont émises (`calendar.readonly`, `gmail.readonly`). La connexion dure environ une heure, puis un tap sur « Se reconnecter ». Agenda et mails restent dans ton navigateur.
 - **WHOOP** (Réglages → *WHOOP*) : connexion à l'API officielle via la petite fonction `supabase/functions/whoop`, car l'API exige un secret qui ne doit jamais être dans un navigateur. Prérequis : la synchronisation Supabase active, la table de `supabase/whoop.sql`, la fonction déployée et les secrets `WHOOP_CLIENT_ID` / `WHOOP_CLIENT_SECRET` côté Supabase. Les données récupérées passent par le même import que l'export CSV : pas de doublons, tes saisies ne sont jamais écrasées.
+
+### Réinitialiser Supabase (projet déjà existant)
+
+Si tu as déjà un projet Soma et que tu veux repartir proprement : ouvre **SQL Editor**, colle le contenu de [`supabase/reset.sql`](supabase/reset.sql) et lance-le. Cela efface les données synchronisées de Soma (pas les comptes). Ensuite lance dans l'ordre : `supabase/schema.sql`, puis `supabase/whoop.sql`.
