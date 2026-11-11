@@ -10,12 +10,23 @@ const MODES: [NeuralMode, string][] = [
   ['tout', 'Tout'],
   ['taches', 'Tâches'],
   ['savoir', 'Savoir'],
+  ['jour', 'Aujourd’hui'],
 ]
 
 /**
  * Interface posée sur le bonhomme, dans sa propre carte. Elle apparaît en fondu quand on est
  * assez près pour voir les neurones, et disparaît de même en dézoomant : aucune page, aucune coupure.
  */
+const KIND_NAME: Record<string, string> = {
+  core: 'Toi',
+  root: 'Regroupement',
+  hub: 'Zone',
+  axe: 'Axe de vie',
+  task: 'Tâche',
+  deadline: 'Échéance',
+  note: 'Fiche',
+}
+
 export function NeuralHud({ model: m, deep, onBack }: { model: NeuralModel; deep: boolean; onBack: () => void }) {
   useEffect(() => {
     if (!deep) return
@@ -27,7 +38,7 @@ export function NeuralHud({ model: m, deep, onBack }: { model: NeuralModel; deep
   }, [deep, m.anyModal, onBack])
 
   const auto = deep ? 'pointer-events-auto' : 'pointer-events-none'
-  const title = m.mode === 'taches' ? 'Tes tâches' : m.mode === 'savoir' ? 'Ce que tu sais' : 'Tout ton cerveau'
+  const title = m.mode === 'taches' ? 'Tes tâches' : m.mode === 'savoir' ? 'Ce que tu sais' : m.mode === 'jour' ? 'Ta journée' : 'Tout ton cerveau'
 
   return (
     <>
@@ -94,6 +105,34 @@ export function NeuralHud({ model: m, deep, onBack }: { model: NeuralModel; deep
               </button>
             ))}
           </div>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <input
+              value={m.query}
+              onChange={(e) => m.setQuery(e.target.value)}
+              placeholder="Chercher…"
+              aria-label="Chercher dans le réseau"
+              tabIndex={deep ? 0 : -1}
+              className="glass-strong w-32 rounded-xl px-3 py-1.5 text-xs text-mist-100 outline-none placeholder:text-mist-700 sm:w-44"
+            />
+            <button
+              onClick={() => m.setTour(!m.tour)}
+              aria-pressed={m.tour}
+              className="glass-strong rounded-xl px-2.5 py-1.5 text-xs transition"
+              style={{ color: m.tour ? 'var(--accent)' : '#b9c6dc' }}
+              title="Visite guidée : le réseau tourne et s'arrête sur chaque zone"
+            >
+              {m.tour ? '■ Visite' : '▶ Visite'}
+            </button>
+            <button
+              onClick={() => m.setSound(!m.sound)}
+              aria-pressed={m.sound}
+              className="glass-strong rounded-xl px-2.5 py-1.5 text-xs transition"
+              style={{ color: m.sound ? 'var(--accent)' : '#7c8dab' }}
+              title="Sons discrets"
+            >
+              {m.sound ? '♪ Son' : '♪ Muet'}
+            </button>
+          </div>
         </div>
         <button onClick={onBack} className={`${auto} glass-strong shrink-0 rounded-xl px-3 py-1.5 text-xs text-mist-100`}>
           Revenir au corps ✕
@@ -102,7 +141,7 @@ export function NeuralHud({ model: m, deep, onBack }: { model: NeuralModel; deep
 
       {/* Filtres, sur une ligne qui défile */}
       <div
-        className="pointer-events-none scroll-x absolute inset-x-0 top-[6.9rem] flex gap-1.5 px-3 transition-opacity duration-300 sm:top-[7.3rem] sm:px-4"
+        className="pointer-events-none scroll-x absolute inset-x-0 top-[9.6rem] flex gap-1.5 px-3 transition-opacity duration-300 sm:top-[10rem] sm:px-4"
         style={{ opacity: deep ? 1 : 0 }}
       >
         {m.mode === 'taches' &&
@@ -159,6 +198,56 @@ export function NeuralHud({ model: m, deep, onBack }: { model: NeuralModel; deep
         )}
       </div>
 
+      {/* Aperçu du neurone survolé ou sélectionné */}
+      {m.preview && (
+        <div
+          className="pointer-events-none absolute bottom-24 left-3 z-10 w-[min(20rem,calc(100%-1.5rem))] transition-opacity duration-200 sm:left-4 sm:bottom-28"
+          style={{ opacity: deep ? 1 : 0 }}
+          aria-live="polite"
+        >
+          <div className={`${auto} glass-strong rounded-2xl p-3`} style={{ boxShadow: `inset 0 0 0 1px ${m.preview.node.color}44` }}>
+            <div className="flex items-start gap-2">
+              <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ background: m.preview.node.color, boxShadow: `0 0 10px ${m.preview.node.color}` }} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-mist-100">{m.preview.node.label}</div>
+                <div className="text-[0.62rem] tracking-wider text-mist-500 uppercase">
+                  {KIND_NAME[m.preview.node.kind]} · {m.preview.links} lien{m.preview.links > 1 ? 's' : ''}
+                  {m.preview.node.age !== undefined && m.preview.node.age <= 3 ? ' · nouveau' : ''}
+                </div>
+              </div>
+              {m.preview.pinned && (
+                <button onClick={() => m.setSelected(null)} className="shrink-0 text-xs text-mist-500" aria-label="Fermer l’aperçu">
+                  ✕
+                </button>
+              )}
+            </div>
+            {m.preview.lines.slice(0, 3).map((l) => (
+              <p key={l} className="mt-1.5 line-clamp-2 text-xs text-mist-300">
+                {l}
+              </p>
+            ))}
+            {m.preview.suggestions.map((s) => (
+              <button
+                key={s.a + s.b}
+                onClick={() => void m.relier(s.a, s.b)}
+                className="mt-2 block w-full rounded-lg bg-[#ffe08a14] px-2.5 py-1.5 text-left text-[0.7rem] text-[#ffe08a]"
+                style={{ boxShadow: 'inset 0 0 0 1px #ffe08a33' }}
+              >
+                Lien possible avec « {s.title} » ({s.shared.slice(0, 3).join(', ')}) — relier
+              </button>
+            ))}
+            {m.preview.pinned && (
+              <button
+                onClick={() => m.openNode(m.preview!.node)}
+                className="mt-2 w-full rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-ink-950"
+              >
+                Ouvrir
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Ajout rapide */}
       <div
         className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 p-3 transition-opacity duration-300 sm:p-4"
@@ -181,7 +270,7 @@ export function NeuralHud({ model: m, deep, onBack }: { model: NeuralModel; deep
             className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-mist-100 outline-none placeholder:text-mist-700"
           />
         </form>
-        <p className="text-center text-[0.62rem] text-mist-700">Glisse pour tourner · molette pour zoomer · recule pour revenir au corps</p>
+        <p className="text-center text-[0.62rem] text-mist-700">Touche un neurone pour le sélectionner, touche-le encore pour l’ouvrir · glisse pour tourner · molette pour zoomer</p>
       </div>
     </>
   )

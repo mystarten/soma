@@ -80,6 +80,16 @@ export interface NeuralLayerProps {
   /** Étiquettes DOM à positionner (id de neurone → élément). */
   labels: React.RefObject<Map<string, HTMLDivElement>>
   clickGuard: () => boolean
+  /** Neurone sélectionné (un premier tap sélectionne, un second ouvre). */
+  selected?: string | null
+  /** Ce qui reste allumé quand on cherche ou qu'on sélectionne : le reste s'estompe. */
+  focusSet?: Set<string> | null
+  /** Le chemin du neurone sélectionné (lui et ses voisins), dont les liens s'illuminent. */
+  path?: Set<string> | null
+  /** Liens possibles entre fiches proches (pointillés doux). */
+  suggested?: { a: string; b: string }[]
+  /** 0 → 1 : activité du jour ; les influx accélèrent. */
+  activity?: number
 }
 
 const smooth = (a: number, b: number, x: number) => {
@@ -89,6 +99,11 @@ const smooth = (a: number, b: number, x: number) => {
 
 export default function NeuralLayer(props: NeuralLayerProps) {
   const { graph, positions, quality, hovered, dive } = props
+  const selected = props.selected ?? null
+  const focusSet = props.focusSet ?? null
+  const path = props.path ?? null
+  const activity = props.activity ?? 0
+  const bornAt = useRef(0)
   const group = useRef<THREE.Group>(null)
   const fade = useRef(0)
   const widths = useRef(new WeakMap<HTMLDivElement, number>())
@@ -97,10 +112,10 @@ export default function NeuralLayer(props: NeuralLayerProps) {
     const m = new Map<string, number>()
     for (const n of graph.nodes) {
       const kindPri = n.kind === 'core' ? 500 : n.kind === 'root' ? 450 : n.kind === 'axe' ? 400 : n.kind === 'hub' ? 350 : 0
-      m.set(n.id, kindPri + n.size * 10 + (['overdue', 'high', 'soon'].includes(n.state) ? 25 : 0) + (n.id === hovered ? 2000 : 0))
+      m.set(n.id, kindPri + n.size * 10 + (['overdue', 'high', 'soon'].includes(n.state) ? 25 : 0) + (n.id === hovered ? 2000 : 0) + (n.id === selected ? 3000 : 0) + (focusSet?.has(n.id) ? 600 : 0))
     }
     return m
-  }, [graph, hovered])
+  }, [graph, hovered, selected, focusSet])
   const gl = useThree((s) => s.gl)
   const camera = useThree((s) => s.camera)
   const size = useThree((s) => s.size)
@@ -110,13 +125,14 @@ export default function NeuralLayer(props: NeuralLayerProps) {
   const bgMat = useMemo(() => createFilamentMaterial(0.11, 0.55, 0.12), [])
   const linkMat = useMemo(() => createFilamentMaterial(0.42, 1.0, 0.28), [])
   const hiMat = useMemo(() => createFilamentMaterial(0.85, 1.6, 0.45), [])
+  const sugMat = useMemo(() => createFilamentMaterial(0.2, 0.9, 0.09), [])
   const dotMat = useMemo(() => createNeuronMaterial(px, 5 * BRAIN_SCALE), [px])
   const nodeMat = useMemo(() => createNeuronMaterial(px, 9.5 * BRAIN_SCALE), [px])
   useEffect(
     () => () => {
-      for (const m of [bgMat, linkMat, hiMat, dotMat, nodeMat]) m.dispose()
+      for (const m of [bgMat, linkMat, hiMat, sugMat, dotMat, nodeMat]) m.dispose()
     },
-    [bgMat, linkMat, hiMat, dotMat, nodeMat],
+    [bgMat, linkMat, hiMat, sugMat, dotMat, nodeMat],
   )
 
   /* Cortex de fond : petits neurones décoratifs reliés à leurs voisins. */
@@ -132,6 +148,8 @@ export default function NeuralLayer(props: NeuralLayerProps) {
     pts.setAttribute('aSize', new THREE.Float32BufferAttribute(net.points.map((_, i) => 3.2 + (i % 5) * 0.7), 1))
     pts.setAttribute('aSeed', new THREE.Float32BufferAttribute(net.points.map((_, i) => (i * 0.37) % 1), 1))
     pts.setAttribute('aAlert', new THREE.Float32BufferAttribute(net.points.map(() => 0), 1))
+    pts.setAttribute('aAge', new THREE.Float32BufferAttribute(net.points.map(() => 100), 1))
+    pts.setAttribute('aDim', new THREE.Float32BufferAttribute(net.points.map(() => 1), 1))
     return { lines: lineGeometry(data), pts }
   }, [net])
 
@@ -165,10 +183,11 @@ export default function NeuralLayer(props: NeuralLayerProps) {
   }, [graph, positions, net, byId])
 
   const highlight = useMemo(() => {
-    if (!hovered) return null
+    if (!hovered && !path) return null
     const data = emptyCurves()
     for (const l of graph.links) {
-      if (l.source !== hovered && l.target !== hovered) continue
+      const inPath = !!path && path.has(l.source) && path.has(l.target)
+      if (!inPath && l.source !== hovered && l.target !== hovered) continue
       const a = positions.get(l.source)
       const b = positions.get(l.target)
       const na = byId.get(l.source)
@@ -177,7 +196,20 @@ export default function NeuralLayer(props: NeuralLayerProps) {
       pushCurve(data, a, b, new THREE.Color(nodeColor(na)), new THREE.Color(nodeColor(nb)), (hashString(l.source + l.target) % 1000) / 1000, 0.2)
     }
     return data.pos.length ? lineGeometry(data) : null
-  }, [hovered, graph, positions, byId])
+  }, [hovered, path, graph, positions, byId])
+
+  /* Synapses possibles entre fiches proches. */
+  const suggestions = useMemo(() => {
+    const data = emptyCurves()
+    for (const s of props.suggested ?? []) {
+      const a = positions.get(s.a)
+      const b = positions.get(s.b)
+      if (!a || !b) continue
+      pushCurve(data, a, b, new THREE.Color('#ffe08a'), new THREE.Color('#ffffff'), (hashString(s.a + s.b) % 1000) / 1000, 0.3)
+    }
+    return data.pos.length ? lineGeometry(data) : null
+  }, [props.suggested, positions])
+  useEffect(() => () => suggestions?.dispose(), [suggestions])
 
   const nodes = useMemo(() => {
     const g = new THREE.BufferGeometry()
@@ -193,11 +225,18 @@ export default function NeuralLayer(props: NeuralLayerProps) {
         3,
       ),
     )
-    g.setAttribute('aSize', new THREE.Float32BufferAttribute(list.map((n) => (n.id === hovered ? 1.5 : 1) * nodePx(n)), 1))
+    g.setAttribute('aSize', new THREE.Float32BufferAttribute(list.map((n) => (n.id === hovered || n.id === selected ? 1.5 : 1) * nodePx(n)), 1))
     g.setAttribute('aSeed', new THREE.Float32BufferAttribute(list.map((n) => (hashString(n.id) % 1000) / 1000), 1))
-    g.setAttribute('aAlert', new THREE.Float32BufferAttribute(list.map((n) => (n.state === 'overdue' ? 1 : n.state === 'soon' ? 0.5 : 0)), 1))
+    g.setAttribute('aAlert', new THREE.Float32BufferAttribute(list.map((n) => (n.state === 'overdue' ? 1 : n.state === 'high' ? 0.7 : n.state === 'soon' ? 0.5 : 0)), 1))
+    g.setAttribute('aAge', new THREE.Float32BufferAttribute(list.map((n) => n.age ?? 100), 1))
+    g.setAttribute('aDim', new THREE.Float32BufferAttribute(list.map((n) => (focusSet && !focusSet.has(n.id) ? 0.2 : 1)), 1))
     return g
-  }, [graph, positions, hovered])
+  }, [graph, positions, hovered, selected, focusSet])
+
+  /* À chaque nouveau graphe, les neurones récents repoussent. */
+  useEffect(() => {
+    bornAt.current = performance.now()
+  }, [graph])
 
   useEffect(() => () => bg.lines.dispose(), [bg])
   useEffect(() => () => links.dispose(), [links])
@@ -227,10 +266,20 @@ export default function NeuralLayer(props: NeuralLayerProps) {
     g.rotation.x += ((dive.current?.tilt ?? 0) - g.rotation.x) * 0.12
     g.scale.setScalar(BRAIN_SCALE * (0.82 + 0.18 * fade.current))
     const t = s.clock.elapsedTime
-    for (const m of [bgMat, linkMat, hiMat, dotMat, nodeMat]) {
+    for (const m of [bgMat, linkMat, hiMat, sugMat, dotMat, nodeMat]) {
       m.uniforms.uTime.value = t
       m.uniforms.uFade.value = fade.current
     }
+    /* Profondeur de champ : le plan net est celui du centre du réseau. */
+    const focusDist = Math.max(0.05, camera.position.distanceTo(g.position))
+    for (const m of [dotMat, nodeMat]) {
+      m.uniforms.uFocus.value = focusDist
+      m.uniforms.uDof.value = 0.9 / focusDist
+      m.uniforms.uBorn.value = Math.min(1, (performance.now() - bornAt.current) / 1700)
+    }
+    /* Tempête d'activité : plus la journée est chargée, plus les influx courent vite. */
+    linkMat.uniforms.uSpeed.value = 0.28 * (1 + activity * 1.6)
+    linkMat.uniforms.uBase.value = focusSet ? 0.1 : 0.42 + activity * 0.14
     g.updateMatrixWorld()
     /* Étiquettes : on les place par ordre d'importance et on masque celles qui en chevauchent
        une déjà placée, pour que ça reste lisible même avec une centaine de neurones. */
@@ -240,7 +289,7 @@ export default function NeuralLayer(props: NeuralLayerProps) {
       const p = positions.get(id)
       if (!p) continue
       v.set(p[0], p[1], p[2]).applyMatrix4(g.matrixWorld).project(camera)
-      if (v.z > 1) {
+      if (v.z > 1 || (focusSet && !focusSet.has(id))) {
         el.style.opacity = '0'
         continue
       }
@@ -281,6 +330,7 @@ export default function NeuralLayer(props: NeuralLayerProps) {
       <points geometry={bg.pts} material={dotMat} />
       <lineSegments geometry={links} material={linkMat} />
       {highlight && <lineSegments geometry={highlight} material={hiMat} />}
+      {suggestions && <lineSegments geometry={suggestions} material={sugMat} />}
       <points geometry={nodes} material={nodeMat} />
       {graph.nodes.map((n) => {
         const p = positions.get(n.id)

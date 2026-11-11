@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Deadline, Task } from '../types'
-import { backgroundNet, bridgeAxeFor, buildKnowledgeGraph, buildTaskGraph, insideBrain, layoutGraph, mergeGraphs, withRoots } from './neural'
+import { ageInDays, backgroundNet, bridgeAxeFor, buildKnowledgeGraph, buildTaskGraph, insideBrain, layoutGraph, matchNodes, mergeGraphs, neighborhood, suggestLinks, withRoots } from './neural'
 import { buildImportPlan, parseClaudeMemory } from './knowledge'
 
 const TODAY = '2026-11-10'
@@ -213,5 +213,44 @@ describe('withRoots', () => {
     const open = withRoots(g, { taches: true, echeances: false })
     expect(open.nodes.some((n) => n.kind === 'task')).toBe(true)
     expect(open.links.some((l) => l.source === 'root:taches' && l.target === 'hub:perso')).toBe(true)
+  })
+})
+
+describe('survol, recherche, suggestions', () => {
+  const g = {
+    nodes: ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id, kind: 'note' as const, label: id === 'b' ? 'Séance Éclair' : id, color: '#fff', size: 1, state: 'normal' as const, summary: id === 'c' ? 'résumé spécial' : undefined })),
+    links: [
+      { source: 'a', target: 'b', kind: 'link' as const, rest: 1 },
+      { source: 'b', target: 'c', kind: 'link' as const, rest: 1 },
+      { source: 'c', target: 'd', kind: 'link' as const, rest: 1 },
+    ],
+  }
+  it('le chemin d’un neurone : lui et ses voisins à 2 liens', () => {
+    expect([...neighborhood(g, 'a', 2)].sort()).toEqual(['a', 'b', 'c'])
+    expect([...neighborhood(g, 'e', 2)]).toEqual(['e'])
+  })
+  it('recherche : ignore accents et casse, cherche aussi dans le résumé', () => {
+    expect([...matchNodes(g, 'eclair')!]).toEqual(['b'])
+    expect([...matchNodes(g, 'SPECIAL')!]).toEqual(['c'])
+    expect(matchNodes(g, ' ')).toBeNull()
+  })
+  it('âge en jours', () => {
+    expect(ageInDays('2026-11-01T10:00:00Z', '2026-11-11')).toBe(10)
+    expect(ageInDays(undefined, '2026-11-11')).toBe(0)
+  })
+  const note = (id: string, title: string, summary: string, links: string[] = []) => ({
+    id, title, kind: 'topic' as const, summary, facts: [], links, tags: [], source: 'manual' as const, createdAt: '', updatedAt: '',
+  })
+  it('propose un lien entre deux fiches aux mots rares communs, jamais entre fiches déjà reliées', () => {
+    const notes = [
+      note('1', 'Préparation physique', 'tractions lestées endurance progression'),
+      note('2', 'Programme street', 'tractions lestées programme semaine'),
+      note('3', 'Cuisine', 'recettes légumes saison'),
+    ]
+    const s = suggestLinks(notes)
+    expect(s).toHaveLength(1)
+    expect(s[0].shared).toEqual(expect.arrayContaining(['tractions', 'lestees']))
+    const linked = [note('1', 'Préparation physique', 'tractions lestées', ['Programme street']), notes[1], notes[2]]
+    expect(suggestLinks(linked)).toHaveLength(0)
   })
 })

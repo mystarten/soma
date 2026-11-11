@@ -45,6 +45,13 @@ export interface Body3DProps {
     setHovered: (id: string | null) => void
     onPick: (n: NeuralNode) => void
     labels: React.RefObject<Map<string, HTMLDivElement>>
+    selected?: string | null
+    focusSet?: Set<string> | null
+    path?: Set<string> | null
+    suggested?: { a: string; b: string }[]
+    activity?: number
+    /** Visite guidée : le réseau tourne seul. */
+    tour?: boolean
   }
   /** Ordre de zoom : 1 = au cœur du cerveau, 0 = vue du corps. */
   diveCommand?: { to: number; nonce: number }
@@ -527,6 +534,8 @@ function Rig({
   onZoomed,
   lod,
   dprIdle,
+  spin,
+  tour,
 }: {
   azimuth: number
   drag: React.RefObject<number>
@@ -540,6 +549,9 @@ function Rig({
   onZoomed?: (zoomed: boolean) => void
   lod: React.RefObject<Lod>
   dprIdle: number
+  /** Vitesse de rotation résiduelle après un glissement (inertie). */
+  spin: React.RefObject<{ v: number; held: boolean }>
+  tour: React.RefObject<boolean>
 }) {
   const group = useRef<THREE.Group>(null)
   const setDpr = useThree((st) => st.setDpr)
@@ -557,9 +569,20 @@ function Rig({
   const inv = useMemo(() => new THREE.Matrix4(), [])
   const heartWorld = useMemo(() => new THREE.Vector3(), [])
 
-  useFrame(() => {
+  useFrame((state) => {
     if (!group.current) return
     const d = dive.current
+    /* Inertie : le corps continue de tourner après un glissement, en ralentissant. */
+    const sp = spin.current
+    if (!sp.held && Math.abs(sp.v) > 1e-4) {
+      drag.current += sp.v
+      sp.v *= 0.93
+    }
+    /* Visite guidée : le réseau tourne seul et oscille doucement. */
+    if (tour.current && d.focus > 0.8) {
+      drag.current += 0.0035
+      d.tilt += (Math.sin(state.clock.elapsedTime * 0.35) * 0.28 - d.tilt) * 0.02
+    }
     const wantRot = azimuth + drag.current
     /* Le réseau dérive lentement quand on est dedans. */
     drag.current += 0.0011 * smoothstep(0.7, 0.95, d.focus)
@@ -692,6 +715,9 @@ export default function Body3D(props: Body3DProps) {
   const drag = useRef(0)
   const zoom = useRef(1)
   const pointer = useRef<{ x: number; y: number; moved: number } | null>(null)
+  const spin = useRef({ v: 0, held: false })
+  const tourRef = useRef(false)
+  tourRef.current = !!props.neural?.tour
   const dive = useRef<DiveState>({
     focus: 0,
     target: 0,
@@ -788,6 +814,8 @@ export default function Body3D(props: Body3DProps) {
 
   const onPointerDown = (e: React.PointerEvent) => {
     touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    spin.current.held = true
+    spin.current.v = 0
     pointer.current = { x: e.clientX, y: e.clientY, moved: touches.current.size > 1 ? 99 : 0 }
   }
   const onPointerMove = (e: React.PointerEvent) => {
@@ -827,11 +855,13 @@ export default function Body3D(props: Body3DProps) {
     p.x = e.clientX
     p.y = e.clientY
     drag.current += dx * 0.011
+    spin.current.v = spin.current.v * 0.5 + dx * 0.011 * 0.5
     /* Dans le cerveau, glisser vers le haut ou le bas incline aussi le réseau. */
     if (dive.current.focus > 0.5) dive.current.tilt = clamp(dive.current.tilt + dy * 0.006, -0.9, 0.9)
   }
   const onPointerUp = (e: React.PointerEvent) => {
     touches.current.delete(e.pointerId)
+    spin.current.held = false
     if (touches.current.size < 2) pinch.current = null
     window.setTimeout(() => {
       pointer.current = null
@@ -878,6 +908,8 @@ export default function Body3D(props: Body3DProps) {
         onFocus={(f) => onFocusProp.current?.(f)}
         onZoomed={setZoomed}
         lod={lod}
+        spin={spin}
+        tour={tourRef}
         dprIdle={quality === 'high' ? Math.min(2, window.devicePixelRatio || 1) : 1}
       >
         <group ref={bodyRef}>
@@ -940,6 +972,11 @@ export default function Body3D(props: Body3DProps) {
             dive={dive}
             labels={props.neural.labels}
             clickGuard={clickGuard}
+            selected={props.neural.selected}
+            focusSet={props.neural.focusSet}
+            path={props.neural.path}
+            suggested={props.neural.suggested}
+            activity={props.neural.activity}
           />
         )}
       </Rig>

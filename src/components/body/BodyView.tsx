@@ -157,7 +157,7 @@ export default function BodyView({
   }, [onFocus])
   useEffect(() => () => void (document.body.style.overflow = ''), [])
 
-  const neuralModel = useNeuralModel(!compact)
+  const neuralModel = useNeuralModel(!compact, deep)
   const webgl = useMemo(() => hasWebGL(), [])
   const low = useMemo(() => isLowPower(), [])
   const use3d = data.settings.bodyRender === '3d' && webgl
@@ -337,6 +337,12 @@ export default function BodyView({
                           setHovered: neuralModel.setHovered,
                           onPick: neuralModel.pick,
                           labels: neuralModel.labels,
+                          selected: neuralModel.selected,
+                          focusSet: neuralModel.focusSet,
+                          path: neuralModel.path,
+                          suggested: neuralModel.suggested.map((s) => ({ a: s.na, b: s.nb })),
+                          activity: neuralModel.activity,
+                          tour: neuralModel.tour,
                         }
                   }
                 />

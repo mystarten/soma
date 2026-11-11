@@ -30,6 +30,10 @@ export interface NeuralNode {
   expanded?: boolean
   /** Direction de départ imposée pour le placement 3D. */
   anchor?: Vec3
+  /** Âge en jours (création ou dernière modification) : les neurones récents bourgeonnent. */
+  age?: number
+  /** Résumé court pour l'aperçu au survol. */
+  summary?: string
 }
 
 export interface NeuralLink {
@@ -85,6 +89,9 @@ export interface GraphFilter {
   showDone?: boolean
 }
 
+export const ageInDays = (iso: string | undefined, today: DayKey): number =>
+  iso ? Math.max(0, Math.round((Date.parse(today) - Date.parse(iso.slice(0, 10))) / 86_400_000)) : 0
+
 export function buildTaskGraph(
   tasks: Task[],
   deadlines: Deadline[],
@@ -129,6 +136,8 @@ export function buildTaskGraph(
       state,
       category: t.category,
       ref: t.id,
+      age: ageInDays(t.createdAt, today),
+      summary: [t.kind && t.kind !== 'tache' ? t.kind : '', t.due ? `pour le ${t.due.slice(8, 10)}/${t.due.slice(5, 7)}` : '', t.notes ?? ''].filter(Boolean).join(' · ') || undefined,
     })
     links.push({ source: `hub:${t.category}`, target: `task:${t.id}`, kind: 'hub', rest: 0.55 })
     if (t.due && t.status !== 'fait') {
@@ -156,6 +165,7 @@ export function buildTaskGraph(
       state: days <= 7 ? 'soon' : 'normal',
       category: cat ?? undefined,
       ref: d.id,
+      summary: `échéance le ${d.date.slice(8, 10)}/${d.date.slice(5, 7)} (dans ${days} j)`,
     })
     links.push({
       source: cat ? `hub:${cat}` : 'core',
@@ -180,7 +190,11 @@ const NOTE_SIZE: Record<string, number> = { area: 1.45, project: 1.25, person: 1
  * Chaque fiche est un neurone. La fiche « axe » d'un domaine (type hub) devient le grand
  * neurone de cet axe, la fiche « profil » devient le cœur, et les [[liens]] sont des synapses.
  */
-export function buildKnowledgeGraph(notes: KnowledgeNote[], filter: KnowledgeFilter = {}): NeuralGraph {
+export function buildKnowledgeGraph(
+  notes: KnowledgeNote[],
+  filter: KnowledgeFilter = {},
+  today: DayKey = new Date().toISOString().slice(0, 10),
+): NeuralGraph {
   const live = notes.filter((n) => !n.deleted)
   const profile = live.find((n) => n.kind === 'profile')
   const nodes: NeuralNode[] = [
@@ -231,6 +245,8 @@ export function buildKnowledgeGraph(notes: KnowledgeNote[], filter: KnowledgeFil
       axe: n.axe,
       noteId: n.id,
       anchor: n.axe ? info.anchor : undefined,
+      age: ageInDays(n.updatedAt, today),
+      summary: n.summary || n.facts[0]?.text,
     })
     nodeOf.set(n.id, `note:${n.id}`)
     links.push({
@@ -475,4 +491,90 @@ export function curveControl(a: Vec3, b: Vec3, seed: number, bend = 0.18): Vec3 
   const m: Vec3 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2]
   const len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])
   return [m[0] + (r() - 0.5) * len * bend * 2, m[1] + (r() - 0.5) * len * bend * 2, m[2] + (r() - 0.5) * len * bend * 2]
+}
+
+
+/* ── Sélection, recherche, suggestions ────────────────────────────────── */
+
+/** Le neurone et tout ce qui l'entoure à `hops` liens : le « chemin » qui s'illumine. */
+export function neighborhood(graph: NeuralGraph, id: string, hops = 2): Set<string> {
+  const out = new Set([id])
+  let frontier = [id]
+  for (let h = 0; h < hops; h++) {
+    const next: string[] = []
+    for (const l of graph.links) {
+      for (const [a, b] of [[l.source, l.target], [l.target, l.source]] as const) {
+        if (frontier.includes(a) && !out.has(b)) {
+          out.add(b)
+          next.push(b)
+        }
+      }
+    }
+    frontier = next
+  }
+  return out
+}
+
+const fold = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+
+/** Neurones dont le nom ou le résumé contient la recherche (tous les mots). */
+export function matchNodes(graph: NeuralGraph, query: string): Set<string> | null {
+  const words = fold(query).split(/\s+/).filter((w) => w.length >= 2)
+  if (!words.length) return null
+  const out = new Set<string>()
+  for (const n of graph.nodes) {
+    if (n.kind === 'core') continue
+    const hay = fold(`${n.label} ${n.summary ?? ''}`)
+    if (words.every((w) => hay.includes(w))) out.add(n.id)
+  }
+  return out
+}
+
+const STOP = new Set(
+  'dans avec pour cette entre leurs elles votre notre depuis comme sont avoir etre faire plus moins tout tous toute aussi autre autres chez sous vers quand dont ainsi alors encore deja jamais toujours'.split(' '),
+)
+const tokens = (n: KnowledgeNote): Set<string> => {
+  const text = fold(`${n.title} ${n.title} ${n.summary ?? ''} ${n.facts.map((f) => f.text).join(' ')}`)
+  return new Set(text.split(/[^a-z0-9]+/).filter((w) => w.length >= 5 && !STOP.has(w) && !/^\d+$/.test(w)))
+}
+
+export interface LinkSuggestion {
+  a: string
+  b: string
+  shared: string[]
+}
+
+/**
+ * Deux fiches qui parlent des mêmes choses (au moins deux mots rares en commun) sans être reliées :
+ * une synapse possible, proposée en pointillé.
+ */
+export function suggestLinks(notes: KnowledgeNote[], max = 8): LinkSuggestion[] {
+  const live = notes.filter((n) => !n.deleted && n.kind !== 'profile')
+  const tok = new Map(live.map((n) => [n.id, tokens(n)]))
+  const df = new Map<string, string[]>()
+  for (const [id, set] of tok) for (const w of set) df.set(w, [...(df.get(w) ?? []), id])
+  const pair = new Map<string, { a: string; b: string; shared: string[] }>()
+  for (const [w, ids] of df) {
+    if (ids.length < 2 || ids.length > 6) continue /* trop courant = peu parlant */
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const [a, b] = ids[i] < ids[j] ? [ids[i], ids[j]] : [ids[j], ids[i]]
+        const key = `${a}|${b}`
+        const cur = pair.get(key) ?? { a, b, shared: [] }
+        cur.shared.push(w)
+        pair.set(key, cur)
+      }
+    }
+  }
+  const byId = new Map(live.map((n) => [n.id, n]))
+  const linked = (x: KnowledgeNote, y: KnowledgeNote) =>
+    x.links.some((l) => normTitle(l) === normTitle(y.title)) || y.links.some((l) => normTitle(l) === normTitle(x.title))
+  return [...pair.values()]
+    .filter((p) => p.shared.length >= 2 && !linked(byId.get(p.a)!, byId.get(p.b)!))
+    .sort((x, y) => y.shared.length - x.shared.length)
+    .slice(0, max)
 }
