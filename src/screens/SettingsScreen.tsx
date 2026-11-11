@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSoma } from '../hooks/useSoma'
 import type {
   CustomMetric,
@@ -48,7 +48,17 @@ import { RUN_5K_REFERENCE_ID, STARTING_REFERENCES } from '../db/seed'
 import { defaultHrZones } from '../engine/cardio'
 import { WORKOUT_KIND_LABEL } from '../engine/muscleMap'
 import { fmtClock, todayKey } from '../engine/time'
-import { SYNC_CONFIGURED } from '../sync/supabase'
+import {
+  SYNC_CONFIGURED,
+  SYNC_FROM_BROWSER,
+  clearSyncConfig,
+  currentSyncConfig,
+  parseShared,
+  saveSyncConfig,
+  shareLink,
+  validateSyncConfig,
+} from '../sync/supabase'
+import schemaSql from '../../supabase/schema.sql?raw'
 import { currentEmail, sendMagicLink, signOut, syncNow } from '../sync/syncEngine'
 import { ExercisePicker } from './Workouts'
 
@@ -76,7 +86,7 @@ function download(name: string, content: string, type = 'application/json') {
   URL.revokeObjectURL(url)
 }
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ param }: { param?: string }) {
   const data = useSoma()
   const s = data.settings
   const toast = useToast()
@@ -533,7 +543,7 @@ export default function SettingsScreen() {
       <FatigueSettings config={s.fatigue} onChange={(f) => void patch({ fatigue: f })} />
 
       {/* ── Sync ── */}
-      <SyncSettings />
+      <SyncSettings param={param} />
 
       {/* ── Données ── */}
       <Card title="Mes données">
@@ -873,27 +883,90 @@ function FatigueSettings({
 
 /* ── Sync ───────────────────────────────────────────────────────────── */
 
-function SyncSettings() {
+function SyncSettings({ param }: { param?: string }) {
   const data = useSoma()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [current, setCurrent] = useState<string | null>(null)
+  const [url, setUrl] = useState('')
+  const [key, setKey] = useState('')
+  const [formError, setFormError] = useState<string | null>(null)
   const toast = useToast()
 
   useMemo(() => {
     void currentEmail().then(setCurrent)
   }, [data.syncState])
 
+  /* Lien reçu depuis l'autre appareil : on enregistre la configuration et on recharge. */
+  useEffect(() => {
+    const shared = param ? parseShared(param) : null
+    if (!shared || SYNC_CONFIGURED) return
+    if (validateSyncConfig(shared)) return
+    saveSyncConfig(shared)
+    window.location.hash = '#/reglages'
+    window.location.reload()
+  }, [param])
+
   if (!SYNC_CONFIGURED) {
+    const appUrl = `${window.location.origin}${window.location.pathname}`
+    const save = () => {
+      const c = { url: url.trim(), key: key.trim() }
+      const err = validateSyncConfig(c)
+      if (err) return setFormError(err)
+      saveSyncConfig(c)
+      window.location.reload()
+    }
     return (
-      <Card title="Synchronisation" subtitle="Sync désactivée">
+      <Card title="Synchronisation entre appareils" subtitle="Désactivée : tout reste sur cet appareil">
         {toast.node}
-        <p className="mt-2 text-xs text-mist-300">
-          Aucune URL Supabase n’est configurée. L’app fonctionne à 100 % en local sur cet appareil.
-          Pour synchroniser PC et téléphone, renseigne <code>VITE_SUPABASE_URL</code> et{' '}
-          <code>VITE_SUPABASE_ANON_KEY</code> (voir le README), puis redéploie.
-        </p>
+        <ol className="mt-3 list-decimal space-y-2 pl-5 text-xs text-mist-300">
+          <li>
+            Crée un compte gratuit sur <span className="text-mist-100">supabase.com</span>, puis{' '}
+            <span className="text-mist-100">New project</span> (donne-lui un nom et un mot de passe, choisis la région la plus proche).
+          </li>
+          <li>
+            Dans ton projet : <span className="text-mist-100">SQL Editor</span> → <span className="text-mist-100">New query</span> → colle le texte ci-dessous → <span className="text-mist-100">Run</span>.
+            <div className="mt-1.5">
+              <Button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(schemaSql)
+                    toast.show('Texte copié')
+                  } catch {
+                    toast.show('Copie impossible : sélectionne le texte à la main')
+                  }
+                }}
+              >
+                Copier le texte à coller
+              </Button>
+            </div>
+          </li>
+          <li>
+            <span className="text-mist-100">Authentication → URL Configuration</span> : dans « Site URL » et « Redirect URLs », mets{' '}
+            <code className="break-all text-accent">{appUrl}</code>
+          </li>
+          <li>
+            <span className="text-mist-100">Project Settings → API</span> : copie « Project URL » et la clé{' '}
+            <span className="text-mist-100">anon public</span> (jamais la clé « service_role »), puis colle-les ici.
+          </li>
+        </ol>
+        <div className="mt-3 space-y-2">
+          <Field label="Project URL">
+            <TextInput value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://xxxx.supabase.co" autoComplete="off" />
+          </Field>
+          <Field label="Clé anon public">
+            <TextInput value={key} onChange={(e) => setKey(e.target.value)} placeholder="eyJ…" autoComplete="off" />
+          </Field>
+          <Button variant="primary" full onClick={save} disabled={!url.trim() || !key.trim()}>
+            Activer la synchronisation
+          </Button>
+          {formError && <p className="text-xs text-[#ff8f8f]">{formError}</p>}
+          <p className="text-[0.68rem] text-mist-700">
+            Ces deux valeurs restent dans ton navigateur. Elles sont publiques par nature : tes données sont protégées par ton
+            compte et par les règles de la base.
+          </p>
+        </div>
       </Card>
     )
   }
@@ -967,6 +1040,33 @@ function SyncSettings() {
             </p>
           )}
           {error && <p className="text-xs text-[#ff8f8f]">{error}</p>}
+        </div>
+      )}
+      {SYNC_FROM_BROWSER && (
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/8 pt-3">
+          <Button
+            onClick={async () => {
+              const c = currentSyncConfig()
+              if (!c) return
+              try {
+                await navigator.clipboard.writeText(shareLink(c))
+                toast.show('Lien copié : ouvre-le sur ton téléphone')
+              } catch {
+                toast.show('Copie impossible')
+              }
+            }}
+          >
+            Copier le lien pour mon téléphone
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              clearSyncConfig()
+              window.location.reload()
+            }}
+          >
+            Retirer la configuration
+          </Button>
         </div>
       )}
     </Card>

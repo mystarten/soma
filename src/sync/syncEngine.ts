@@ -110,6 +110,24 @@ export async function signOut(): Promise<void> {
   setState({ kind: 'signed-out' })
 }
 
+/** Met en file toutes les lignes locales (première synchronisation d'un appareil). */
+async function enqueueAllLocal(): Promise<void> {
+  for (const table of TABLES) {
+    const rows = (await localTable(table).toArray()) as unknown as { id?: string; day?: string; updatedAt?: string }[]
+    for (const row of rows) {
+      const id = row.id ?? row.day
+      if (!id) continue
+      await db.syncQueue.add({
+        table,
+        rowId: String(id),
+        payload: row,
+        op: 'upsert',
+        updatedAt: row.updatedAt ?? nowIso(),
+      })
+    }
+  }
+}
+
 /** Pousse la file locale, puis récupère les modifications distantes. */
 export async function syncNow(): Promise<void> {
   const sb = supabase()
@@ -126,17 +144,31 @@ export async function syncNow(): Promise<void> {
     const userId = session.user.id
     setState({ kind: 'syncing', email, pending: await pendingCount() })
 
-    /* 1. Pousser. */
-    const ops = await db.syncQueue.orderBy('id').limit(400).toArray()
-    if (ops.length) {
-      const rows = ops.map((op) => ({
-        user_id: userId,
-        table_name: op.table,
-        row_id: op.rowId,
-        data: op.payload ?? {},
-        deleted: op.op === 'delete',
-        updated_at: op.updatedAt,
-      }))
+    /* 0. Première connexion sur cet appareil : tout ce qui existe déjà ici doit partir aussi
+          (programme importé, séances, check-ins…), pas seulement ce qui sera modifié ensuite. */
+    const doneKey = `initial_push:${userId}`
+    if (!(await db.meta.get(doneKey))) {
+      await enqueueAllLocal()
+      await db.meta.put({ key: doneKey, value: nowIso() })
+    }
+
+    /* 1. Pousser, par paquets, jusqu'à ce que la file soit vide. */
+    for (let batch = 0; batch < 60; batch++) {
+      const ops = await db.syncQueue.orderBy('id').limit(300).toArray()
+      if (!ops.length) break
+      /* Une seule version par ligne dans un paquet (la dernière), sinon la base refuse. */
+      const byKey = new Map<string, Record<string, unknown>>()
+      for (const op of ops) {
+        byKey.set(`${op.table}|${op.rowId}`, {
+          user_id: userId,
+          table_name: op.table,
+          row_id: op.rowId,
+          data: op.payload ?? {},
+          deleted: op.op === 'delete',
+          updated_at: op.updatedAt,
+        })
+      }
+      const rows = [...byKey.values()]
       const { error } = await sb.from(ROWS_TABLE).upsert(rows, {
         onConflict: 'user_id,table_name,row_id',
       })
@@ -168,7 +200,7 @@ export async function syncNow(): Promise<void> {
         continue /* La version locale est plus récente : on la garde. */
       }
       if (row.deleted) {
-        if (['checkins', 'workouts', 'goals', 'tasks', 'deadlines', 'notes'].includes(table)) {
+        if (['checkins', 'workouts', 'goals', 'tasks', 'deadlines', 'notes', 'programs', 'reviews'].includes(table)) {
           if (incoming) await store.put({ ...incoming, id, deleted: true } as never)
         } else {
           await store.delete(id as never)

@@ -236,3 +236,15 @@ Usage personnel.
 
 - Dans le cerveau, les tâches sont regroupées sous un neurone **Tâches** (et les échéances sous **Échéances**) : un clic sur ce neurone les déplie ou les replie.
 - **Savoir → Importer** accepte maintenant aussi un texte en *plan* (titres et puces imbriquées) : chaque rubrique et sous-rubrique devient un neurone, et la partie « À vérifier » est rangée à part. Les imports se fusionnent par titre, sans rien écraser.
+
+## Mon programme, ma revue, mon tableau de bord
+
+- **Programme** (Séances → onglet *Programme*) : importe ton fichier Word (`.docx`, un tableau par séance avec les semaines en lignes). Le fichier est lu dans ton navigateur et rien n'est envoyé nulle part ; il n'est **jamais** dans ce dépôt. Ensuite tu touches une case *séance × semaine* (plusieurs séances possibles le même jour, dans n'importe quel ordre) : séries, reps, charges et repos se préremplissent. Le type de séance reste modifiable dans l'éditeur.
+- **Revue** : chaque semaine, quelques chiffres, ce qui a changé, une question, trois lignes à écrire. Règles simples, sans IA externe.
+- **Tableau de bord** : récupération, charge, programme, tendances, échéances et objectifs sur un écran.
+- **Cerveau** : en zoomant dessus, la carte s'agrandit progressivement jusqu'au plein écran (Échap ou « Revenir au corps » pour sortir).
+- **Corps** : la molette (ou le pincement) zoome sur la région visée ; de près apparaissent les chefs musculaires, les os des articulations, et près de la poitrine le cœur anatomique et la cage thoracique. Les boutons « Cœur, Épaule, Genou… » y mènent directement. Rendu schématique (hologramme), pas un atlas médical.
+
+## Synchroniser PC et téléphone
+
+Réglages → *Synchronisation entre appareils* t'explique tout pas à pas (compte Supabase gratuit, un texte à coller, deux valeurs à copier). Une fois active sur le PC, « Copier le lien pour mon téléphone » configure le téléphone en un geste. Tout ce qui existe déjà sur un appareil (programme, séances, tâches, connaissances) est envoyé à la première connexion. Tu peux aussi fournir `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY` au build (voir plus haut). Seule la clé publique `anon` est utilisée, jamais la clé `service_role`.

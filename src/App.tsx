@@ -116,7 +116,7 @@ export default function App() {
             {route === 'tableau' && <Dashboard />}
             {route === 'revue' && <Review />}
             {route === 'import' && <WhoopImport />}
-            {route === 'reglages' && <SettingsScreen />}
+            {route === 'reglages' && <SettingsScreen param={param} />}
           </Suspense>
         </div>
       </main>
