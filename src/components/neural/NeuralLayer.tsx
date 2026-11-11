@@ -229,7 +229,10 @@ export default function NeuralLayer(props: NeuralLayerProps) {
       const x = (v.x * 0.5 + 0.5) * size.width
       const y = (-v.y * 0.5 + 0.5) * size.height
       el.style.transform = `translate(-50%, -100%) translate(${x.toFixed(1)}px, ${(y - 10).toFixed(1)}px)`
-      el.style.opacity = v.z > 1 ? '0' : String(Math.max(0.2, Math.min(1, 1.5 - v.z * 25)) * fade.current)
+      /* Au second palier de zoom, chaque élément porte son nom : on les examine un par un. */
+      const micro = Math.max(0, Math.min(1, ((dive.current?.focus ?? 0) - 1) / 0.6))
+      const base = Math.max(0.2, Math.min(1, 1.5 - v.z * 25))
+      el.style.opacity = v.z > 1 ? '0' : String(Math.max(base, micro) * fade.current)
     }
   })
 

@@ -82,7 +82,7 @@ export function useNeuralModel(enabled: boolean) {
     const leaves = graph.nodes.filter((n) => n.kind === 'task' || n.kind === 'deadline' || n.kind === 'note')
     const roomy = typeof window === 'undefined' || window.innerWidth >= 700
     const rank = (n: NeuralNode) => (['overdue', 'high', 'soon'].includes(n.state) ? 10 : 0) + n.size
-    const important = [...leaves].sort((a, b) => rank(b) - rank(a)).slice(0, roomy ? 70 : 28)
+    const important = [...leaves].sort((a, b) => rank(b) - rank(a)).slice(0, roomy ? 400 : 160)
     return [...graph.nodes.filter((n) => n.kind === 'hub' || n.kind === 'axe' || n.kind === 'core' || n.kind === 'root'), ...important]
   }, [graph])
   const hoveredNode = graph.nodes.find((n) => n.id === hovered)

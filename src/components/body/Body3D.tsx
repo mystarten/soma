@@ -67,6 +67,9 @@ const HEAD_Y = BRAIN_POS[1]
 /** Demi-largeur et demi-hauteur du réseau à l'échelle du crâne, pour cadrer la vue finale. */
 const DEEP_HALF_W = 0.094
 const DEEP_HALF_H = 0.07
+/** Au-delà de « dans le crâne », un second palier de zoom va jusqu'au neurone près de soi. */
+export const DIVE_MAX = 1.6
+const MICRO_MIN = 0.35
 
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
@@ -527,9 +530,12 @@ function Rig({
        Interpolation logarithmique : la vitesse de zoom paraît constante du début à la fin. */
     d.focus += (d.target - d.focus) * 0.16
     if (Math.abs(d.target - d.focus) < 0.0004) d.focus = d.target
-    const e = d.focus * d.focus * (3 - 2 * d.focus)
+    const p = Math.min(1, d.focus)
+    const e = p * p * (3 - 2 * p)
     const lookY = BODY_CENTER_Y + (HEAD_Y - BODY_CENTER_Y) * Math.min(1, e * 1.5)
-    const dist = base * Math.pow(deep / base, e)
+    /* Second palier : on s'approche encore, jusqu'à pouvoir examiner un neurone de près. */
+    const m = Math.max(0, Math.min(1, (d.focus - 1) / (DIVE_MAX - 1)))
+    const dist = base * Math.pow(deep / base, e) * Math.pow(MICRO_MIN, m * m * (3 - 2 * m))
     want.set(0, lookY, dist)
     camera.position.lerp(want, 0.3)
     look.set(0, lookY, 0)
@@ -596,7 +602,7 @@ export default function Body3D(props: Body3DProps) {
 
   /* Ordre de zoom venant d'un bouton : même trajectoire continue que la molette. */
   useEffect(() => {
-    if (props.diveCommand) dive.current.target = clamp(props.diveCommand.to, 0, 1)
+    if (props.diveCommand) dive.current.target = clamp(props.diveCommand.to, 0, DIVE_MAX)
   }, [props.diveCommand])
 
   /* Molette : au-dessus de la tête → plongée ; ailleurs → zoom (ou défilement sur l'accueil). */
@@ -612,10 +618,10 @@ export default function Body3D(props: Body3DProps) {
       const step = Math.max(-0.45, Math.min(0.45, -e.deltaY / 340))
       if (step > 0 && canDive.current && (near || d.target > 0.02)) {
         e.preventDefault()
-        d.target = clamp(d.target + step, 0, 1)
+        d.target = clamp(d.target + step, 0, DIVE_MAX)
       } else if (step < 0 && d.target > 0.02) {
         e.preventDefault()
-        d.target = clamp(d.target + step, 0, 1)
+        d.target = clamp(d.target + step, 0, DIVE_MAX)
       } else if (!heroRef.current) {
         e.preventDefault()
         zoom.current = clamp(zoom.current + e.deltaY * 0.0012, 0.72, 1.6)
@@ -643,7 +649,7 @@ export default function Body3D(props: Body3DProps) {
       const [a, b] = [...touches.current.values()]
       const dist = Math.hypot(a.x - b.x, a.y - b.y)
       if (pinch.current !== null && canDive.current) {
-        dive.current.target = clamp(dive.current.target + (dist - pinch.current) / 200, 0, 1)
+        dive.current.target = clamp(dive.current.target + (dist - pinch.current) / 200, 0, DIVE_MAX)
       }
       pinch.current = dist
       if (pointer.current) pointer.current.moved = 99
