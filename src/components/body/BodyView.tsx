@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import type { Joint, MuscleZone } from '../../types'
@@ -69,6 +69,76 @@ export default function BodyView({
   const diveTo = (to: number) => setDiveCommand((c) => ({ to, nonce: (c?.nonce ?? 0) + 1 }))
   const raf = useRef(0)
 
+  /* Plein écran progressif : à mesure qu'on plonge dans le cerveau, la carte s'agrandit
+     jusqu'à occuper tout l'écran, sans coupure. Tout se fait directement sur le DOM
+     (pas de re-rendu à chaque image) en partant de la place d'origine de la carte. */
+  const slotRef = useRef<HTMLDivElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
+  const ctrlRef = useRef<HTMLDivElement>(null)
+  const fsBase = useRef<{ stage: number; ctrl: number; extra: number } | null>(null)
+  const lastFocus = useRef(0)
+  const onFocus = useCallback((f: number) => {
+    lastFocus.current = f
+    const card = cardRef.current
+    const slot = slotRef.current
+    const stage = stageRef.current
+    const ctrl = ctrlRef.current
+    if (!card || !slot || !stage) return
+    const x = Math.max(0, Math.min(1, (f - 0.5) / 0.48))
+    const t = x * x * (3 - 2 * x)
+    if (t <= 0.001) {
+      if (fsBase.current) {
+        fsBase.current = null
+        for (const k of ['position', 'zIndex', 'left', 'top', 'width', 'height', 'borderRadius', 'background'] as const) card.style[k] = ''
+        card.style.removeProperty('--stage-h')
+        slot.style.height = ''
+        if (ctrl) {
+          ctrl.style.height = ''
+          ctrl.style.opacity = ''
+          ctrl.style.overflow = ''
+        }
+        document.body.style.overflow = ''
+      }
+      return
+    }
+    if (!fsBase.current) {
+      const total = card.getBoundingClientRect().height
+      const stageH = stage.getBoundingClientRect().height
+      const ctrlH = ctrl?.getBoundingClientRect().height ?? 0
+      fsBase.current = { stage: stageH, ctrl: ctrlH, extra: Math.max(0, total - stageH - ctrlH) }
+      slot.style.height = `${total}px`
+      card.style.position = 'fixed'
+      card.style.zIndex = '60'
+      document.body.style.overflow = 'hidden'
+    }
+    const { ctrl: cH, extra } = fsBase.current
+    const o = slot.getBoundingClientRect()
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const h = o.height + (vh - o.height) * t
+    const ch = cH * (1 - t)
+    card.style.left = `${o.left * (1 - t)}px`
+    card.style.top = `${o.top * (1 - t)}px`
+    card.style.width = `${o.width + (vw - o.width) * t}px`
+    card.style.height = `${h}px`
+    card.style.borderRadius = `${(1 - t) * 24}px`
+    /* Le fond devient opaque : on ne voit plus la page derrière, seulement le réseau. */
+    card.style.background = `color-mix(in srgb, #03060c ${Math.round(Math.min(1, t * 1.6) * 100)}%, transparent)`
+    card.style.setProperty('--stage-h', `${Math.max(120, h - ch - extra * (1 - t))}px`)
+    if (ctrl) {
+      ctrl.style.height = `${ch}px`
+      ctrl.style.opacity = String(Math.max(0, 1 - t * 2.4))
+      ctrl.style.overflow = 'hidden'
+    }
+  }, [])
+  useEffect(() => {
+    const onResize = () => onFocus(lastFocus.current)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [onFocus])
+  useEffect(() => () => void (document.body.style.overflow = ''), [])
+
   const neuralModel = useNeuralModel(!compact)
   const webgl = useMemo(() => hasWebGL(), [])
   const low = useMemo(() => isLowPower(), [])
@@ -110,6 +180,15 @@ export default function BodyView({
       ),
     [data.fatigueCtx, data.nowMs, dayAnchor],
   )
+
+  useEffect(() => {
+    if (!deep) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') diveTo(0)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [deep])
 
   const effectiveTime = data.nowMs + dayOffset * 86_400_000 + horizon * 3_600_000
   const body = useMemo(
@@ -154,7 +233,11 @@ export default function BodyView({
       }
     >
       {/* ── Modèle, avec le score en surimpression ── */}
-      <Card padded={false} className={`relative ${hero ? 'hero-stage' : ''}`}>
+      <div ref={slotRef} className="relative">
+      <div
+        ref={cardRef}
+        className={`glass relative w-full overflow-hidden rounded-[var(--radius-card)] text-left ${hero ? 'hero-stage' : ''}`}
+      >
         <div
           className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 p-4 transition-opacity duration-300"
           style={{ opacity: deep ? 0 : 1 }}
@@ -180,9 +263,10 @@ export default function BodyView({
         </div>
 
         <div
+          ref={stageRef}
           className="relative w-full"
           style={{
-            height: hero ? 'clamp(400px, 66vh, 780px)' : compact ? 300 : 'clamp(340px, 56vh, 560px)',
+            height: `var(--stage-h, ${hero ? 'clamp(400px, 66vh, 780px)' : compact ? '300px' : 'clamp(340px, 56vh, 560px)'})`,
           }}
         >
           {hero && <div className="hero-scan transition-opacity duration-500" style={{ opacity: deep ? 0 : 1 }} aria-hidden />}
@@ -223,6 +307,7 @@ export default function BodyView({
                   hero={hero}
                   diveCommand={diveCommand}
                   onDeep={setDeep}
+                  onFocus={onFocus}
                   neural={
                     compact
                       ? undefined
@@ -256,6 +341,7 @@ export default function BodyView({
           )}
         </div>
 
+        <div ref={ctrlRef}>
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <Segmented value={layer} onChange={setLayer} options={LAYERS} size="sm" />
@@ -335,7 +421,9 @@ export default function BodyView({
         </div>
           </>
         )}
-      </Card>
+        </div>
+      </div>
+      </div>
 
       {!hero && (
         <>

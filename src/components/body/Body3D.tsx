@@ -48,6 +48,8 @@ export interface Body3DProps {
   diveCommand?: { to: number; nonce: number }
   /** Appelé quand on est assez près pour voir les neurones (et inversement). */
   onDeep?: (deep: boolean) => void
+  /** Avancement continu de la plongée, pour agrandir la carte en douceur jusqu'au plein écran. */
+  onFocus?: (focus: number) => void
 }
 
 /** État partagé de la plongée vers le cerveau. */
@@ -490,6 +492,7 @@ function Rig({
   dive,
   bodyRef,
   onDeep,
+  onFocus,
 }: {
   azimuth: number
   drag: React.RefObject<number>
@@ -499,6 +502,7 @@ function Rig({
   dive: React.RefObject<DiveState>
   bodyRef: React.RefObject<THREE.Group | null>
   onDeep?: (deep: boolean) => void
+  onFocus?: (focus: number) => void
 }) {
   const group = useRef<THREE.Group>(null)
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera
@@ -508,6 +512,7 @@ function Rig({
   const probe = useMemo(() => new THREE.Vector3(), [])
   const lastFade = useRef(-1)
   const deepFlag = useRef(false)
+  const sentFocus = useRef(-1)
 
   useFrame(() => {
     if (!group.current) return
@@ -559,6 +564,10 @@ function Rig({
     probe.set(0, HEAD_Y + 0.11, 0).project(camera)
     d.headR = Math.abs((-probe.y * 0.5 + 0.5) * size.height - d.headY)
 
+    if (Math.abs(d.focus - sentFocus.current) > 0.002 || (d.focus === d.target && sentFocus.current !== d.focus)) {
+      sentFocus.current = d.focus
+      onFocus?.(d.focus)
+    }
     const isDeep = deepFlag.current ? d.focus > 0.62 : d.focus > 0.78
     if (isDeep !== deepFlag.current) {
       deepFlag.current = isDeep
@@ -591,6 +600,8 @@ export default function Body3D(props: Body3DProps) {
   const [deep, setDeep] = useState(false)
   const onDeepProp = useRef(props.onDeep)
   onDeepProp.current = props.onDeep
+  const onFocusProp = useRef(props.onFocus)
+  onFocusProp.current = props.onFocus
   /* Sans réseau (mini-bonhomme), pas de plongée : la tête serait vide. */
   const canDive = useRef(false)
   canDive.current = !!props.neural
@@ -711,6 +722,7 @@ export default function Body3D(props: Body3DProps) {
           setDeep(v)
           onDeepProp.current?.(v)
         }}
+        onFocus={(f) => onFocusProp.current?.(f)}
       >
         <group ref={bodyRef}>
         <Shell seg={seg} opacity={layer === 'organes' ? 0.22 : 0.3} />
