@@ -4,6 +4,7 @@ import type {
   DeadlineKind,
   Task,
   TaskCategory,
+  TaskKind,
   TaskPriority,
 } from '../types'
 import { addDayKey, dayDiff, parseDay, weekBounds } from './time'
@@ -12,6 +13,46 @@ import { addDayKey, dayDiff, parseDay, weekBounds } from './time'
    To-do : ajout rapide au clavier, vues, retards, échéances.
    Aucune dépendance React — testé dans tasks.test.ts.
    ────────────────────────────────────────────────────────────────────────── */
+
+export const KIND_LABEL: Record<TaskKind, string> = {
+  tache: 'Tâche',
+  rdv: 'Rendez-vous',
+  concours: 'Concours',
+  appel: 'Appel',
+  rendu: 'À rendre',
+  penser: 'À penser',
+  achat: 'Achat',
+}
+
+/** Symbole court affiché devant la tâche. */
+export const KIND_ICON: Record<TaskKind, string> = {
+  tache: '○',
+  rdv: '◷',
+  concours: '★',
+  appel: '✆',
+  rendu: '✎',
+  penser: '?',
+  achat: '🛒',
+}
+
+export const KIND_ORDER: TaskKind[] = ['tache', 'rdv', 'concours', 'appel', 'rendu', 'penser', 'achat']
+
+/** Mots en tête de titre qui désignent la nature de la tâche (« rdv médecin », « concours blanc »…). */
+const KIND_WORDS: [RegExp, TaskKind][] = [
+  [/^(rdv|rendez-?vous)\b/i, 'rdv'],
+  [/^concours\b/i, 'concours'],
+  [/^(appel|appeler|t[ée]l[ée]phoner)\b/i, 'appel'],
+  [/^(rendre|rendu|remettre|à rendre|a rendre|deadline)\b/i, 'rendu'],
+  [/^(penser|réfléchir|reflechir|r[ée]flexion|d[ée]cider)\b/i, 'penser'],
+  [/^(acheter|achat|courses)\b/i, 'achat'],
+]
+
+/** Nature détectée au début du titre ; « tache » par défaut. */
+export function detectKind(title: string): TaskKind {
+  const t = title.trim()
+  for (const [re, kind] of KIND_WORDS) if (re.test(t)) return kind
+  return 'tache'
+}
 
 export const PRIORITY_LABEL: Record<TaskPriority, string> = {
   haute: 'Haute',
@@ -73,6 +114,7 @@ export interface QuickAddResult {
   dueTime?: string
   priority: TaskPriority
   category: TaskCategory
+  kind: TaskKind
 }
 
 /**
@@ -201,7 +243,7 @@ export function parseQuickAdd(input: string, today: DayKey): QuickAddResult {
 
   let title = text.replace(/\s+/g, ' ').trim().replace(/[\s,;:–-]+$/, '')
   if (title) title = title.charAt(0).toUpperCase() + title.slice(1)
-  return { title, due, dueTime, priority, category }
+  return { title, due, dueTime, priority, category, kind: detectKind(title) }
 }
 
 /* ── Vues ─────────────────────────────────────────────────────────────── */

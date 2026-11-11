@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Deadline, Task } from '../types'
 import {
   countdownLabel,
+  detectKind,
   doneToday,
   dueLabel,
   isOverdue,
@@ -31,6 +32,7 @@ describe('ajout rapide', () => {
     const r = parseQuickAdd('rendu maths demain 14h !haute #école', TODAY)
     expect(r).toEqual({
       title: 'Rendu maths',
+      kind: 'rendu',
       due: '2026-11-11',
       dueTime: '14:00',
       priority: 'haute',
@@ -41,6 +43,7 @@ describe('ajout rapide', () => {
   it('une ligne simple reste une tâche perso normale, sans date', () => {
     expect(parseQuickAdd('acheter du pain', TODAY)).toEqual({
       title: 'Acheter du pain',
+      kind: 'achat',
       due: undefined,
       dueTime: undefined,
       priority: 'normale',
@@ -158,5 +161,21 @@ describe('échéances', () => {
     expect(countdownLabel(dl('x', '2026-11-11'), TODAY)).toBe('Demain')
     expect(countdownLabel(dl('x', '2026-11-20'), TODAY)).toBe('J-10')
     expect(countdownLabel(dl('x', '2026-11-01'), TODAY)).toBe('Passée')
+  })
+})
+
+describe('nature des tâches', () => {
+  it('devine la nature depuis le début du titre', () => {
+    expect(parseQuickAdd('rdv médecin demain 9h', TODAY).kind).toBe('rdv')
+    expect(parseQuickAdd('Rendez-vous banque lundi', TODAY).kind).toBe('rdv')
+    expect(parseQuickAdd('concours blanc samedi', TODAY).kind).toBe('concours')
+    expect(parseQuickAdd('appeler le comptable', TODAY).kind).toBe('appel')
+    expect(parseQuickAdd('rendre le dossier vendredi', TODAY).kind).toBe('rendu')
+    expect(parseQuickAdd('penser à la stratégie', TODAY).kind).toBe('penser')
+    expect(parseQuickAdd('acheter du café', TODAY).kind).toBe('achat')
+  })
+  it('reste tâche simple sinon', () => {
+    expect(parseQuickAdd('courir 10 km', TODAY).kind).toBe('tache')
+    expect(detectKind('rdvous')).toBe('tache')
   })
 })

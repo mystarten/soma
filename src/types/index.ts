@@ -597,9 +597,13 @@ export interface TaskSource {
   label?: string
 }
 
+/** Nature d'une tâche : une tâche simple, ou un rendez-vous, un concours, un appel… */
+export type TaskKind = 'tache' | 'rdv' | 'concours' | 'appel' | 'rendu' | 'penser' | 'achat'
+
 export interface Task {
   id: Id
   title: string
+  kind?: TaskKind
   due?: DayKey
   /** Heure facultative `HH:MM`. */
   dueTime?: string

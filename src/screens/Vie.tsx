@@ -113,7 +113,7 @@ export default function Vie() {
       <div className="flex min-w-0 flex-col gap-4 lg:row-span-2 xl:col-start-2 xl:row-span-1 xl:row-start-1">
         <DayLine />
         <BodyView hero />
-        <TodoPanel />
+        <TodoPanel initialView="week" />
       </div>
       {/* Échéances */}
       <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 xl:col-start-1 xl:row-start-1">

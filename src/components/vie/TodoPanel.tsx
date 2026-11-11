@@ -1,9 +1,12 @@
 import { useMemo, useRef, useState } from 'react'
 import { useSoma } from '../../hooks/useSoma'
-import type { Task, TaskCategory, TaskPriority, TaskStatus } from '../../types'
+import type { Task, TaskCategory, TaskKind, TaskPriority, TaskStatus } from '../../types'
 import {
   CATEGORY_COLOR,
   CATEGORY_LABEL,
+  KIND_ICON,
+  KIND_LABEL,
+  KIND_ORDER,
   PRIORITY_LABEL,
   doneToday,
   dueLabel,
@@ -14,6 +17,7 @@ import {
 } from '../../engine/tasks'
 import { deleteTask, saveTask } from '../../db/repo'
 import { uid } from '../../db/db'
+import { weekBounds } from '../../engine/time'
 import { Button, Field, Segmented, Sheet, TextArea, TextInput, useToast } from '../ui/primitives'
 
 const VIEWS: { value: TaskView; label: string }[] = [
@@ -36,6 +40,8 @@ export default function TodoPanel({ initialView = 'today' }: { initialView?: Tas
   const data = useSoma()
   const [view, setView] = useState<TaskView>(initialView)
   const [text, setText] = useState('')
+  /* Nature choisie à la main ; sinon elle est devinée depuis le titre. */
+  const [pickedKind, setPickedKind] = useState<TaskKind | null>(null)
   const [editing, setEditing] = useState<Task | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const toast = useToast()
@@ -57,12 +63,15 @@ export default function TodoPanel({ initialView = 'today' }: { initialView?: Tas
   const add = async () => {
     const p = preview
     if (!p?.title) return
+    const kind = pickedKind ?? p.kind
     /* On vide tout de suite : ce que tu tapes ensuite ne doit jamais être effacé. */
     setText('')
+    setPickedKind(null)
     const now = new Date().toISOString()
     /* La tâche créée doit rester visible : on bascule sur une vue qui la contient. */
     if (view === 'today' && p.due !== data.today) setView(p.due ? 'week' : 'all')
     if (view === 'overdue') setView(p.due === data.today ? 'today' : 'all')
+    if (view === 'week' && (!p.due || p.due > weekBounds(data.today, data.settings.weekStartsOn).end)) setView('all')
     inputRef.current?.focus()
     await saveTask({
       id: uid('task'),
@@ -71,6 +80,7 @@ export default function TodoPanel({ initialView = 'today' }: { initialView?: Tas
       dueTime: p.dueTime,
       priority: p.priority,
       category: p.category,
+      kind,
       status: 'a_faire',
       createdAt: now,
       updatedAt: now,
@@ -117,10 +127,36 @@ export default function TodoPanel({ initialView = 'today' }: { initialView?: Tas
             </button>
           )}
         </div>
+        {/* Nature de la tâche : un tap suffit, sinon elle est devinée depuis le titre. */}
+        <div role="radiogroup" aria-label="Nature de la tâche" className="scroll-x mt-2 flex gap-1.5">
+          {KIND_ORDER.map((k) => {
+            const active = (pickedKind ?? preview?.kind ?? 'tache') === k
+            return (
+              <button
+                key={k}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setPickedKind(k)}
+                style={{
+                  background: active ? 'color-mix(in srgb, var(--accent) 20%, transparent)' : '#ffffff0d',
+                  color: active ? 'var(--accent)' : '#b9c6dc',
+                  boxShadow: active ? 'inset 0 0 0 1px var(--accent)' : 'none',
+                }}
+                className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[0.7rem] transition"
+
+              >
+                <span aria-hidden>{KIND_ICON[k]}</span>
+                {KIND_LABEL[k]}
+              </button>
+            )
+          })}
+        </div>
         {preview && (
           <div className="mt-2 flex flex-wrap items-center gap-1.5 px-1 text-[0.68rem]">
             <span className="text-mist-500">Compris :</span>
             <span className="text-mist-100">{preview.title || '…'}</span>
+            <Chip color="#c9b6ff">{KIND_LABEL[pickedKind ?? preview.kind]}</Chip>
             {preview.due && (
               <Chip color="#8fb4ff">
                 {dueLabel({ due: preview.due, dueTime: preview.dueTime } as Task, data.today)}
@@ -248,6 +284,11 @@ function TaskRow({ task, onToggle, onOpen }: { task: Task; onToggle: () => void;
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: CATEGORY_COLOR[task.category] }} />
             {CATEGORY_LABEL[task.category]}
           </span>
+          {task.kind && task.kind !== 'tache' && (
+            <span className="text-mist-300">
+              {KIND_ICON[task.kind]} {KIND_LABEL[task.kind]}
+            </span>
+          )}
           {label && <span style={late ? { color: OVERDUE } : undefined}>{label}</span>}
           {task.status === 'en_cours' && <span className="text-accent">en cours</span>}
           {task.source && <span>{task.source.kind === 'mail' ? '✉ mail' : '◷ agenda'}</span>}
@@ -328,6 +369,13 @@ export function TaskEditor({ task, onClose }: { task: Task; onClose: () => void 
             value={t.priority}
             onChange={(v) => patch({ priority: v as TaskPriority })}
             options={(['haute', 'normale', 'basse'] as TaskPriority[]).map((p) => ({ value: p, label: PRIORITY_LABEL[p] }))}
+          />
+        </Field>
+        <Field label="Nature" group>
+          <Segmented
+            value={t.kind ?? 'tache'}
+            onChange={(v) => patch({ kind: v as TaskKind })}
+            options={KIND_ORDER.map((k) => ({ value: k, label: `${KIND_ICON[k]} ${KIND_LABEL[k]}` }))}
           />
         </Field>
         <Field label="Catégorie" group>
