@@ -628,7 +628,16 @@ export interface Task {
   deleted?: boolean
 }
 
-export type DeadlineKind = 'rendu' | 'oral' | 'concours' | 'business' | 'autre'
+export type DeadlineKind =
+  | 'rendu'
+  | 'oral'
+  | 'concours'
+  | 'business'
+  | 'autre'
+  | 'rdv'
+  | 'appel'
+  | 'penser'
+  | 'achat'
 
 export interface Deadline {
   id: Id

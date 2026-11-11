@@ -2,8 +2,18 @@ import { useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { useSoma } from '../../hooks/useSoma'
-import type { Deadline, DeadlineKind } from '../../types'
-import { DEADLINE_KIND_LABEL, countdownLabel, daysLeft, upcomingDeadlines } from '../../engine/tasks'
+import type { Deadline, DeadlineKind, TaskKind } from '../../types'
+import {
+  CATEGORY_LABEL,
+  DEADLINE_KIND_LABEL,
+  KIND_LABEL,
+  countdownLabel,
+  daysLeft,
+  dueLabel,
+  parseQuickAdd,
+  upcomingDeadlines,
+} from '../../engine/tasks'
+import KindPicker from './KindPicker'
 import { deleteDeadline, saveDeadline } from '../../db/repo'
 import { uid } from '../../db/db'
 import { parseDay } from '../../engine/time'
@@ -23,6 +33,10 @@ function urgencyColor(days: number): string {
 export default function DeadlinesPanel({ limit = 5, full = false }: { limit?: number; full?: boolean }) {
   const data = useSoma()
   const [editing, setEditing] = useState<Deadline | null>(null)
+  const [text, setText] = useState('')
+  const [picked, setPicked] = useState<TaskKind | null>(null)
+  const preview = useMemo(() => (text.trim() ? parseQuickAdd(text, data.today) : null), [text, data.today])
+  const kind: TaskKind = picked ?? (preview && preview.kind !== 'tache' ? preview.kind : 'rdv')
   const list = useMemo(
     () => upcomingDeadlines(data.deadlines, data.today, full ? undefined : limit),
     [data.deadlines, data.today, limit, full],
@@ -38,6 +52,25 @@ export default function DeadlinesPanel({ limit = 5, full = false }: { limit?: nu
     [data.deadlines, data.today, full],
   )
   const total = upcomingDeadlines(data.deadlines, data.today).length
+
+  /* Même saisie rapide que les tâches : « rdv dentiste jeudi 10h ». Sans date, on demande la date. */
+  const quickAdd = async () => {
+    const p = preview
+    if (!p?.title) return
+    setText('')
+    setPicked(null)
+    const row: Deadline = {
+      id: uid('dl'),
+      title: p.title,
+      date: p.due ?? data.today,
+      kind: kind as DeadlineKind,
+      category: p.category,
+      notes: p.dueTime ? `à ${p.dueTime}` : undefined,
+      updatedAt: new Date().toISOString(),
+    }
+    if (p.due) await saveDeadline(row)
+    else setEditing(row)
+  }
 
   const create = () =>
     setEditing({
@@ -61,6 +94,45 @@ export default function DeadlinesPanel({ limit = 5, full = false }: { limit?: nu
           + Ajouter
         </Button>
       </div>
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          void quickAdd()
+        }}
+        className="mb-3"
+      >
+        <div className="flex items-center gap-2 rounded-xl bg-ink-900/70 px-3 hairline focus-within:ring-2 focus-within:ring-[var(--accent-soft)]">
+          <span className="text-lg text-accent" aria-hidden>
+            +
+          </span>
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Nouvelle échéance…  ex. concours blanc 24/11"
+            aria-label="Ajouter une échéance"
+            className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-mist-100 outline-none placeholder:text-mist-700"
+            enterKeyHint="done"
+          />
+          {text && (
+            <button type="submit" className="shrink-0 rounded-lg bg-accent/15 px-2.5 py-1 text-xs text-accent">
+              Entrée ↵
+            </button>
+          )}
+        </div>
+        <KindPicker
+          value={kind}
+          onPick={setPicked}
+          kinds={['rdv', 'concours', 'appel', 'rendu', 'penser', 'achat']}
+        />
+        {preview && (
+          <p className="mt-2 px-1 text-[0.68rem] text-mist-500">
+            Compris : <span className="text-mist-100">{preview.title || '…'}</span> · {KIND_LABEL[kind]} ·{' '}
+            {preview.due ? dueLabel({ due: preview.due, dueTime: preview.dueTime } as never, data.today) : 'date à choisir'} ·{' '}
+            {CATEGORY_LABEL[preview.category]}
+          </p>
+        )}
+      </form>
 
       <ul className="space-y-1.5">
         {list.map((d, i) => {

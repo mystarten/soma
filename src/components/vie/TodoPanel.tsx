@@ -18,6 +18,7 @@ import {
 import { deleteTask, saveTask } from '../../db/repo'
 import { uid } from '../../db/db'
 import { weekBounds } from '../../engine/time'
+import KindPicker from './KindPicker'
 import { Button, Field, Segmented, Sheet, TextArea, TextInput, useToast } from '../ui/primitives'
 
 const VIEWS: { value: TaskView; label: string }[] = [
@@ -128,30 +129,7 @@ export default function TodoPanel({ initialView = 'today' }: { initialView?: Tas
           )}
         </div>
         {/* Nature de la tâche : un tap suffit, sinon elle est devinée depuis le titre. */}
-        <div role="radiogroup" aria-label="Nature de la tâche" className="scroll-x mt-2 flex gap-1.5">
-          {KIND_ORDER.map((k) => {
-            const active = (pickedKind ?? preview?.kind ?? 'tache') === k
-            return (
-              <button
-                key={k}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => setPickedKind(k)}
-                style={{
-                  background: active ? 'color-mix(in srgb, var(--accent) 20%, transparent)' : '#ffffff0d',
-                  color: active ? 'var(--accent)' : '#b9c6dc',
-                  boxShadow: active ? 'inset 0 0 0 1px var(--accent)' : 'none',
-                }}
-                className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[0.7rem] transition"
-
-              >
-                <span aria-hidden>{KIND_ICON[k]}</span>
-                {KIND_LABEL[k]}
-              </button>
-            )
-          })}
-        </div>
+        <KindPicker value={pickedKind ?? preview?.kind ?? 'tache'} onPick={setPickedKind} />
         {preview && (
           <div className="mt-2 flex flex-wrap items-center gap-1.5 px-1 text-[0.68rem]">
             <span className="text-mist-500">Compris :</span>

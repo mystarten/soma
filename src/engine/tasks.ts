@@ -75,11 +75,15 @@ export const CATEGORY_COLOR: Record<TaskCategory, string> = {
 }
 
 export const DEADLINE_KIND_LABEL: Record<DeadlineKind, string> = {
-  rendu: 'Rendu',
+  rendu: 'À rendre',
   oral: 'Oral',
   concours: 'Concours',
   business: 'Deadline business',
   autre: 'Autre',
+  rdv: 'Rendez-vous',
+  appel: 'Appel',
+  penser: 'À penser',
+  achat: 'Achat',
 }
 
 const strip = (s: string) =>
