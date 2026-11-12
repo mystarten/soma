@@ -14,6 +14,9 @@ import { zoneList } from '../engine/suggest'
 import { reviewDone, reviewWeekFor } from '../engine/review'
 import { programDone, weekOfDay } from '../engine/program'
 import { useGoogle } from '../integrations/useGoogle'
+import { AgendaPanel, MailPanel } from '../components/vie/GooglePanels'
+import RecentWorkouts from '../components/vie/RecentWorkouts'
+import { sleepHours } from '../engine/sleep'
 
 const recoveryColor = (v: number) => (v >= 67 ? '#41e08a' : v >= 34 ? '#ffc24b' : '#ff5a5a')
 
@@ -82,6 +85,18 @@ function MorningBrief() {
   )
 }
 
+/** Agenda et mails : seulement une fois Google connecté, pour ne pas encombrer l'accueil sinon. */
+function GoogleOnHome() {
+  const g = useGoogle()
+  if (!g.connected && !g.agenda.length && !g.mails.length) return null
+  return (
+    <>
+      <AgendaPanel />
+      <MailPanel />
+    </>
+  )
+}
+
 /** Un rappel discret le week-end et le lundi, tant que la revue de la semaine n'est pas faite. */
 function ReviewNudge() {
   const data = useSoma()
@@ -111,6 +126,19 @@ function SportCard() {
   const load = morning.value
   const summary = useMemo(() => bodySummary(data.body), [data.body])
   const sleep = data.sleepScore.score
+  /* La nuit en détail : durée, sommeil profond et paradoxal, VFC, fréquence cardiaque de repos. */
+  const nightLine = (() => {
+    const c = data.checkinByDay.get(data.today)
+    const h = sleepHours(c)
+    if (!c || h === null) return null
+    const fmt = (m: number) => `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, '0')}`
+    const parts = [`Nuit ${fmt(h * 60)}`]
+    if (c.sleep?.deepMin) parts.push(`profond ${fmt(c.sleep.deepMin)}`)
+    if (c.sleep?.remMin) parts.push(`paradoxal ${fmt(c.sleep.remMin)}`)
+    if (c.hrv) parts.push(`VFC ${Math.round(c.hrv)} ms`)
+    if (c.restingHr) parts.push(`FC repos ${Math.round(c.restingHr)}`)
+    return parts.join(' · ')
+  })()
   return (
     <section aria-label="Sport et récupération" className="glass rounded-[var(--radius-card)] p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -140,6 +168,7 @@ function SportCard() {
           thickness={7}
         />
       </div>
+      {nightLine && <p className="mt-3 text-xs text-mist-300">{nightLine}</p>}
       <div className="mt-3 space-y-1 text-xs">
         {summary.careful.length > 0 && (
           <p className="text-mist-300">
@@ -175,10 +204,12 @@ export default function Vie() {
       {/* Échéances */}
       <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 xl:col-start-1 xl:row-start-1">
         <DeadlinesPanel />
+        <GoogleOnHome />
       </div>
       {/* Sport */}
       <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 xl:col-start-3 xl:row-start-1">
         <SportCard />
+        <RecentWorkouts />
       </div>
     </div>
   )
