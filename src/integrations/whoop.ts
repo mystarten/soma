@@ -13,10 +13,24 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
   if (!sb) throw new Error('Active d’abord la synchronisation (Supabase) : WHOOP en a besoin.')
   const { data, error } = await sb.functions.invoke('whoop', { body })
   if (error) {
-    /* Le détail est dans la réponse de la fonction. */
-    const ctx = (error as { context?: Response }).context
-    const msg = ctx ? ((await ctx.json().catch(() => null)) as { error?: string } | null)?.error : undefined
-    throw new Error(msg ?? 'La fonction « whoop » ne répond pas : est-elle bien déployée ?')
+    /* On remonte la vraie cause : fonction absente, accès refusé, ou réponse d'erreur de la fonction. */
+    const ctx = (error as { context?: unknown }).context
+    if (typeof Response !== 'undefined' && ctx instanceof Response) {
+      let detail: string | undefined
+      try {
+        const body = (await ctx.clone().json()) as { error?: string; message?: string } | null
+        detail = body?.error ?? body?.message
+      } catch {
+        /* réponse sans JSON */
+      }
+      if (detail) throw new Error(detail)
+      if (ctx.status === 404) throw new Error('La fonction « whoop » est introuvable dans ce projet : déploie-la (Edge Functions → Deploy a new function), avec le nom exact « whoop ».')
+      if (ctx.status === 401 || ctx.status === 403) throw new Error('Accès refusé : reconnecte-toi (Réglages → Synchronisation), puis réessaie.')
+      throw new Error(`La fonction « whoop » a répondu ${ctx.status}. Regarde l’onglet Logs de la fonction dans Supabase.`)
+    }
+    throw new Error(
+      `Impossible de joindre la fonction « whoop » (${error instanceof Error ? error.message : 'réseau'}). Vérifie qu’elle est bien déployée sous ce nom exact, dans le même projet que la synchronisation.`,
+    )
   }
   const d = data as { error?: string } & T
   if (d?.error) throw new Error(d.error)
