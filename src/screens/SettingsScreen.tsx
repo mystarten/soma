@@ -61,7 +61,7 @@ import {
   validateSyncConfig,
 } from '../sync/supabase'
 import schemaSql from '../../supabase/schema.sql?raw'
-import { currentEmail, sendMagicLink, signOut, syncNow, verifyEmailCode } from '../sync/syncEngine'
+import { currentEmail, sendMagicLink, signInWithPassword, signOut, signUpWithPassword, syncNow, verifyEmailCode } from '../sync/syncEngine'
 import { ExercisePicker } from './Workouts'
 
 const ACCENTS = ['#35e3ff', '#41e08a', '#9b7bff', '#ffc24b', '#ff8f45', '#27e0c0', '#c8ef5a']
@@ -892,6 +892,8 @@ function SyncSettings({ param }: { param?: string }) {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [code, setCode] = useState('')
+  const [password, setPassword] = useState('')
+  const [mode, setMode] = useState<'password' | 'code'>('password')
   const [error, setError] = useState<string | null>(null)
   const [current, setCurrent] = useState<string | null>(null)
   const [url, setUrl] = useState('')
@@ -1024,6 +1026,60 @@ function SyncSettings({ param }: { param?: string }) {
               autoComplete="email"
             />
           </Field>
+          <Segmented
+            value={mode}
+            onChange={(v) => setMode(v as 'password' | 'code')}
+            options={[
+              { value: 'password', label: 'Mot de passe' },
+              { value: 'code', label: 'Code par e-mail' },
+            ]}
+            size="sm"
+          />
+          {mode === 'password' && (
+            <>
+              <Field label="Mot de passe" hint="Au moins 6 caractères. Première fois : crée-le ici, il sert ensuite à te reconnecter.">
+                <TextInput
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                />
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="primary"
+                  disabled={!email.includes('@') || password.length < 6}
+                  onClick={async () => {
+                    setError(null)
+                    try {
+                      await signInWithPassword(email.trim(), password)
+                      window.location.reload()
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Connexion refusée')
+                    }
+                  }}
+                >
+                  Me connecter
+                </Button>
+                <Button
+                  disabled={!email.includes('@') || password.length < 6}
+                  onClick={async () => {
+                    setError(null)
+                    try {
+                      await signUpWithPassword(email.trim(), password)
+                      window.location.reload()
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Création impossible')
+                    }
+                  }}
+                >
+                  Créer mon compte
+                </Button>
+              </div>
+            </>
+          )}
+          {mode === 'code' && (
+            <>
           <Button
             variant="primary"
             onClick={async () => {
@@ -1075,6 +1131,8 @@ function SyncSettings({ param }: { param?: string }) {
                 Renvoyer un code
               </button>
             </div>
+          )}
+            </>
           )}
           {error && <p className="text-xs text-[#ff8f8f]">{error}</p>}
         </div>

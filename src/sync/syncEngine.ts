@@ -105,6 +105,24 @@ export async function sendMagicLink(email: string): Promise<void> {
   if (error) throw error
 }
 
+/** Connexion par mot de passe : aucun e-mail envoyé, donc aucune limite d'envoi. */
+export async function signInWithPassword(email: string, password: string): Promise<void> {
+  const sb = supabase()
+  if (!sb) throw new Error('Synchronisation non configurée.')
+  const { error } = await sb.auth.signInWithPassword({ email, password })
+  if (error) throw error
+}
+
+/** Création du compte avec mot de passe (une seule fois). */
+export async function signUpWithPassword(email: string, password: string): Promise<void> {
+  const sb = supabase()
+  if (!sb) throw new Error('Synchronisation non configurée.')
+  const { error, data } = await sb.auth.signUp({ email, password })
+  if (error) throw error
+  /* Si la confirmation par mail est active côté Supabase, aucune session n'est créée tout de suite. */
+  if (!data.session) throw new Error('Compte créé. Connecte-toi maintenant avec ton mot de passe.')
+}
+
 /** Connexion par code à 6 chiffres reçu par e-mail : pas de lien à ouvrir, donc rien à consommer par erreur. */
 export async function verifyEmailCode(email: string, token: string): Promise<void> {
   const sb = supabase()
