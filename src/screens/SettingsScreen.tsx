@@ -61,7 +61,7 @@ import {
   validateSyncConfig,
 } from '../sync/supabase'
 import schemaSql from '../../supabase/schema.sql?raw'
-import { currentEmail, sendMagicLink, signInWithPassword, signOut, signUpWithPassword, syncNow, verifyEmailCode } from '../sync/syncEngine'
+import { currentEmail, restoreFromCloud, sendMagicLink, signInWithPassword, signOut, signUpWithPassword, syncNow, verifyEmailCode } from '../sync/syncEngine'
 import { ExercisePicker } from './Workouts'
 
 const ACCENTS = ['#35e3ff', '#41e08a', '#9b7bff', '#ffc24b', '#ff8f45', '#27e0c0', '#c8ef5a']
@@ -894,6 +894,7 @@ function SyncSettings({ param }: { param?: string }) {
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
   const [mode, setMode] = useState<'password' | 'code'>('password')
+  const [confirmRestore, setConfirmRestore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [current, setCurrent] = useState<string | null>(null)
   const [url, setUrl] = useState('')
@@ -1014,6 +1015,37 @@ function SyncSettings({ param }: { param?: string }) {
           >
             Se déconnecter
           </Button>
+          <div className="mt-2 w-full rounded-xl bg-white/4 p-3 text-xs hairline">
+            <p className="text-mist-300">
+              <span className="font-medium text-mist-100">Appareil neuf ?</span> Si tes vraies données sont sur un autre appareil
+              (déjà synchronisé), récupère-les ici : les données de cet appareil-ci sont remplacées par celles du cloud.
+            </p>
+            {confirmRestore ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-[#ffb02e]">Remplacer les données de cet appareil ?</span>
+                <Button
+                  variant="danger"
+                  onClick={async () => {
+                    setError(null)
+                    try {
+                      await restoreFromCloud()
+                      window.location.reload()
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Récupération impossible')
+                      setConfirmRestore(false)
+                    }
+                  }}
+                >
+                  Oui, récupérer
+                </Button>
+                <Button onClick={() => setConfirmRestore(false)}>Annuler</Button>
+              </div>
+            ) : (
+              <Button className="mt-2" onClick={() => setConfirmRestore(true)}>
+                Récupérer mes données du cloud
+              </Button>
+            )}
+          </div>
         </div>
       ) : (
         <div className="mt-3 space-y-2">

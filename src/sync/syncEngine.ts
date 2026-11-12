@@ -205,18 +205,19 @@ export async function syncNow(): Promise<void> {
       await db.syncQueue.bulkDelete(ops.map((o) => o.id!).filter((v) => v !== undefined))
     }
 
-    /* 2. Récupérer. */
-    const last = (await db.meta.get(LAST_SYNC_KEY))?.value as string | undefined
+    /* 2. Récupérer, par pages de 1000 lignes, jusqu'à avoir tout reçu. */
+    let last = (await db.meta.get(LAST_SYNC_KEY))?.value as string | undefined
+    let newest = last ?? '1970-01-01T00:00:00.000Z'
+    for (let page = 0; page < 60; page++) {
     let query = sb
       .from(ROWS_TABLE)
       .select('table_name,row_id,data,updated_at,deleted')
       .order('updated_at', { ascending: true })
-      .limit(2000)
+      .limit(1000)
     if (last) query = query.gt('updated_at', last)
     const { data, error } = await query
     if (error) throw error
 
-    let newest = last ?? '1970-01-01T00:00:00.000Z'
     for (const row of data ?? []) {
       const table = row.table_name as SyncTable
       if (!TABLES.includes(table)) continue
@@ -239,6 +240,9 @@ export async function syncNow(): Promise<void> {
       }
     }
     await db.meta.put({ key: LAST_SYNC_KEY, value: newest })
+    if ((data?.length ?? 0) < 1000) break
+    last = newest
+    }
 
     setState({ kind: 'idle', email, lastSync: nowIso(), pending: await pendingCount() })
   } catch (e) {
@@ -249,6 +253,30 @@ export async function syncNow(): Promise<void> {
   } finally {
     running = false
   }
+}
+
+/**
+ * Deuxième appareil : on repart de ce que contient le cloud. Les données locales de cet appareil
+ * sont remplacées (à n'utiliser que sur un appareil neuf ou après la première synchronisation
+ * de l'appareil qui contient tes vraies données).
+ */
+export async function restoreFromCloud(): Promise<void> {
+  const sb = supabase()
+  if (!sb) throw new Error('Synchronisation non configurée.')
+  const { data } = await sb.auth.getSession()
+  if (!data.session) throw new Error('Connecte-toi d’abord.')
+  await db.transaction(
+    'rw',
+    [db.checkins, db.workouts, db.exercises, db.templates, db.workoutTypes, db.goals, db.metrics, db.settings, db.tasks, db.deadlines, db.notes, db.programs, db.reviews, db.injuries, db.syncQueue, db.meta],
+    async () => {
+      for (const t of TABLES) await localTable(t).clear()
+      await db.syncQueue.clear()
+      await db.meta.delete(LAST_SYNC_KEY)
+      /* Rien à renvoyer : le cloud fait foi. */
+      await db.meta.put({ key: `initial_push:${data.session!.user.id}`, value: nowIso() })
+    },
+  )
+  await syncNow()
 }
 
 let timer: number | undefined
