@@ -1,5 +1,6 @@
 import { supabase } from '../sync/supabase'
 import { buildWhoopPreview } from '../engine/whoop'
+import { dayKey } from '../engine/time'
 import { apiToFiles, type WhoopApiData } from './whoopApi'
 import { db, nowIso, uid } from '../db/db'
 import { recordImport, saveCheckIns, saveWorkouts } from '../db/repo'
@@ -133,7 +134,19 @@ export async function whoopSync(
     return { days: 0, workouts: 0, withRecovery: 0, received }
   }
   const [checkins, workouts] = await Promise.all([db.checkins.toArray(), db.workouts.toArray()])
-  const preview = buildWhoopPreview(files, { checkins, workouts })
+  /* Anciennes valeurs WHOOP de la période (éventuellement rangées au mauvais jour) : on les retire,
+     elles sont réécrites ci-dessous avec le bon jour. Les saisies à la main ne sont jamais touchées. */
+  const from = dayKey(start)
+  const fromCycles = ['recovery', 'restingHr', 'hrv', 'whoopDayStrain', 'respiratoryRate', 'spo2', 'skinTempC'] as const
+  const cleaned = checkins
+    .filter((c) => !c.deleted && c.source === 'whoop' && c.day >= from)
+    .map((c) => {
+      const copy = { ...c } as Record<string, unknown>
+      for (const k of fromCycles) delete copy[k]
+      return { ...copy, updatedAt: nowIso() } as typeof c
+    })
+  if (cleaned.length) await saveCheckIns(cleaned)
+  const preview = buildWhoopPreview(files, { checkins: [...checkins.filter((c) => !cleaned.some((x) => x.day === c.day)), ...cleaned], workouts })
   if (preview.days.length) await saveCheckIns(preview.days)
   if (preview.workouts.length) await saveWorkouts(preview.workouts)
   await recordImport({

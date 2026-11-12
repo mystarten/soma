@@ -61,3 +61,27 @@ describe('récupération sans cycle', () => {
     expect(apiToFiles({ recovery: [{ cycle_id: 1, score: {} }] })).toEqual([])
   })
 })
+
+describe('jour de la récupération = jour du réveil', () => {
+  it('un cycle qui commence à l’endormissement, la veille au soir, ne décale pas la récupération', () => {
+    /* heure locale du test : on construit les dates sans fuseau pour rester indépendant de la machine */
+    const evening = new Date(2026, 10, 11, 22, 40).toISOString() /* début du cycle : 11 nov, 22 h 40 */
+    const wake = new Date(2026, 10, 12, 6, 30).toISOString() /* réveil : 12 nov, 6 h 30 */
+    const files = apiToFiles({
+      cycles: [{ id: 7, start: evening, score: { strain: 11 } }],
+      recovery: [{ cycle_id: 7, sleep_id: 's9', score: { recovery_score: 64, resting_heart_rate: 51 } }],
+      sleep: [{ id: 's9', start: evening, end: wake, score: {} }],
+    })
+    const preview = buildWhoopPreview(files, { checkins: [], workouts: [] })
+    const day = preview.days.find((d) => d.recovery === 64)
+    expect(day?.day).toBe('2026-11-12')
+  })
+  it('sans nuit liée, un début de cycle en soirée est ramené au lendemain', () => {
+    const evening = new Date(2026, 10, 11, 22, 40).toISOString()
+    const preview = buildWhoopPreview(
+      apiToFiles({ cycles: [{ id: 8, start: evening, score: { strain: 9 } }] }),
+      { checkins: [], workouts: [] },
+    )
+    expect(preview.days[0].day).toBe('2026-11-12')
+  })
+})

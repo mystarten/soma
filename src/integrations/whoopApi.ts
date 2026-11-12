@@ -18,6 +18,16 @@ const cell = (v: unknown): string => {
 const csv = (head: string[], rows: unknown[][]) => [head.join(','), ...rows.map((r) => r.map(cell).join(','))].join('\n')
 const min = (milli?: number) => (milli === undefined ? '' : Math.round((milli / 60000) * 10) / 10)
 
+/**
+ * Un cycle WHOOP commence à l'endormissement : son début tombe donc le soir, la veille du jour où l'on
+ * voit sa récupération. Le jour d'une mesure est celui du réveil : un début de cycle en soirée est
+ * ramené au lendemain.
+ */
+export function wakeDayAnchor(iso: string): string {
+  const d = new Date(iso)
+  return d.getHours() >= 15 ? new Date(d.getTime() + 12 * 3_600_000).toISOString() : iso
+}
+
 export interface WhoopApiData {
   recovery?: unknown[]
   sleep?: unknown[]
@@ -49,7 +59,8 @@ export function apiToFiles(d: WhoopApiData): WhoopFileInput[] {
     if (n(rc.recovery_score) === undefined) continue /* mesure non calculée */
     const cy = cycleById.get(String(rec.cycle_id)) ?? {}
     const night = sleepById.get(String(rec.sleep_id)) ?? {}
-    const start = s(cy.start) || s(night.end) || s(rec.created_at) || s(rec.updated_at)
+    /* Le jour de la récupération est celui du réveil (fin de la nuit liée), pas le début du cycle. */
+    const start = s(night.end) || s(rec.created_at) || (s(cy.start) ? wakeDayAnchor(s(cy.start)) : '') || s(rec.updated_at)
     if (!start) continue
     if (rec.cycle_id !== undefined) usedCycles.add(String(rec.cycle_id))
     cycleRows.push([
@@ -60,7 +71,7 @@ export function apiToFiles(d: WhoopApiData): WhoopFileInput[] {
   /* Cycles sans récupération : on garde au moins la strain du jour. */
   for (const [id, cy] of cycleById) {
     if (usedCycles.has(id) || !s(cy.start)) continue
-    cycleRows.push([s(cy.start), '', undefined, undefined, undefined, n(o(cy.score).strain), undefined, undefined, undefined])
+    cycleRows.push([wakeDayAnchor(s(cy.start)), '', undefined, undefined, undefined, n(o(cy.score).strain), undefined, undefined, undefined])
   }
   if (cycleRows.length) {
     files.push({
