@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button, Card, useToast } from '../ui/primitives'
 import { SYNC_CONFIGURED } from '../../sync/supabase'
 import { useSoma } from '../../hooks/useSoma'
-import { redirectUri, whoopConnected, whoopDisconnect, whoopStart, whoopSync } from '../../integrations/whoop'
+import { readWhoopLast, redirectUri, whoopConnected, whoopDisconnect, whoopStart, whoopSync, type WhoopLast } from '../../integrations/whoop'
 import functionCode from '../../../supabase/functions/whoop/index.ts?raw'
 import tokensSql from '../../../supabase/whoop.sql?raw'
 
@@ -13,6 +13,7 @@ export default function WhoopSettings() {
   const [connected, setConnected] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [last, setLast] = useState<WhoopLast | null>(readWhoopLast)
   const signedIn = SYNC_CONFIGURED && data.syncState.kind !== 'signed-out' && data.syncState.kind !== 'disabled'
 
   useEffect(() => {
@@ -55,6 +56,7 @@ export default function WhoopSettings() {
             onClick={() =>
               run(async () => {
                 const r = await whoopSync(30)
+                setLast(readWhoopLast())
                 toast.show(`${r.days} jours (dont ${r.withRecovery} avec récupération) et ${r.workouts} séances ajoutés`)
                 if (r.received.recovery === 0) {
                   setError('WHOOP n’a renvoyé aucune récupération : vérifie que l’accès « recovery » est bien coché dans ton application WHOOP, puis reconnecte-la.')
@@ -67,6 +69,14 @@ export default function WhoopSettings() {
           <Button variant="ghost" disabled={busy} onClick={() => run(async () => { await whoopDisconnect(); setConnected(false) })}>
             Déconnecter WHOOP
           </Button>
+          <p className="w-full text-[0.68rem] text-mist-500">
+            Récupération automatique chaque jour à partir de 10 h, à l’ouverture de l’app (puis toutes les 20 minutes tant qu’elle est ouverte, jusqu’à ce que la récupération du jour arrive).
+          </p>
+          {last && (
+            <p className="w-full rounded-lg bg-white/4 px-2.5 py-2 text-[0.68rem] text-mist-300 hairline">
+              Dernière récupération : {new Date(last.at).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' })} · reçu de WHOOP : {last.received.recovery} récupération{last.received.recovery > 1 ? 's' : ''}, {last.received.sleep} nuit{last.received.sleep > 1 ? 's' : ''}, {last.received.cycles} cycle{last.received.cycles > 1 ? 's' : ''}, {last.received.workouts} séance{last.received.workouts > 1 ? 's' : ''}.
+            </p>
+          )}
         </div>
       ) : (
         <>

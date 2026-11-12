@@ -7,7 +7,7 @@ import { Ring } from '../components/ui/Ring'
 import { Button } from '../components/ui/primitives'
 import { navigate } from '../lib/router'
 import { taskLoad, tasksForView } from '../engine/tasks'
-import { dayLoad } from '../engine/load'
+import { morningLoad } from '../engine/load'
 import { bodySummary } from '../engine/fatigue'
 import { fatigueColor } from '../engine/fatigueConfig'
 import { zoneList } from '../engine/suggest'
@@ -104,10 +104,11 @@ function SportCard() {
   const data = useSoma()
   const checkin = data.checkinByDay.get(data.today)
   const recovery = checkin?.recovery ?? null
-  const load = useMemo(
-    () => dayLoad(data.today, data.workouts, data.checkinByDay, data.loadCtx).load,
+  const morning = useMemo(
+    () => morningLoad(data.today, data.workouts, data.checkinByDay, data.loadCtx),
     [data.today, data.workouts, data.checkinByDay, data.loadCtx],
   )
+  const load = morning.value
   const summary = useMemo(() => bodySummary(data.body), [data.body])
   const sleep = data.sleepScore.score
   return (
@@ -128,7 +129,7 @@ function SportCard() {
           size={74}
           thickness={7}
         />
-        <Ring value={load} max={21} display={load.toFixed(1)} unit="/21" label="Charge" size={74} thickness={7} />
+        <Ring value={load} max={21} display={load.toFixed(1)} unit="/21" label={morning.label === 'Hier' ? 'Charge hier' : 'Charge'} size={74} thickness={7} />
         <Ring
           value={sleep}
           display={sleep > 0 ? String(Math.round(sleep)) : '—'}

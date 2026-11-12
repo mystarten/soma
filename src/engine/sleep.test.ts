@@ -84,3 +84,14 @@ describe('sommeil', () => {
     expect(sleepWindow(undefined, '2025-06-03')).toBeNull()
   })
 })
+
+describe('score de sommeil WHOOP', () => {
+  it('une nuit WHOOP garde la performance de sommeil de WHOOP', () => {
+    const night: CheckIn = { id: '2026-11-12', day: '2026-11-12', source: 'whoop', updatedAt: '', sleep: { hours: 7.5, quality: 78, deepMin: 90, remMin: 100 } }
+    expect(computeSleepScore(new Map([[night.day, night]]), night.day, 8).score).toBe(78)
+  })
+  it('une nuit saisie à la main utilise notre calcul', () => {
+    const night: CheckIn = { id: '2026-11-12', day: '2026-11-12', source: 'manual', updatedAt: '', sleep: { hours: 7.5, quality: 78, deepMin: 90, remMin: 100 } }
+    expect(computeSleepScore(new Map([[night.day, night]]), night.day, 8).score).not.toBe(78)
+  })
+})

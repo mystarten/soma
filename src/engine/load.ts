@@ -8,7 +8,7 @@ import type {
   Workout,
 } from '../types'
 import { clamp, mean } from './stats'
-import { dayRange, lastDays } from './time'
+import { addDayKey, dayRange, lastDays } from './time'
 import { setTonnage } from './strength'
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -284,4 +284,21 @@ export function runRecords(workouts: Workout[]): {
       return best ? { ...t, ...best } : null
     })
     .filter((x): x is { distanceM: number; label: string; durationSec: number; day: DayKey } => !!x)
+}
+
+
+/**
+ * Charge à afficher : celle d'aujourd'hui dès qu'il y en a une, sinon celle d'hier, qui est le vrai
+ * bilan du matin (la strain d'aujourd'hui commence à zéro au réveil).
+ */
+export function morningLoad(
+  today: DayKey,
+  workouts: Workout[],
+  checkins: Map<DayKey, CheckIn>,
+  ctx: LoadContext,
+): { value: number; label: 'Aujourd’hui' | 'Hier' } {
+  const t = dayLoad(today, workouts, checkins, ctx).load
+  if (t >= 0.5) return { value: t, label: 'Aujourd’hui' }
+  const y = dayLoad(addDayKey(today, -1), workouts, checkins, ctx).load
+  return y > 0 ? { value: y, label: 'Hier' } : { value: t, label: 'Aujourd’hui' }
 }

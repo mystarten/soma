@@ -5,7 +5,7 @@ import { Button, Card, ProgressBar } from '../components/ui/primitives'
 import { Spark } from '../components/charts/charts'
 import { navigate } from '../lib/router'
 import { addDayKey, lastDays, weekBounds } from '../engine/time'
-import { dayLoadSeries } from '../engine/load'
+import { dayLoadSeries, morningLoad } from '../engine/load'
 import { programStats } from '../engine/program'
 import { reviewDone, reviewWeekFor, weekStats } from '../engine/review'
 import { countdownLabel, taskLoad, upcomingDeadlines } from '../engine/tasks'
@@ -33,6 +33,10 @@ export default function Dashboard() {
   const loads = useMemo(
     () => dayLoadSeries(days[0], today, data.workouts, data.checkins, data.loadCtx),
     [days, today, data.workouts, data.checkins, data.loadCtx],
+  )
+  const morning = useMemo(
+    () => morningLoad(today, data.workouts, data.checkinByDay, data.loadCtx),
+    [today, data.workouts, data.checkinByDay, data.loadCtx],
   )
   const recSeries = days.flatMap((d) => {
     const v = data.checkinByDay.get(d)?.recovery
@@ -74,7 +78,7 @@ export default function Dashboard() {
             size={84}
             thickness={8}
           />
-          <Ring value={loads[loads.length - 1]?.load ?? 0} max={21} display={(loads[loads.length - 1]?.load ?? 0).toFixed(1)} unit="/21" label="Charge" size={84} thickness={8} />
+          <Ring value={morning.value} max={21} display={morning.value.toFixed(1)} unit="/21" label={morning.label === 'Hier' ? 'Charge hier' : 'Charge'} size={84} thickness={8} />
           <Ring
             value={sleep}
             display={sleep > 0 ? String(Math.round(sleep)) : '—'}

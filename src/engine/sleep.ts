@@ -121,11 +121,10 @@ export function computeSleepScore(
       : sleepDebtHours(byDay, day, goalHours)
   const debtPart = clamp(1 - debtHours7d / 8, 0, 1) * 10
 
-  const score = clamp(
-    durationPart + stagesPart + efficiencyPart + consistencyPart + debtPart,
-    0,
-    100,
-  )
+  /* Une nuit venue de WHOOP garde le score de WHOOP (« performance de sommeil ») : c'est le chiffre
+     que tu retrouves dans leur application. Les autres nuits utilisent notre calcul. */
+  const computed = clamp(durationPart + stagesPart + efficiencyPart + consistencyPart + debtPart, 0, 100)
+  const score = c?.source === 'whoop' && typeof s.quality === 'number' && s.quality > 0 ? clamp(s.quality, 0, 100) : computed
   return {
     score,
     durationPart,

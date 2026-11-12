@@ -40,7 +40,9 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
 export const redirectUri = () => `${window.location.origin}${window.location.pathname}`
 
 export async function whoopConnected(): Promise<boolean> {
-  return (await call<{ connected: boolean }>({ action: 'status' })).connected
+  const c = (await call<{ connected: boolean }>({ action: 'status' })).connected
+  setWhoopConnectedFlag(c)
+  return c
 }
 
 /** Ouvre la page d'autorisation WHOOP. */
@@ -66,6 +68,7 @@ export async function whoopHandleReturn(): Promise<'done' | 'none' | string> {
   window.sessionStorage.removeItem(STATE_KEY)
   try {
     await call({ action: 'exchange', code, redirectUri: redirectUri() })
+    setWhoopConnectedFlag(true)
     clean()
     return 'done'
   } catch (e) {
@@ -76,6 +79,37 @@ export async function whoopHandleReturn(): Promise<'done' | 'none' | string> {
 
 export async function whoopDisconnect(): Promise<void> {
   await call({ action: 'disconnect' })
+  setWhoopConnectedFlag(false)
+}
+
+export interface WhoopLast {
+  at: string
+  days: number
+  withRecovery: number
+  received: { recovery: number; sleep: number; cycles: number; workouts: number }
+}
+const LAST_KEY = 'soma-whoop-last'
+const CONNECTED_KEY = 'soma-whoop-connected'
+export const readWhoopLast = (): WhoopLast | null => {
+  try {
+    return JSON.parse(window.localStorage.getItem(LAST_KEY) ?? 'null') as WhoopLast | null
+  } catch {
+    return null
+  }
+}
+export const setWhoopConnectedFlag = (on: boolean) => {
+  try {
+    window.localStorage.setItem(CONNECTED_KEY, on ? '1' : '0')
+  } catch {
+    /* sans stockage, pas de récupération automatique */
+  }
+}
+export const whoopConnectedFlag = (): boolean => {
+  try {
+    return window.localStorage.getItem(CONNECTED_KEY) === '1'
+  } catch {
+    return false
+  }
 }
 
 /** Récupère les derniers jours depuis WHOOP et les ajoute (sans doublons, sans écraser tes saisies). */
@@ -87,7 +121,17 @@ export async function whoopSync(
   const raw = await call<WhoopApiData>({ action: 'fetch', start: start.toISOString(), end: end.toISOString() })
   const received = { recovery: raw.recovery?.length ?? 0, sleep: raw.sleep?.length ?? 0, cycles: raw.cycles?.length ?? 0, workouts: raw.workouts?.length ?? 0 }
   const files = apiToFiles(raw)
-  if (!files.length) return { days: 0, workouts: 0, withRecovery: 0, received }
+  const remember = (r: Omit<WhoopLast, 'at'>) => {
+    try {
+      window.localStorage.setItem(LAST_KEY, JSON.stringify({ at: nowIso(), ...r }))
+    } catch {
+      /* facultatif */
+    }
+  }
+  if (!files.length) {
+    remember({ days: 0, withRecovery: 0, received })
+    return { days: 0, workouts: 0, withRecovery: 0, received }
+  }
   const [checkins, workouts] = await Promise.all([db.checkins.toArray(), db.workouts.toArray()])
   const preview = buildWhoopPreview(files, { checkins, workouts })
   if (preview.days.length) await saveCheckIns(preview.days)
@@ -100,5 +144,7 @@ export async function whoopSync(
     workoutCount: preview.workouts.length,
     nightCount: preview.nights,
   })
-  return { days: preview.days.length, workouts: preview.workouts.length, withRecovery: preview.days.filter((d) => typeof d.recovery === 'number').length, received }
+  const withRecovery = preview.days.filter((d) => typeof d.recovery === 'number').length
+  remember({ days: preview.days.length, withRecovery, received })
+  return { days: preview.days.length, workouts: preview.workouts.length, withRecovery, received }
 }

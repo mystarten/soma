@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { whoopHandleReturn } from './integrations/whoop'
+import WhoopAuto from './integrations/WhoopAuto'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { BottomNav, MoreSheetContent, SideRail } from './components/Nav'
@@ -107,6 +108,7 @@ export default function App() {
             </div>
           </header>
 
+          <WhoopAuto />
           {whoopMsg && (
             <div role="status" className="mb-3 rounded-xl bg-accent/10 px-3 py-2 text-sm text-mist-100 hairline">
               {whoopMsg}{' '}

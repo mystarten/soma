@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dayLoad, dayLoadSeries, exerciseRecords, loadBalance, runRecords, volumeSummary } from './load'
+import { dayLoad, dayLoadSeries, exerciseRecords, loadBalance, morningLoad, runRecords, volumeSummary } from './load'
 import { epley1RM, estimated1RM, repsAtLoad, riegelProjection, setEffort } from './strength'
 import { EXERCISES, makeCheckIn, makeSet, makeWorkout } from '../test/fixtures'
 import { DEFAULT_FATIGUE_CONFIG } from './fatigueConfig'
@@ -167,5 +167,19 @@ describe('force', () => {
     expect(c.tau.small).toBeLessThan(c.tau.medium)
     expect(c.tau.medium).toBeLessThan(c.tau.large)
     expect(c.sleepMultiplier.max).toBeGreaterThan(c.awakeMultiplier.max)
+  })
+})
+
+describe('charge du matin', () => {
+  it('sans effort aujourd’hui, montre la charge d’hier', () => {
+    const ctx = { exercises: [], bodyWeightKg: 70, hrZones: { bounds: [100, 120, 140, 160, 175], maxHr: 190 } as never }
+    const yesterday: CheckIn = { id: '2026-11-11', day: '2026-11-11', whoopDayStrain: 12, source: 'whoop', updatedAt: '' }
+    const m = morningLoad('2026-11-12', [], new Map([[yesterday.day, yesterday]]), ctx)
+    expect(m.label).toBe('Hier')
+    expect(m.value).toBeCloseTo(12, 0)
+  })
+  it('s’il n’y a rien non plus hier, reste sur aujourd’hui', () => {
+    const ctx = { exercises: [], bodyWeightKg: 70, hrZones: { bounds: [100, 120, 140, 160, 175], maxHr: 190 } as never }
+    expect(morningLoad('2026-11-12', [], new Map(), ctx).label).toBe('Aujourd’hui')
   })
 })
