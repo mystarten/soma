@@ -46,3 +46,18 @@ describe('API WHOOP → import existant', () => {
     expect(apiToFiles({})).toEqual([])
   })
 })
+
+describe('récupération sans cycle', () => {
+  it('arrive quand même, rattachée au réveil de la nuit liée', () => {
+    const files = apiToFiles({
+      recovery: [{ cycle_id: 99, sleep_id: 's1', score: { recovery_score: 83, resting_heart_rate: 50, hrv_rmssd_milli: 70 } }],
+      sleep: [{ id: 's1', start: '2026-11-11T22:30:00.000Z', end: '2026-11-12T06:20:00.000Z', score: {} }],
+    })
+    const preview = buildWhoopPreview(files, { checkins: [], workouts: [] })
+    expect(preview.days[0].recovery).toBe(83)
+    expect(preview.days[0].restingHr).toBe(50)
+  })
+  it('une mesure non calculée est ignorée', () => {
+    expect(apiToFiles({ recovery: [{ cycle_id: 1, score: {} }] })).toEqual([])
+  })
+})

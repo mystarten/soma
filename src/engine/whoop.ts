@@ -491,7 +491,9 @@ export function buildWhoopPreview(
         skippedDuplicates += 1
       }
     } else {
-      days.push({ ...prev, ...withNote, updatedAt: new Date().toISOString() })
+      /* On complète sans jamais effacer : une valeur absente de l'import ne retire rien de ce qui existe. */
+      const defined = Object.fromEntries(Object.entries(withNote).filter(([, v]) => v !== undefined))
+      days.push({ ...prev, ...defined, sleep: mergeSleep(prev.sleep, withNote.sleep), updatedAt: new Date().toISOString() } as CheckIn)
     }
   }
 

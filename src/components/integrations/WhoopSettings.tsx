@@ -55,7 +55,10 @@ export default function WhoopSettings() {
             onClick={() =>
               run(async () => {
                 const r = await whoopSync(30)
-                toast.show(`${r.days} jours et ${r.workouts} séances ajoutés`)
+                toast.show(`${r.days} jours (dont ${r.withRecovery} avec récupération) et ${r.workouts} séances ajoutés`)
+                if (r.received.recovery === 0) {
+                  setError('WHOOP n’a renvoyé aucune récupération : vérifie que l’accès « recovery » est bien coché dans ton application WHOOP, puis reconnecte-la.')
+                }
               })
             }
           >

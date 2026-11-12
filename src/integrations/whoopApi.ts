@@ -28,22 +28,40 @@ export interface WhoopApiData {
 export function apiToFiles(d: WhoopApiData): WhoopFileInput[] {
   const files: WhoopFileInput[] = []
 
-  /* Un cycle WHOOP commence au réveil : il donne le jour, la strain et, via cycle_id, la récupération. */
-  const recByCycle = new Map<string, Rec>()
+  /* La récupération est rattachée à un cycle (cycle_id) et à une nuit (sleep_id). Le jour vient du réveil :
+     on prend le début du cycle s'il est connu, sinon la fin de la nuit liée, sinon la date de la mesure.
+     Ainsi la récupération arrive même si l'API ne renvoie aucun cycle. */
+  const cycleById = new Map<string, Rec>()
+  for (const c of d.cycles ?? []) {
+    const cy = o(c)
+    if (cy.id !== undefined) cycleById.set(String(cy.id), cy)
+  }
+  const sleepById = new Map<string, Rec>()
+  for (const x of d.sleep ?? []) {
+    const sl = o(x)
+    if (sl.id !== undefined) sleepById.set(String(sl.id), sl)
+  }
+  const cycleRows: unknown[][] = []
+  const usedCycles = new Set<string>()
   for (const r of d.recovery ?? []) {
     const rec = o(r)
-    if (rec.cycle_id !== undefined) recByCycle.set(String(rec.cycle_id), o(rec.score))
+    const rc = o(rec.score)
+    if (n(rc.recovery_score) === undefined) continue /* mesure non calculée */
+    const cy = cycleById.get(String(rec.cycle_id)) ?? {}
+    const night = sleepById.get(String(rec.sleep_id)) ?? {}
+    const start = s(cy.start) || s(night.end) || s(rec.created_at) || s(rec.updated_at)
+    if (!start) continue
+    if (rec.cycle_id !== undefined) usedCycles.add(String(rec.cycle_id))
+    cycleRows.push([
+      start, '', n(rc.recovery_score), n(rc.resting_heart_rate), n(rc.hrv_rmssd_milli),
+      n(o(cy.score).strain), n(rc.respiratory_rate), n(rc.spo2_percentage), n(rc.skin_temp_celsius),
+    ])
   }
-  const cycleRows = (d.cycles ?? []).flatMap((c) => {
-    const cy = o(c)
-    if (!s(cy.start)) return []
-    const sc = o(cy.score)
-    const rc = recByCycle.get(String(cy.id)) ?? {}
-    return [[
-      s(cy.start), '', n(rc.recovery_score), n(rc.resting_heart_rate), n(rc.hrv_rmssd_milli),
-      n(sc.strain), n(rc.respiratory_rate), n(rc.spo2_percentage), n(rc.skin_temp_celsius),
-    ]]
-  })
+  /* Cycles sans récupération : on garde au moins la strain du jour. */
+  for (const [id, cy] of cycleById) {
+    if (usedCycles.has(id) || !s(cy.start)) continue
+    cycleRows.push([s(cy.start), '', undefined, undefined, undefined, n(o(cy.score).strain), undefined, undefined, undefined])
+  }
   if (cycleRows.length) {
     files.push({
       name: 'physiological_cycles.csv',

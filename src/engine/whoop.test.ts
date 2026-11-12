@@ -177,3 +177,13 @@ describe('séances supprimées', () => {
     expect(buildWhoopPreview([{ name: 'workouts.csv', text: csv }], { checkins: [], workouts: [gone] }).workouts).toHaveLength(0)
   })
 })
+
+describe('complément sans effacement', () => {
+  it('un import sans récupération ne retire pas celle déjà enregistrée', () => {
+    const csv = 'Cycle start time,Day Strain\n2026-11-10T06:30:00.000Z,10'
+    const prev: CheckIn = { id: '2026-11-10', day: '2026-11-10', recovery: 77, source: 'whoop', updatedAt: '' }
+    const p = buildWhoopPreview([{ name: 'physiological_cycles.csv', text: csv }], { checkins: [prev], workouts: [] })
+    expect(p.days[0].recovery).toBe(77)
+    expect(p.days[0].whoopDayStrain).toBe(10)
+  })
+})

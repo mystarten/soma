@@ -79,12 +79,15 @@ export async function whoopDisconnect(): Promise<void> {
 }
 
 /** Récupère les derniers jours depuis WHOOP et les ajoute (sans doublons, sans écraser tes saisies). */
-export async function whoopSync(days = 30): Promise<{ days: number; workouts: number }> {
+export async function whoopSync(
+  days = 30,
+): Promise<{ days: number; workouts: number; withRecovery: number; received: { recovery: number; sleep: number; cycles: number; workouts: number } }> {
   const end = new Date()
   const start = new Date(end.getTime() - days * 86_400_000)
   const raw = await call<WhoopApiData>({ action: 'fetch', start: start.toISOString(), end: end.toISOString() })
+  const received = { recovery: raw.recovery?.length ?? 0, sleep: raw.sleep?.length ?? 0, cycles: raw.cycles?.length ?? 0, workouts: raw.workouts?.length ?? 0 }
   const files = apiToFiles(raw)
-  if (!files.length) return { days: 0, workouts: 0 }
+  if (!files.length) return { days: 0, workouts: 0, withRecovery: 0, received }
   const [checkins, workouts] = await Promise.all([db.checkins.toArray(), db.workouts.toArray()])
   const preview = buildWhoopPreview(files, { checkins, workouts })
   if (preview.days.length) await saveCheckIns(preview.days)
@@ -97,5 +100,5 @@ export async function whoopSync(days = 30): Promise<{ days: number; workouts: nu
     workoutCount: preview.workouts.length,
     nightCount: preview.nights,
   })
-  return { days: preview.days.length, workouts: preview.workouts.length }
+  return { days: preview.days.length, workouts: preview.workouts.length, withRecovery: preview.days.filter((d) => typeof d.recovery === 'number').length, received }
 }

@@ -177,7 +177,7 @@ export default function SettingsScreen({ param }: { param?: string }) {
                 <span className="w-36 shrink-0 text-xs text-mist-300">{row.label}</span>
                 {row.kind === 'reps' && (
                   <>
-                    <div className="w-32">
+                    <div className="w-44">
                       <Stepper
                         value={ref?.reps ?? 0}
                         onChange={(v) => void setRef(row.id, { reps: v })}
@@ -187,7 +187,7 @@ export default function SettingsScreen({ param }: { param?: string }) {
                       />
                     </div>
                     {row.id.includes('lest') && (
-                      <div className="w-28">
+                      <div className="w-40">
                         <Stepper
                           value={ref?.loadKg ?? 0}
                           onChange={(v) => void setRef(row.id, { loadKg: v })}
@@ -200,7 +200,7 @@ export default function SettingsScreen({ param }: { param?: string }) {
                   </>
                 )}
                 {row.kind === 'hold' && (
-                  <div className="w-32">
+                  <div className="w-44">
                     <Stepper
                       value={ref?.holdSec ?? 0}
                       onChange={(v) => void setRef(row.id, { holdSec: v })}
@@ -212,7 +212,7 @@ export default function SettingsScreen({ param }: { param?: string }) {
                 )}
                 {row.kind === 'time' && (
                   <>
-                    <div className="w-32">
+                    <div className="w-44">
                       <Stepper
                         value={Math.round((ref?.holdSec ?? 1200) / 60)}
                         onChange={(v) =>
@@ -223,7 +223,7 @@ export default function SettingsScreen({ param }: { param?: string }) {
                         suffix="min"
                       />
                     </div>
-                    <div className="w-28">
+                    <div className="w-40">
                       <Stepper
                         value={(ref?.holdSec ?? 1200) % 60}
                         onChange={(v) =>
@@ -1429,7 +1429,7 @@ function TemplateEditor({
             return (
               <div key={i} className="flex flex-wrap items-center gap-2 rounded-xl bg-white/4 p-2 hairline">
                 <span className="min-w-0 flex-1 truncate text-xs text-mist-100">{ex?.name}</span>
-                <div className="w-24">
+                <div className="w-36">
                   <Stepper
                     value={item.sets}
                     onChange={(v) =>
@@ -1440,7 +1440,7 @@ function TemplateEditor({
                     suffix="sér."
                   />
                 </div>
-                <div className="w-28">
+                <div className="w-40">
                   <Stepper
                     value={ex?.kind === 'static' ? (item.holdSec ?? 30) : (item.reps ?? 10)}
                     onChange={(v) =>
