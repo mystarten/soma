@@ -105,6 +105,14 @@ export async function sendMagicLink(email: string): Promise<void> {
   if (error) throw error
 }
 
+/** Connexion par code à 6 chiffres reçu par e-mail : pas de lien à ouvrir, donc rien à consommer par erreur. */
+export async function verifyEmailCode(email: string, token: string): Promise<void> {
+  const sb = supabase()
+  if (!sb) throw new Error('Synchronisation non configurée.')
+  const { error } = await sb.auth.verifyOtp({ email, token: token.replace(/\s/g, ''), type: 'email' })
+  if (error) throw error
+}
+
 export async function signOut(): Promise<void> {
   const sb = supabase()
   if (!sb) return

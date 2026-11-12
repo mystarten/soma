@@ -61,7 +61,7 @@ import {
   validateSyncConfig,
 } from '../sync/supabase'
 import schemaSql from '../../supabase/schema.sql?raw'
-import { currentEmail, sendMagicLink, signOut, syncNow } from '../sync/syncEngine'
+import { currentEmail, sendMagicLink, signOut, syncNow, verifyEmailCode } from '../sync/syncEngine'
 import { ExercisePicker } from './Workouts'
 
 const ACCENTS = ['#35e3ff', '#41e08a', '#9b7bff', '#ffc24b', '#ff8f45', '#27e0c0', '#c8ef5a']
@@ -891,6 +891,7 @@ function SyncSettings({ param }: { param?: string }) {
   const data = useSoma()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
+  const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [current, setCurrent] = useState<string | null>(null)
   const [url, setUrl] = useState('')
@@ -1036,12 +1037,44 @@ function SyncSettings({ param }: { param?: string }) {
             }}
             disabled={!email.includes('@')}
           >
-            Recevoir le lien de connexion
+            Recevoir mon code par e-mail
           </Button>
           {sent && (
-            <p className="text-xs text-[#41e08a]">
-              Lien envoyé. Ouvre-le sur cet appareil pour terminer la connexion.
-            </p>
+            <div className="space-y-2 rounded-xl bg-white/4 p-3 hairline">
+              <p className="text-xs text-[#41e08a]">
+                Code envoyé à {email}. Recopie les 6 chiffres du mail ici.
+              </p>
+              <div className="flex gap-2">
+                <TextInput
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="123456"
+                  aria-label="Code à 6 chiffres"
+                />
+                <Button
+                  variant="primary"
+                  disabled={code.replace(/\s/g, '').length < 6}
+                  onClick={async () => {
+                    setError(null)
+                    try {
+                      await verifyEmailCode(email.trim(), code)
+                      setSent(false)
+                      setCode('')
+                      window.location.reload()
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Code refusé')
+                    }
+                  }}
+                >
+                  Valider
+                </Button>
+              </div>
+              <button className="text-xs text-mist-500 underline" onClick={() => setSent(false)}>
+                Renvoyer un code
+              </button>
+            </div>
           )}
           {error && <p className="text-xs text-[#ff8f8f]">{error}</p>}
         </div>
