@@ -56,7 +56,7 @@ export default function Dashboard() {
     () => weekStats(week.start, { workouts: data.workouts, checkins: data.checkins, tasks: data.tasks }),
     [week.start, data.workouts, data.checkins, data.tasks],
   )
-  const prog = data.program ? programStats(data.program, data.workouts, today) : null
+  const prog = data.program ? programStats(data.program, [...data.workouts, ...data.programMarks], today) : null
   const load = taskLoad(data.tasks, today, data.settings.weekStartsOn)
   const deadlines = upcomingDeadlines(data.deadlines, today, 4)
   const toReview = reviewWeekFor(today, data.settings.weekStartsOn)

@@ -187,6 +187,8 @@ export interface Workout {
   fallbackMix?: MuscleMix
   /** Séances du programme couvertes par cette séance (plusieurs possibles le même jour). */
   program?: ProgramRef[]
+  /** Simple coche de rattrapage (« déjà faite ») : jamais comptée dans les séances, la charge ni la fatigue. */
+  backfill?: boolean
   planned?: boolean
   source: DataSource
   /** Clé de dédoublonnage d'import (ex. `whoop:2025-04-02T06:12:00Z`). */

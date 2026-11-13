@@ -12,7 +12,7 @@ import { CoachBanners, ImpactNotice, useImpact } from './advice'
 export default function ProgramQuickPick({ onApply }: { onApply: (b: BuiltWorkout) => void }) {
   const data = useSoma()
   const program = data.program!
-  const done = useMemo(() => programDone(data.workouts), [data.workouts])
+  const done = useMemo(() => programDone([...data.workouts, ...data.programMarks]), [data.workouts, data.programMarks])
   const [picks, setPicks] = useState<Record<string, number>>({})
   const [light, setLight] = useState(false)
   const list: ProgramPick[] = Object.entries(picks).map(([code, week]) => ({ code, week }))

@@ -12,10 +12,11 @@ import { bodySummary } from '../engine/fatigue'
 import { fatigueColor } from '../engine/fatigueConfig'
 import { zoneList } from '../engine/suggest'
 import { reviewDone, reviewWeekFor } from '../engine/review'
-import { programDone, weekOfDay } from '../engine/program'
+import { useRotation } from '../components/program/useRotation'
 import { useGoogle } from '../integrations/useGoogle'
 import { AgendaPanel, MailPanel } from '../components/vie/GooglePanels'
 import RecentWorkouts from '../components/vie/RecentWorkouts'
+import NextSessions from '../components/vie/NextSessions'
 import { sleepHours } from '../engine/sleep'
 
 const recoveryColor = (v: number) => (v >= 67 ? '#41e08a' : v >= 34 ? '#ffc24b' : '#ff5a5a')
@@ -56,6 +57,7 @@ function DayLine() {
 function MorningBrief() {
   const data = useSoma()
   const g = useGoogle()
+  const { rotation } = useRotation()
   const lines: string[] = []
   const rec = data.checkinByDay.get(data.today)?.recovery
   if (typeof rec === 'number') {
@@ -65,12 +67,11 @@ function MorningBrief() {
   } else lines.push('Pas encore de check-in ce matin : deux minutes pour calibrer la journée.')
   const today = g.agenda.filter((e) => e.day === data.today)
   if (today.length) lines.push(`Agenda : ${today.length} événement${today.length > 1 ? 's' : ''}, le premier à ${today[0].time ?? 'la journée'} (${today[0].title}).`)
-  if (data.program) {
-    const done = programDone(data.workouts)
-    const next = data.program.sessions
-      .map((s) => ({ s, w: weekOfDay(s, data.today) }))
-      .find((x) => x.w && !done.get(x.s.code)?.has(x.w.n))
-    if (next) lines.push(`Programme : ${next.s.code} · semaine ${next.w!.n}${next.w!.light ? ' (légère)' : ''} t’attend.`)
+  if (data.program && rotation.length) {
+    const next = rotation
+      .filter((r) => r.available.length)
+      .map((r) => `${r.available.map((i) => `${i.code} (S${i.nextWeek})`).join(' ou ')}`)
+    if (next.length) lines.push(`Programme : à faire — ${next.join(' · ')}.`)
   }
   if (!lines.length) return null
   return (
@@ -209,6 +210,7 @@ export default function Vie() {
       {/* Sport */}
       <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 xl:col-start-3 xl:row-start-1">
         <SportCard />
+        <NextSessions />
         <RecentWorkouts />
       </div>
     </div>

@@ -257,3 +257,7 @@ Réglages → *Synchronisation entre appareils* t'explique tout pas à pas (comp
 ### Réinitialiser Supabase (projet déjà existant)
 
 Si tu as déjà un projet Soma et que tu veux repartir proprement : ouvre **SQL Editor**, colle le contenu de [`supabase/reset.sql`](supabase/reset.sql) et lance-le. Cela efface les données synchronisées de Soma (pas les comptes). Ensuite lance dans l'ordre : `supabase/schema.sql`, puis `supabase/whoop.sql`.
+
+### Roulement du programme (Séances → Programme)
+
+Les séances sont rangées en trois socles : **street workout** (T, M, P), **jambes** (J) et **abdos** (A). Dans un socle, on ne revient pas sur une séance avant d'avoir fait toutes les autres, et jamais deux fois de suite la même ; d'un socle à l'autre, aucune contrainte. L'écran n'affiche que les séances dont c'est le tour : une séance cochée sort de la liste et se range dans « Faites et corrections » (grisée), où une touche suffit pour retirer la coche. Cocher enregistre la séance dans le journal avec ses séries prévues, donc elle alimente la fatigue, le petit bonhomme et la récupération ; « Détailler les séries » reste possible. Les semaines faites avant l'app se déclarent une fois dans « Où en es-tu ? » : ce sont de simples coches, sans séance ni effet sur la fatigue.

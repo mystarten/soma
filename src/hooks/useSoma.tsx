@@ -40,6 +40,8 @@ export interface SomaData {
   settings: Settings
   checkins: CheckIn[]
   workouts: Workout[]
+  /** Coches « déjà faite » du programme (semaines faites avant l'app). */
+  programMarks: Workout[]
   exercises: ExerciseDef[]
   templates: WorkoutTemplate[]
   workoutTypes: WorkoutTypeDef[]
@@ -114,7 +116,9 @@ export function SomaProvider({ children }: { children: ReactNode }) {
     if (!settings) return null
     const today = todayKey()
     const liveCheckins = (checkins ?? []).filter((c) => !c.deleted)
-    const liveWorkouts = (workouts ?? []).filter((w) => !w.deleted)
+    /* Les coches de rattrapage du programme ne sont pas des séances : on les garde à part. */
+    const liveWorkouts = (workouts ?? []).filter((w) => !w.deleted && !w.backfill)
+    const programMarks = (workouts ?? []).filter((w) => !w.deleted && w.backfill)
     const liveGoals = (goals ?? []).filter((g) => !g.deleted)
     const bodyWeightKg = settings.weightKg ?? FALLBACK_BODY_WEIGHT_KG
     const checkinByDay = new Map<DayKey, CheckIn>(liveCheckins.map((c) => [c.day, c]))
@@ -174,6 +178,7 @@ export function SomaProvider({ children }: { children: ReactNode }) {
       settings,
       checkins: liveCheckins,
       workouts: liveWorkouts,
+      programMarks,
       exercises: exercises ?? [],
       templates: templates ?? [],
       workoutTypes: workoutTypes ?? [],

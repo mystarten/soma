@@ -199,8 +199,15 @@ export default function Workouts({ focusId }: { focusId?: string }) {
 
       {tab === 'programme' && (
         <ProgramPanel
-          onStart={(built) => {
+          onStart={(built, day) => {
             const w = emptyWorkout(built.kind)
+            if (day) {
+              const d = parseDay(day)
+              const t = new Date(w.startedAt)
+              d.setHours(t.getHours(), t.getMinutes(), 0, 0)
+              w.day = day
+              w.startedAt = d.toISOString()
+            }
             w.title = built.title
             w.durationMin = built.durationMin
             w.sets = built.sets
