@@ -85,25 +85,30 @@ function Icon({ children }: { children: ReactNode }) {
   )
 }
 
+/** Les écrans anciens vivent maintenant dans un onglet d'un écran principal : le menu reste court. */
+export const NAV_GROUP: Partial<Record<Route, Route>> = {
+  taches: 'accueil',
+  sport: 'tableau',
+  analyses: 'tableau',
+  suivi: 'tableau',
+  objectifs: 'tableau',
+  revue: 'tableau',
+  calendrier: 'seances',
+  checkin: 'reglages',
+  import: 'reglages',
+}
+export const navKey = (r: Route): Route => NAV_GROUP[r] ?? r
+
 export const NAV_ITEMS: { route: Route; label: string; icon: ReactNode }[] = [
   { route: 'accueil', label: 'Vie', icon: I.home },
   { route: 'tableau', label: 'Tableau de bord', icon: I.chart },
-  { route: 'taches', label: 'Tâches', icon: I.check },
-  { route: 'savoir', label: 'Savoir', icon: I.book },
-  { route: 'sport', label: 'Sport', icon: I.pulse },
-  { route: 'corps', label: 'Corps', icon: I.body },
-  { route: 'checkin', label: 'Check-in', icon: I.plus },
   { route: 'seances', label: 'Séances', icon: I.dumbbell },
-  { route: 'calendrier', label: 'Calendrier', icon: I.calendar },
-  { route: 'objectifs', label: 'Objectifs', icon: I.target },
-  { route: 'analyses', label: 'Analyses', icon: I.chart },
-  { route: 'revue', label: 'Revue', icon: I.loop },
-  { route: 'suivi', label: 'Suivi', icon: I.eye },
-  { route: 'import', label: 'Import WHOOP', icon: I.upload },
+  { route: 'corps', label: 'Corps', icon: I.body },
+  { route: 'savoir', label: 'Savoir', icon: I.book },
   { route: 'reglages', label: 'Réglages', icon: I.gear },
 ]
 
-const MOBILE_ROUTES: Route[] = ['accueil', 'taches', 'checkin', 'seances']
+const MOBILE_ROUTES: Route[] = ['accueil', 'tableau', 'seances', 'corps']
 
 export function BottomNav({
   current,
@@ -120,8 +125,7 @@ export function BottomNav({
       aria-label="Navigation principale"
     >
       {items.map((item) => {
-        const active = current === item.route
-        const isCheckin = item.route === 'checkin'
+        const active = navKey(current) === item.route
         return (
           <button
             key={item.route}
@@ -130,20 +134,7 @@ export function BottomNav({
             className="flex min-w-0 flex-1 flex-col items-center gap-0.5 py-2.5 transition active:scale-95"
             style={{ color: active ? 'var(--accent)' : 'var(--color-mist-500)' }}
           >
-            {isCheckin ? (
-              <span
-                className="grid h-9 w-9 place-items-center rounded-full"
-                style={{
-                  background: 'var(--accent)',
-                  color: '#04070d',
-                  boxShadow: '0 0 18px var(--accent-soft)',
-                }}
-              >
-                <Icon>{item.icon}</Icon>
-              </span>
-            ) : (
-              <Icon>{item.icon}</Icon>
-            )}
+            <Icon>{item.icon}</Icon>
             <span className="text-[0.6rem] font-medium tracking-wide">{item.label}</span>
           </button>
         )
@@ -173,7 +164,7 @@ export function SideRail({ current }: { current: Route }) {
         </div>
       </div>
       {NAV_ITEMS.map((item) => {
-        const active = current === item.route
+        const active = navKey(current) === item.route
         return (
           <button
             key={item.route}

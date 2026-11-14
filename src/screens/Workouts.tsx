@@ -30,6 +30,8 @@ import {
   useToast,
 } from '../components/ui/primitives'
 import ProgramPanel from '../components/program/ProgramPanel'
+import CalendarScreen from './CalendarScreen'
+import RecordsEditor from '../components/records/RecordsEditor'
 import { deleteWorkout, rememberWorkout, saveWorkout } from '../db/repo'
 import { uid } from '../db/db'
 import {
@@ -65,10 +67,20 @@ function emptyWorkout(kind: WorkoutKind = 'street'): Workout {
   }
 }
 
-export default function Workouts({ focusId }: { focusId?: string }) {
+export default function Workouts({
+  focusId,
+  tab: initialTab,
+  calDay,
+}: {
+  focusId?: string
+  tab?: 'programme' | 'historique' | 'records' | 'calendrier'
+  calDay?: string
+}) {
   const data = useSoma()
   /* Le programme est la base : on arrive dessus s'il est importé. */
-  const [tab, setTab] = useState<'programme' | 'historique' | 'records'>(() => (data.program ? 'programme' : 'historique'))
+  const [tab, setTab] = useState<'programme' | 'historique' | 'records' | 'calendrier'>(
+    () => initialTab ?? (data.program ? 'programme' : 'historique'),
+  )
   const [choosing, setChoosing] = useState(false)
   const [editing, setEditing] = useState<Workout | null>(null)
   const [autoPick, setAutoPick] = useState(false)
@@ -113,6 +125,7 @@ export default function Workouts({ focusId }: { focusId?: string }) {
           options={[
             { value: 'programme', label: 'Programme' },
             { value: 'historique', label: 'Historique' },
+            { value: 'calendrier', label: 'Calendrier' },
             { value: 'records', label: 'Records' },
           ]}
         />
@@ -204,6 +217,8 @@ export default function Workouts({ focusId }: { focusId?: string }) {
           }}
         />
       )}
+
+      {tab === 'calendrier' && <CalendarScreen day={calDay} />}
 
       {tab === 'records' && <Records />}
 
@@ -352,6 +367,7 @@ function Records() {
 
   return (
     <div className="flex flex-col gap-3">
+      <RecordsEditor />
       {!practiced.length && !runs.length && (
         <Card>
           <EmptyState

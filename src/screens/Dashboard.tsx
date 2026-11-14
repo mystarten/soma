@@ -21,7 +21,7 @@ import { CoachBanners } from '../components/program/advice'
 
 const recoveryColor = (v: number) => (v >= 67 ? '#41e08a' : v >= 34 ? '#ffc24b' : '#ff5a5a')
 
-export default function Dashboard() {
+export function Overview() {
   const data = useSoma()
   const { today } = data
   const week = weekBounds(today, data.settings.weekStartsOn)
@@ -89,11 +89,6 @@ export default function Dashboard() {
             thickness={8}
           />
         </div>
-        {recovery === null && (
-          <Button variant="primary" full className="mt-3" onClick={() => navigate('checkin')}>
-            Faire mon check-in
-          </Button>
-        )}
         <p className="mt-3 text-center text-xs text-mist-500">
           Alignement des objectifs : <span className="text-mist-100 tnum">{Math.round(data.alignment)} %</span>
         </p>

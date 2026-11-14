@@ -1,10 +1,8 @@
 import { useMemo } from 'react'
 import { useSoma } from '../hooks/useSoma'
 import BodyView from '../components/body/BodyView'
-import TodoPanel from '../components/vie/TodoPanel'
-import DeadlinesPanel from '../components/vie/DeadlinesPanel'
+import PlanningPanel from '../components/vie/PlanningPanel'
 import { Ring } from '../components/ui/Ring'
-import { Button } from '../components/ui/primitives'
 import { navigate } from '../lib/router'
 import { taskLoad, tasksForView } from '../engine/tasks'
 import { morningLoad } from '../engine/load'
@@ -14,6 +12,7 @@ import { zoneList } from '../engine/suggest'
 import { reviewDone, reviewWeekFor } from '../engine/review'
 import { useRotation } from '../components/program/useRotation'
 import { useGoogle } from '../integrations/useGoogle'
+import { whoopConnectedFlag } from '../integrations/whoop'
 import { AgendaPanel, MailPanel } from '../components/vie/GooglePanels'
 import RecentWorkouts from '../components/vie/RecentWorkouts'
 import NextSessions from '../components/vie/NextSessions'
@@ -64,7 +63,8 @@ function MorningBrief() {
     lines.push(
       rec >= 67 ? `Récupération à ${Math.round(rec)} % : bonne journée pour pousser.` : rec >= 34 ? `Récupération à ${Math.round(rec)} % : séance normale, sans forcer.` : `Récupération à ${Math.round(rec)} % : journée légère, mobilité ou marche.`,
     )
-  } else lines.push('Pas encore de check-in ce matin : deux minutes pour calibrer la journée.')
+  } else if (whoopConnectedFlag()) lines.push('La récupération de WHOOP arrive après ton réveil : elle s’affichera dès qu’elle est publiée.')
+  else lines.push('Connecte WHOOP (Réglages) pour voir ta récupération et ton sommeil sans rien saisir.')
   const today = g.agenda.filter((e) => e.day === data.today)
   if (today.length) lines.push(`Agenda : ${today.length} événement${today.length > 1 ? 's' : ''}, le premier à ${today[0].time ?? 'la journée'} (${today[0].title}).`)
   if (data.program && rotation.length) {
@@ -183,9 +183,11 @@ function SportCard() {
         </p>
       </div>
       {recovery === null && (
-        <Button variant="primary" full className="mt-3" onClick={() => navigate('checkin')}>
-          Faire mon check-in
-        </Button>
+        <p className="mt-3 text-[0.7rem] text-mist-500">
+          {whoopConnectedFlag()
+            ? 'Récupération en attente : WHOOP la publie après ton réveil.'
+            : 'Connecte WHOOP dans Réglages : récupération et sommeil arrivent tout seuls.'}
+        </p>
       )}
     </section>
   )
@@ -194,17 +196,16 @@ function SportCard() {
 export default function Vie() {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.7fr)_minmax(0,0.9fr)]">
-      {/* Centre : le bonhomme, puis la to-do */}
+      {/* Centre : le bonhomme */}
       <div className="flex min-w-0 flex-col gap-4 lg:row-span-2 xl:col-start-2 xl:row-span-1 xl:row-start-1">
         <DayLine />
         <MorningBrief />
         <ReviewNudge />
         <BodyView hero />
-        <TodoPanel initialView="week" />
       </div>
-      {/* Échéances */}
+      {/* À venir : tâches et échéances réunies */}
       <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 xl:col-start-1 xl:row-start-1">
-        <DeadlinesPanel />
+        <PlanningPanel />
         <GoogleOnHome />
       </div>
       {/* Sport */}

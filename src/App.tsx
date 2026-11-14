@@ -9,20 +9,13 @@ import { Sheet } from './components/ui/primitives'
 import { useRoute } from './lib/router'
 import { useSoma } from './hooks/useSoma'
 import { SYNC_CONFIGURED } from './sync/supabase'
-import Home from './screens/Home'
 import Vie from './screens/Vie'
 import BodyScreen from './screens/BodyScreen'
 import CheckInScreen from './screens/CheckInScreen'
 
 const Workouts = lazy(() => import('./screens/Workouts'))
-const TasksScreen = lazy(() => import('./screens/TasksScreen'))
 const Knowledge = lazy(() => import('./screens/Knowledge'))
-const CalendarScreen = lazy(() => import('./screens/CalendarScreen'))
-const Goals = lazy(() => import('./screens/Goals'))
-const Analysis = lazy(() => import('./screens/Analysis'))
-const Follow = lazy(() => import('./screens/Follow'))
-const Dashboard = lazy(() => import('./screens/Dashboard'))
-const Review = lazy(() => import('./screens/Review'))
+const Dashboard = lazy(() => import('./screens/DashboardTabs'))
 const WhoopImport = lazy(() => import('./screens/WhoopImport'))
 const SettingsScreen = lazy(() => import('./screens/SettingsScreen'))
 
@@ -137,19 +130,16 @@ export default function App() {
               <div className="py-16 text-center text-sm text-mist-700">Chargement…</div>
             }
           >
-            {route === 'accueil' && <Vie />}
-            {route === 'sport' && <Home />}
-            {route === 'taches' && <TasksScreen />}
+            {(route === 'accueil' || route === 'taches') && <Vie />}
             {route === 'savoir' && <Knowledge />}
             {route === 'corps' && <BodyScreen />}
             {route === 'checkin' && <CheckInScreen day={param} />}
-            {route === 'seances' && <Workouts focusId={param} />}
-            {route === 'calendrier' && <CalendarScreen day={param} />}
-            {route === 'objectifs' && <Goals />}
-            {route === 'analyses' && <Analysis />}
-            {route === 'suivi' && <Follow />}
-            {route === 'tableau' && <Dashboard />}
-            {route === 'revue' && <Review />}
+            {route === 'seances' && <Workouts key="seances" focusId={param} />}
+            {route === 'calendrier' && <Workouts key="cal" tab="calendrier" calDay={param} />}
+            {(route === 'tableau' || route === 'sport' || route === 'suivi') && <Dashboard key="apercu" />}
+            {route === 'analyses' && <Dashboard key="analyses" tab="analyses" />}
+            {route === 'objectifs' && <Dashboard key="objectifs" tab="objectifs" />}
+            {route === 'revue' && <Dashboard key="revue" tab="revue" />}
             {route === 'import' && <WhoopImport />}
             {route === 'reglages' && <SettingsScreen param={param} />}
           </Suspense>

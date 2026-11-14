@@ -65,13 +65,25 @@ export const CATEGORY_LABEL: Record<TaskCategory, string> = {
   business: 'Business',
   sport: 'Sport',
   perso: 'Perso',
+  sante: 'Santé',
+  admin: 'Admin',
+  concours: 'Concours',
 }
+
+export const CATEGORY_ORDER: TaskCategory[] = ['perso', 'sport', 'concours', 'ecole', 'business', 'sante', 'admin']
+
+/** Toutes les catégories d'une tâche, la principale d'abord. */
+export const categoriesOf = (t: Pick<Task, 'category' | 'categories'>): TaskCategory[] =>
+  t.categories?.length ? t.categories : [t.category]
 
 export const CATEGORY_COLOR: Record<TaskCategory, string> = {
   ecole: '#9b7bff',
   business: '#35e3ff',
   sport: '#41e08a',
   perso: '#ffc24b',
+  sante: '#ff9ad5',
+  admin: '#8fb4ff',
+  concours: '#ffd166',
 }
 
 export const DEADLINE_KIND_LABEL: Record<DeadlineKind, string> = {
@@ -108,6 +120,14 @@ const CATEGORY_ALIASES: Record<string, TaskCategory> = {
   perso: 'perso',
   personnel: 'perso',
   maison: 'perso',
+  sante: 'sante',
+  medecin: 'sante',
+  docteur: 'sante',
+  admin: 'admin',
+  administratif: 'admin',
+  papiers: 'admin',
+  concours: 'concours',
+  prepa: 'concours',
 }
 
 const WEEKDAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
@@ -118,6 +138,8 @@ export interface QuickAddResult {
   dueTime?: string
   priority: TaskPriority
   category: TaskCategory
+  /** Toutes les catégories reconnues dans la phrase (#sport #concours…). */
+  categories: TaskCategory[]
   kind: TaskKind
 }
 
@@ -131,7 +153,7 @@ export interface QuickAddResult {
 export function parseQuickAdd(input: string, today: DayKey): QuickAddResult {
   let text = ` ${input.trim()} `
   let priority: TaskPriority = 'normale'
-  let category: TaskCategory = 'perso'
+  const categories: TaskCategory[] = []
   let due: DayKey | undefined
   let dueTime: string | undefined
 
@@ -148,15 +170,15 @@ export function parseQuickAdd(input: string, today: DayKey): QuickAddResult {
     priority = t === '!basse' || t === '!b' ? 'basse' : t === '!normale' || t === '!n' ? 'normale' : 'haute'
   })
 
-  /* Catégorie : premier #tag reconnu */
+  /* Catégories : tous les #tags reconnus, le premier est la catégorie principale */
   for (const m of [...text.matchAll(/\s#([\p{L}\d_-]+)(?=\s)/gu)]) {
     const cat = CATEGORY_ALIASES[strip(m[1])]
     if (cat) {
-      category = cat
+      if (!categories.includes(cat)) categories.push(cat)
       text = text.replace(m[0], ' ')
-      break
     }
   }
+  const category: TaskCategory = categories[0] ?? 'perso'
 
   /* Heure */
   take(/\s(?:a\s|à\s)?(\d{1,2})(?:h(\d{2})?|:(\d{2}))(?=\s)/i, (m) => {
@@ -247,7 +269,7 @@ export function parseQuickAdd(input: string, today: DayKey): QuickAddResult {
 
   let title = text.replace(/\s+/g, ' ').trim().replace(/[\s,;:–-]+$/, '')
   if (title) title = title.charAt(0).toUpperCase() + title.slice(1)
-  return { title, due, dueTime, priority, category, kind: detectKind(title) }
+  return { title, due, dueTime, priority, category, categories: categories.length ? categories : [category], kind: detectKind(title) }
 }
 
 /* ── Vues ─────────────────────────────────────────────────────────────── */

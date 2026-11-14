@@ -37,6 +37,7 @@ describe('ajout rapide', () => {
       dueTime: '14:00',
       priority: 'haute',
       category: 'ecole',
+      categories: ['ecole'],
     })
   })
 
@@ -48,6 +49,7 @@ describe('ajout rapide', () => {
       dueTime: undefined,
       priority: 'normale',
       category: 'perso',
+      categories: ['perso'],
     })
   })
 
@@ -177,5 +179,18 @@ describe('nature des tâches', () => {
   it('reste tâche simple sinon', () => {
     expect(parseQuickAdd('courir 10 km', TODAY).kind).toBe('tache')
     expect(detectKind('rdvous')).toBe('tache')
+  })
+})
+
+describe('plusieurs catégories', () => {
+  it('garde tous les #tags reconnus, le premier est la catégorie principale', () => {
+    const r = parseQuickAdd('visite médicale demain 8h #santé #concours', TODAY)
+    expect(r.category).toBe('sante')
+    expect(r.categories).toEqual(['sante', 'concours'])
+    expect(r.title).toBe('Visite médicale')
+    expect(r.dueTime).toBe('08:00')
+  })
+  it('un #tag inconnu reste dans le titre', () => {
+    expect(parseQuickAdd('acheter pain #truc', TODAY).categories).toEqual(['perso'])
   })
 })

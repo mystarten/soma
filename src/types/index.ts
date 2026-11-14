@@ -600,7 +600,7 @@ export interface WhoopImport {
 /* ── Vie : tâches & échéances ─────────────────────────────────────────── */
 
 export type TaskPriority = 'haute' | 'normale' | 'basse'
-export type TaskCategory = 'ecole' | 'business' | 'sport' | 'perso'
+export type TaskCategory = 'ecole' | 'business' | 'sport' | 'perso' | 'sante' | 'admin' | 'concours'
 export type TaskStatus = 'a_faire' | 'en_cours' | 'fait'
 
 export interface TaskSource {
@@ -622,6 +622,8 @@ export interface Task {
   dueTime?: string
   priority: TaskPriority
   category: TaskCategory
+  /** Toutes les catégories de la tâche (la première est `category`). */
+  categories?: TaskCategory[]
   status: TaskStatus
   notes?: string
   source?: TaskSource

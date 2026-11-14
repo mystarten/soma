@@ -46,10 +46,10 @@ import {
 import { uid } from '../db/db'
 import { generateDemoData, removeDemoData } from '../db/demo'
 import { DEFAULT_FATIGUE_CONFIG, ZONE_LABEL, ZONE_SHORT } from '../engine/fatigueConfig'
-import { RUN_5K_REFERENCE_ID, STARTING_REFERENCES } from '../db/seed'
 import { defaultHrZones } from '../engine/cardio'
 import { WORKOUT_KIND_LABEL } from '../engine/muscleMap'
-import { fmtClock, todayKey } from '../engine/time'
+import { todayKey } from '../engine/time'
+import { navigate } from '../lib/router'
 import {
   SYNC_CONFIGURED,
   SYNC_FROM_BROWSER,
@@ -65,18 +65,6 @@ import { currentEmail, restoreFromCloud, sendMagicLink, signInWithPassword, sign
 import { ExercisePicker } from './Workouts'
 
 const ACCENTS = ['#35e3ff', '#41e08a', '#9b7bff', '#ffc24b', '#ff8f45', '#27e0c0', '#c8ef5a']
-
-const REFERENCE_ROWS: { id: string; label: string; kind: 'reps' | 'hold' | 'time' }[] = [
-  { id: 'ex_tractions_pronation', label: 'Tractions strictes', kind: 'reps' },
-  { id: 'ex_tractions_lestees', label: 'Tractions lestées', kind: 'reps' },
-  { id: 'ex_pompes', label: 'Pompes', kind: 'reps' },
-  { id: 'ex_dips', label: 'Dips', kind: 'reps' },
-  { id: 'ex_dips_lestes', label: 'Dips lestés', kind: 'reps' },
-  { id: 'ex_muscle_up', label: 'Muscle-up', kind: 'reps' },
-  { id: 'ex_lsit', label: 'L-sit', kind: 'hold' },
-  { id: 'ex_front_lever', label: 'Front lever', kind: 'hold' },
-  { id: RUN_5K_REFERENCE_ID, label: '5 km', kind: 'time' },
-]
 
 function download(name: string, content: string, type = 'application/json') {
   const blob = new Blob([content], { type })
@@ -98,13 +86,6 @@ export default function SettingsScreen({ param }: { param?: string }) {
 
   const patch = async (p: Partial<Settings>) => {
     await saveSettings(p)
-  }
-
-  const refValue = (id: string) => s.references.find((r) => r.exerciseId === id)
-  const setRef = async (id: string, p: { reps?: number; loadKg?: number; holdSec?: number }) => {
-    const next = s.references.filter((r) => r.exerciseId !== id)
-    next.push({ exerciseId: id, ...refValue(id), ...p })
-    await patch({ references: next })
   }
 
   return (
@@ -156,95 +137,11 @@ export default function SettingsScreen({ param }: { param?: string }) {
         </div>
       </Card>
 
-      {/* ── Références ── */}
-      <Card
-        title="Références par exercice"
-        subtitle="Tes maxima propres : ils calibrent l’effort relatif"
-        action={
-          <Button
-            className="px-2.5 py-1.5 text-[0.7rem]"
-            onClick={() => void patch({ references: STARTING_REFERENCES })}
-          >
-            Valeurs de départ
-          </Button>
-        }
-      >
-        <div className="mt-3 space-y-2">
-          {REFERENCE_ROWS.map((row) => {
-            const ref = refValue(row.id)
-            return (
-              <div key={row.id} className="flex flex-wrap items-center gap-2">
-                <span className="w-36 shrink-0 text-xs text-mist-300">{row.label}</span>
-                {row.kind === 'reps' && (
-                  <>
-                    <div className="w-44">
-                      <Stepper
-                        value={ref?.reps ?? 0}
-                        onChange={(v) => void setRef(row.id, { reps: v })}
-                        min={0}
-                        max={500}
-                        suffix="reps"
-                      />
-                    </div>
-                    {row.id.includes('lest') && (
-                      <div className="w-40">
-                        <Stepper
-                          value={ref?.loadKg ?? 0}
-                          onChange={(v) => void setRef(row.id, { loadKg: v })}
-                          min={0}
-                          max={120}
-                          suffix="kg"
-                        />
-                      </div>
-                    )}
-                  </>
-                )}
-                {row.kind === 'hold' && (
-                  <div className="w-44">
-                    <Stepper
-                      value={ref?.holdSec ?? 0}
-                      onChange={(v) => void setRef(row.id, { holdSec: v })}
-                      min={0}
-                      max={900}
-                      suffix="s"
-                    />
-                  </div>
-                )}
-                {row.kind === 'time' && (
-                  <>
-                    <div className="w-44">
-                      <Stepper
-                        value={Math.round((ref?.holdSec ?? 1200) / 60)}
-                        onChange={(v) =>
-                          void setRef(row.id, { holdSec: v * 60 + ((ref?.holdSec ?? 0) % 60) })
-                        }
-                        min={10}
-                        max={90}
-                        suffix="min"
-                      />
-                    </div>
-                    <div className="w-40">
-                      <Stepper
-                        value={(ref?.holdSec ?? 1200) % 60}
-                        onChange={(v) =>
-                          void setRef(row.id, {
-                            holdSec: Math.floor((ref?.holdSec ?? 1200) / 60) * 60 + v,
-                          })
-                        }
-                        min={0}
-                        max={59}
-                        suffix="s"
-                      />
-                    </div>
-                    <span className="text-xs text-mist-700 tnum">
-                      {fmtClock(ref?.holdSec ?? 1200)}
-                    </span>
-                  </>
-                )}
-              </div>
-            )
-          })}
-        </div>
+      {/* ── Records ── */}
+      <Card title="Records" subtitle="Tractions, pompes, dips, 5 km… se modifient dans Séances → Records.">
+        <Button className="mt-2" onClick={() => navigate('seances')}>
+          Ouvrir Séances
+        </Button>
       </Card>
 
       {/* ── Préférences ── */}

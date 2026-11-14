@@ -8,6 +8,7 @@ import {
   layoutGraph,
   matchNodes,
   mergeGraphs,
+  type HubCategory,
   neighborhood,
   suggestLinks,
   withRoots,
@@ -75,7 +76,7 @@ export function useNeuralModel(enabled: boolean, deep = false) {
     const inWeek = addDayKey(data.today, 7)
     const tasks = mode === 'jour' ? data.tasks.filter((x) => x.due && x.due <= data.today) : data.tasks
     const deadlines = mode === 'jour' ? data.deadlines.filter((d) => d.date <= inWeek) : data.deadlines
-    const t = withRoots(buildTaskGraph(tasks, deadlines, data.today, { categories: cats, showDone }), {
+    const t = withRoots(buildTaskGraph(tasks, deadlines, data.today, { categories: cats as HubCategory[], showDone }), {
       taches: full || opened.taches,
       echeances: full || opened.echeances,
     })

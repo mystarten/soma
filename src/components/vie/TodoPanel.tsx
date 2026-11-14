@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from 'react'
 import { useSoma } from '../../hooks/useSoma'
-import type { Task, TaskCategory, TaskKind, TaskPriority, TaskStatus } from '../../types'
+import type { Task, TaskKind, TaskPriority, TaskStatus } from '../../types'
 import {
   CATEGORY_COLOR,
   CATEGORY_LABEL,
+  categoriesOf,
   KIND_ICON,
   KIND_LABEL,
   KIND_ORDER,
@@ -19,6 +20,7 @@ import { deleteTask, saveTask } from '../../db/repo'
 import { uid } from '../../db/db'
 import { weekBounds } from '../../engine/time'
 import KindPicker from './KindPicker'
+import CategoryChips from './CategoryChips'
 import { Button, Field, Segmented, Sheet, TextArea, TextInput, useToast } from '../ui/primitives'
 
 const VIEWS: { value: TaskView; label: string }[] = [
@@ -356,14 +358,10 @@ export function TaskEditor({ task, onClose }: { task: Task; onClose: () => void 
             options={KIND_ORDER.map((k) => ({ value: k, label: `${KIND_ICON[k]} ${KIND_LABEL[k]}` }))}
           />
         </Field>
-        <Field label="Catégorie" group>
-          <Segmented
-            value={t.category}
-            onChange={(v) => patch({ category: v as TaskCategory })}
-            options={(['ecole', 'business', 'sport', 'perso'] as TaskCategory[]).map((c) => ({
-              value: c,
-              label: CATEGORY_LABEL[c],
-            }))}
+        <Field label="Catégories" group hint="Tu peux en choisir plusieurs.">
+          <CategoryChips
+            value={categoriesOf(t)}
+            onChange={(cats) => patch({ categories: cats, category: cats[0] ?? 'perso' })}
           />
         </Field>
         <Field label="Statut" group>

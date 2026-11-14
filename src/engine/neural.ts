@@ -51,10 +51,13 @@ export interface NeuralGraph {
 
 export type Vec3 = [number, number, number]
 
-export const CATEGORIES: TaskCategory[] = ['ecole', 'business', 'sport', 'perso']
+/** Les quatre grandes zones du réseau ; les autres catégories de tâches se rangent sous « Perso ». */
+export type HubCategory = 'ecole' | 'business' | 'sport' | 'perso'
+export const CATEGORIES: HubCategory[] = ['ecole', 'business', 'sport', 'perso']
+export const hubOf = (c: TaskCategory | undefined): HubCategory => (c && (CATEGORIES as string[]).includes(c) ? (c as HubCategory) : 'perso')
 
 /** Direction de départ de chaque grande zone, pour une structure lisible. */
-const HUB_ANCHOR: Record<TaskCategory, Vec3> = {
+const HUB_ANCHOR: Record<HubCategory, Vec3> = {
   ecole: [-0.85, 0.55, 0.35],
   business: [0.85, 0.55, 0.35],
   sport: [-0.75, -0.45, -0.25],
@@ -85,7 +88,7 @@ export function clampToBrain(p: Vec3, margin = 0.95): Vec3 {
 }
 
 export interface GraphFilter {
-  categories?: TaskCategory[]
+  categories?: HubCategory[]
   showDone?: boolean
 }
 
@@ -120,7 +123,7 @@ export function buildTaskGraph(
   const live = tasks.filter(
     (t) =>
       !t.deleted &&
-      cats.includes(t.category) &&
+      cats.includes(hubOf(t.category)) &&
       (t.status !== 'fait' || (filter.showDone && t.completedAt?.slice(0, 10) === today)),
   )
   const byDay = new Map<string, string[]>()
@@ -134,12 +137,12 @@ export function buildTaskGraph(
       color: CATEGORY_COLOR[t.category],
       size: state === 'high' || state === 'overdue' ? 1.25 : t.priority === 'basse' ? 0.75 : 1,
       state,
-      category: t.category,
+      category: hubOf(t.category),
       ref: t.id,
       age: ageInDays(t.createdAt, today),
       summary: [t.kind && t.kind !== 'tache' ? t.kind : '', t.due ? `pour le ${t.due.slice(8, 10)}/${t.due.slice(5, 7)}` : '', t.notes ?? ''].filter(Boolean).join(' · ') || undefined,
     })
-    links.push({ source: `hub:${t.category}`, target: `task:${t.id}`, kind: 'hub', rest: 0.55 })
+    links.push({ source: `hub:${hubOf(t.category)}`, target: `task:${t.id}`, kind: 'hub', rest: 0.55 })
     if (t.due && t.status !== 'fait') {
       const list = byDay.get(t.due) ?? []
       list.push(`task:${t.id}`)
@@ -155,7 +158,7 @@ export function buildTaskGraph(
   for (const d of deadlines) {
     if (d.deleted || d.done || d.date < today) continue
     const days = Math.round((Date.parse(d.date) - Date.parse(today)) / 86_400_000)
-    const cat = d.category && cats.includes(d.category) ? d.category : null
+    const cat = d.category && cats.includes(hubOf(d.category)) ? hubOf(d.category) : null
     nodes.push({
       id: `deadline:${d.id}`,
       kind: 'deadline',
@@ -277,7 +280,7 @@ export function buildKnowledgeGraph(
 }
 
 /** Mots (français et anglais courants) qui rapprochent une catégorie de tâches d'un axe. */
-const BRIDGE_WORDS: Record<TaskCategory, RegExp> = {
+const BRIDGE_WORDS: Record<HubCategory, RegExp> = {
   ecole: /\b(?:etude|ecole|school|cours\b|scolar|univers|campus)/,
   business: /\b(?:entrepren|business|travail|pro\b|profession|carriere|work)/,
   sport: /\b(?:sport|fitness|training|entrainement|physique)/,
@@ -285,7 +288,7 @@ const BRIDGE_WORDS: Record<TaskCategory, RegExp> = {
 }
 
 /** L'axe qui correspond à une catégorie de tâches, s'il y en a un. */
-export function bridgeAxeFor(category: TaskCategory, axeSlugs: string[]): string | undefined {
+export function bridgeAxeFor(category: HubCategory, axeSlugs: string[]): string | undefined {
   return axeSlugs.find((s) => BRIDGE_WORDS[category].test(normTitle(s)))
 }
 
@@ -370,11 +373,11 @@ export function layoutGraph(graph: NeuralGraph, iterations = 240): Map<string, V
     const j = (k: number) => (r() - 0.5) * k
     if (n.kind === 'core') return [0, 0, 0]
     if (n.kind === 'hub' && n.category) {
-      const a = HUB_ANCHOR[n.category]
+      const a = HUB_ANCHOR[hubOf(n.category)]
       return [a[0] * 0.7, a[1] * 0.7, a[2] * 0.7]
     }
     if ((n.kind === 'axe' || n.kind === 'root') && n.anchor) return [n.anchor[0] * 0.95, n.anchor[1] * 0.95, n.anchor[2] * 0.95]
-    const a = n.anchor ?? (n.category ? HUB_ANCHOR[n.category] : ([0, 0.2, 0] as Vec3))
+    const a = n.anchor ?? (n.category ? HUB_ANCHOR[hubOf(n.category)] : ([0, 0.2, 0] as Vec3))
     return [a[0] + j(0.6), a[1] + j(0.6), a[2] + j(0.6)]
   })
   const V: Vec3[] = P.map(() => [0, 0, 0])
@@ -424,7 +427,7 @@ export function layoutGraph(graph: NeuralGraph, iterations = 240): Map<string, V
         continue
       }
       if (n.kind === 'hub' && n.category) {
-        const a = HUB_ANCHOR[n.category]
+        const a = HUB_ANCHOR[hubOf(n.category)]
         F[i][0] += (a[0] * 0.7 - P[i][0]) * 0.08
         F[i][1] += (a[1] * 0.7 - P[i][1]) * 0.08
         F[i][2] += (a[2] * 0.7 - P[i][2]) * 0.08
