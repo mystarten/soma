@@ -298,3 +298,8 @@ input[type='number'] {
   0% { transform: translateY(-100%); }
   100% { transform: translateY(1200%); }
 }
+
+/* Page Vie : la scène 3D s'adapte à la hauteur de la fenêtre pour éviter tout défilement (grand écran). */
+@media (min-width: 1280px) {
+  .vie-center { --stage-h: clamp(280px, calc(100dvh - 530px), 700px); }
+}

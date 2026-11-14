@@ -180,26 +180,29 @@ function SportCard() {
 }
 
 export default function Vie() {
+  /* Sur grand écran, la page tient dans la fenêtre : colonnes équilibrées, pas de défilement. */
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.7fr)_minmax(0,0.9fr)]">
+    <div
+      className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)_minmax(0,0.95fr)]"
+    >
       {/* Centre : le bonhomme */}
-      <div className="flex min-w-0 flex-col gap-4 lg:row-span-2 xl:col-start-2 xl:row-span-1 xl:row-start-1">
+      <div className="vie-center flex min-w-0 flex-col gap-3 lg:row-span-2 xl:col-start-2 xl:row-span-1 xl:row-start-1">
         <DayLine />
         <MorningBrief />
         <ReviewNudge />
         <BodyView hero />
       </div>
-      {/* À venir : tâches et échéances réunies */}
-      <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 xl:col-start-1 xl:row-start-1">
+      {/* Gauche : à venir, séances */}
+      <div className="flex min-w-0 flex-col gap-3 lg:col-start-2 xl:col-start-1 xl:row-start-1">
         <PlanningPanel />
+        <NextSessions />
         <GoogleOnHome />
+        <RecentWorkouts limit={3} />
       </div>
-      {/* Sport */}
-      <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 xl:col-start-3 xl:row-start-1">
+      {/* Droite : récupération */}
+      <div className="flex min-w-0 flex-col gap-3 lg:col-start-2 xl:col-start-3 xl:row-start-1">
         <SportCard />
         <KeyMetrics />
-        <NextSessions />
-        <RecentWorkouts />
       </div>
     </div>
   )
