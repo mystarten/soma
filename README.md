@@ -261,3 +261,7 @@ Si tu as déjà un projet Soma et que tu veux repartir proprement : ouvre **SQL 
 ### Roulement du programme (Séances → Programme)
 
 Les séances sont rangées en trois socles : **street workout** (T, M, P), **jambes** (J) et **abdos** (A). Dans un socle, on ne revient pas sur une séance avant d'avoir fait toutes les autres, et jamais deux fois de suite la même ; d'un socle à l'autre, aucune contrainte. L'écran n'affiche que les séances dont c'est le tour : une séance cochée sort de la liste et se range dans « Faites et corrections » (grisée), où une touche suffit pour retirer la coche. Cocher enregistre la séance dans le journal avec ses séries prévues, donc elle alimente la fatigue, le petit bonhomme et la récupération ; « Détailler les séries » reste possible. Les semaines faites avant l'app se déclarent une fois dans « Où en es-tu ? » : ce sont de simples coches, sans séance ni effet sur la fatigue.
+
+### Séances : le programme d'abord
+
+L'écran **Séances** a trois onglets : **Programme** (la base : le roulement et les coches), **Historique** (tout ce qui a été fait, programme ou non) et **Records**. Le bouton **+ Séance** propose d'abord le programme, puis les séances libres : course, natation, vélo/marche/rando, séance libre, mobilité. L'éditeur d'une séance libre n'affiche que l'essentiel (type, titre, jour, heure, durée, exercices) ; l'effort, le ressenti et « séance prévue » sont dans « Plus de détails ».

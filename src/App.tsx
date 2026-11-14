@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { whoopHandleReturn } from './integrations/whoop'
 import WhoopAuto from './integrations/WhoopAuto'
+import ErrorBoundary, { autoReloadOnce } from './components/ErrorBoundary'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { BottomNav, MoreSheetContent, SideRail } from './components/Nav'
@@ -80,6 +81,21 @@ export default function App() {
   const [more, setMore] = useState(false)
   const [whoopMsg, setWhoopMsg] = useState<string | null>(null)
 
+  /* Un fichier de l'ancienne version a disparu (mise à jour publiée) : on se recharge une fois, proprement. */
+  useEffect(() => {
+    const onPreloadError = (e: Event) => {
+      e.preventDefault()
+      autoReloadOnce()
+    }
+    window.addEventListener('vite:preloadError', onPreloadError)
+    return () => window.removeEventListener('vite:preloadError', onPreloadError)
+  }, [])
+
+  /* Un écran quitté en plein écran ne doit jamais laisser la page bloquée. */
+  useEffect(() => {
+    document.body.style.overflow = ''
+  }, [route])
+
   /* Retour de la page d'autorisation WHOOP : le code est dans l'adresse. */
   useEffect(() => {
     if (!window.location.search.includes('code=')) return
@@ -115,6 +131,7 @@ export default function App() {
               <button className="ml-2 text-accent" onClick={() => setWhoopMsg(null)}>OK</button>
             </div>
           )}
+          <ErrorBoundary resetKey={route}>
           <Suspense
             fallback={
               <div className="py-16 text-center text-sm text-mist-700">Chargement…</div>
@@ -136,6 +153,7 @@ export default function App() {
             {route === 'import' && <WhoopImport />}
             {route === 'reglages' && <SettingsScreen param={param} />}
           </Suspense>
+          </ErrorBoundary>
         </div>
       </main>
       <BottomNav current={route} onMore={() => setMore(true)} />

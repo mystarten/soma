@@ -11,7 +11,6 @@ import type {
   SetEntry,
   Workout,
   WorkoutKind,
-  WorkoutTemplate,
 } from '../types'
 import {
   Badge,
@@ -31,8 +30,7 @@ import {
   useToast,
 } from '../components/ui/primitives'
 import ProgramPanel from '../components/program/ProgramPanel'
-import ProgramQuickPick from '../components/program/ProgramQuickPick'
-import { deleteTemplate, deleteWorkout, rememberWorkout, saveWorkout } from '../db/repo'
+import { deleteWorkout, rememberWorkout, saveWorkout } from '../db/repo'
 import { uid } from '../db/db'
 import {
   CARDIO_MODALITIES,
@@ -44,13 +42,7 @@ import { fmtClock, fmtPace, parseDay, todayKey } from '../engine/time'
 import { estimated1RM, set1RM } from '../engine/strength'
 import { recommendedLoadKg } from '../engine/coach'
 import { groupByExercise, summarizeSets } from '../engine/sets'
-import {
-  DEFAULT_REST_SEC,
-  sortTemplates,
-  templateItemSets,
-  workoutFromTemplate,
-} from '../engine/templates'
-import { agoLabel } from '../engine/suggest'
+import { DEFAULT_REST_SEC } from '../engine/templates'
 import { navigate } from '../lib/router'
 
 const KINDS: WorkoutKind[] = ['street', 'muscu', 'course', 'cardio', 'abdos', 'mobilite', 'custom']
@@ -75,9 +67,9 @@ function emptyWorkout(kind: WorkoutKind = 'street'): Workout {
 
 export default function Workouts({ focusId }: { focusId?: string }) {
   const data = useSoma()
-  const [tab, setTab] = useState<'journal' | 'programme' | 'modeles' | 'records'>(() =>
-    data.program && !focusId ? 'programme' : 'journal',
-  )
+  /* Le programme est la base : on arrive dessus s'il est importé. */
+  const [tab, setTab] = useState<'programme' | 'historique' | 'records'>(() => (data.program ? 'programme' : 'historique'))
+  const [choosing, setChoosing] = useState(false)
   const [editing, setEditing] = useState<Workout | null>(null)
   const [autoPick, setAutoPick] = useState(false)
   const [visibleDays, setVisibleDays] = useState(25)
@@ -119,24 +111,17 @@ export default function Workouts({ focusId }: { focusId?: string }) {
           value={tab}
           onChange={setTab}
           options={[
-            { value: 'journal', label: 'Journal' },
             { value: 'programme', label: 'Programme' },
-            { value: 'modeles', label: 'Mes séances' },
+            { value: 'historique', label: 'Historique' },
             { value: 'records', label: 'Records' },
           ]}
         />
-        <Button
-          variant="primary"
-          onClick={() => {
-            setAutoPick(false)
-            setEditing(emptyWorkout())
-          }}
-        >
+        <Button variant="primary" onClick={() => setChoosing(true)}>
           + Séance
         </Button>
       </div>
 
-      {tab === 'journal' && (
+      {tab === 'historique' && (
         <div className="flex flex-col gap-3">
           {!byDay.length && (
             <Card>
@@ -144,7 +129,7 @@ export default function Workouts({ focusId }: { focusId?: string }) {
                 title="Aucune séance enregistrée"
                 hint="Ajoute ta première séance, importe ton export WHOOP, ou génère des données de démo dans Réglages."
                 action={
-                  <Button variant="primary" className="mt-2" onClick={() => setEditing(emptyWorkout())}>
+                  <Button variant="primary" className="mt-2" onClick={() => setChoosing(true)}>
                     Ajouter une séance
                   </Button>
                 }
@@ -220,23 +205,23 @@ export default function Workouts({ focusId }: { focusId?: string }) {
         />
       )}
 
-      {tab === 'modeles' && (
-        <MySessions
-          onRedo={(tpl) => {
-            const now = new Date()
-            now.setSeconds(0, 0)
+      {tab === 'records' && <Records />}
+
+      {choosing && (
+        <NewSessionSheet
+          hasProgram={!!data.program}
+          onClose={() => setChoosing(false)}
+          onProgram={() => {
+            setChoosing(false)
+            setTab('programme')
+          }}
+          onPick={(w) => {
+            setChoosing(false)
             setAutoPick(false)
-            setEditing(
-              workoutFromTemplate(tpl, { id: uid('w'), day: todayKey(), startedAt: now.toISOString() }, () =>
-                uid('set'),
-              ),
-            )
-            toast.show('Modifie si besoin, puis Enregistrer')
+            setEditing(w)
           }}
         />
       )}
-
-      {tab === 'records' && <Records />}
 
       {editing && (
         <WorkoutEditor
@@ -328,9 +313,11 @@ function WorkoutRow({
         </button>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           <Badge color="var(--accent)">{load.toFixed(1)} / 21</Badge>
-          <Button className="px-2.5 py-1.5 text-[0.7rem]" onClick={onDuplicate}>
-            Refaire
-          </Button>
+          {!workout.program?.length && (
+            <Button variant="ghost" className="px-2.5 py-1.5 text-[0.7rem]" onClick={onDuplicate}>
+              Dupliquer
+            </Button>
+          )}
         </div>
       </div>
       {needsDetail && (
@@ -344,87 +331,6 @@ function WorkoutRow({
     </Card>
   )
 }
-
-/* ── Mes séances : ce que tu as déjà fait, à refaire en un clic ──────── */
-
-function MySessions({ onRedo }: { onRedo: (tpl: WorkoutTemplate) => void }) {
-  const data = useSoma()
-  const list = useMemo(() => sortTemplates(data.templates), [data.templates])
-  if (!list.length) {
-    return (
-      <Card>
-        <EmptyState
-          title="Aucune séance mémorisée"
-          hint="Enregistre une séance avec un titre (ex. « Pull lourd ») : elle apparaîtra ici, prête à être refaite."
-        />
-      </Card>
-    )
-  }
-  return (
-    <div className="flex flex-col gap-2">
-      {list.map((t) => {
-        const lines = t.items.map((i) => {
-          const ex = data.exercises.find((e) => e.id === i.exerciseId)
-          return {
-            id: i.exerciseId,
-            name: ex?.name ?? 'Exercice',
-            line: summarizeSets(ex, templateItemSets(i, () => 'x')).line,
-          }
-        })
-        const ago = t.lastDoneAt ? agoLabel((Date.now() - new Date(t.lastDoneAt).getTime()) / 3_600_000) : null
-        return (
-          <Card key={t.id}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-mist-100">{t.name}</div>
-                <div className="text-[0.68rem] text-mist-700">
-                  {WORKOUT_KIND_LABEL[t.kind]}
-                  {t.durationMin ? ` · ${t.durationMin} min` : ''}
-                  {t.rpe ? ` · RPE ${t.rpe}` : ''}
-                  {ago ? ` · faite ${ago}` : ' · modèle de départ'}
-                </div>
-                {lines.length > 0 && (
-                  <ul className="mt-1.5 space-y-0.5">
-                    {lines.map((l) => (
-                      <li key={l.id} className="text-[0.72rem] leading-snug text-mist-500">
-                        <span className="text-mist-300">{l.name}</span> — {l.line}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {t.run?.distanceM ? (
-                  <div className="mt-1 text-[0.72rem] text-mist-500">
-                    {(t.run.distanceM / 1000).toFixed(1)} km · {RUN_TYPE_LABEL[t.run.runType]}
-                  </div>
-                ) : null}
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1.5">
-                <Button variant="primary" className="px-3 py-1.5 text-xs" onClick={() => onRedo(t)}>
-                  Refaire
-                </Button>
-                <button
-                  onClick={async () => {
-                    if (window.confirm(`Oublier « ${t.name} » ? Tes séances passées restent dans le journal.`))
-                      await deleteTemplate(t.id)
-                  }}
-                  className="text-[0.66rem] text-mist-700 hover:text-mist-300"
-                >
-                  oublier
-                </button>
-              </div>
-            </div>
-          </Card>
-        )
-      })}
-      <p className="px-2 text-center text-[0.68rem] text-mist-700">
-        Chaque séance enregistrée avec un titre est gardée ici. « Refaire » l’ouvre pour aujourd’hui : modifie
-        les reps ou le lest, puis Enregistrer.
-      </p>
-    </div>
-  )
-}
-
-/* ── Records ─────────────────────────────────────────────────────────── */
 
 function Records() {
   const data = useSoma()
@@ -532,6 +438,66 @@ function Records() {
   )
 }
 
+/* ── Quelle séance ? ────────────────────────────────────────────────── */
+
+/** Le point de départ de « + Séance » : le programme d'abord, puis les séances libres. */
+function NewSessionSheet({
+  hasProgram,
+  onClose,
+  onProgram,
+  onPick,
+}: {
+  hasProgram: boolean
+  onClose: () => void
+  onProgram: () => void
+  onPick: (w: Workout) => void
+}) {
+  const free: { label: string; hint: string; make: () => Workout }[] = [
+    { label: 'Course à pied', hint: 'Footing, fractionné, sortie longue', make: () => ({ ...emptyWorkout('course'), title: 'Course', durationMin: 40 }) },
+    {
+      label: 'Natation',
+      hint: 'Distance et durée',
+      make: () => ({ ...emptyWorkout('cardio'), title: 'Natation', durationMin: 45, cardio: { modality: 'natation', distanceM: 1500 } }),
+    },
+    {
+      label: 'Vélo, marche, rando…',
+      hint: 'Autre activité d’endurance',
+      make: () => ({ ...emptyWorkout('cardio'), title: 'Cardio', durationMin: 45, cardio: { modality: 'velo' } }),
+    },
+    { label: 'Séance libre', hint: 'Street workout ou musculation, à ta façon', make: () => emptyWorkout('street') },
+    { label: 'Mobilité, étirements', hint: 'Récupération active', make: () => ({ ...emptyWorkout('mobilite'), durationMin: 20 }) },
+  ]
+  return (
+    <Sheet open onClose={onClose} title="Quelle séance ?">
+      <div className="space-y-2 pb-2">
+        <button
+          onClick={onProgram}
+          className="flex w-full items-center justify-between gap-3 rounded-2xl bg-accent/12 px-4 py-3.5 text-left hairline transition active:scale-[0.99]"
+        >
+          <span>
+            <span className="block text-sm font-medium text-accent">{hasProgram ? 'Une séance de mon programme' : 'Importer mon programme'}</span>
+            <span className="block text-xs text-mist-500">La base de tout : tu coches ce que tu fais.</span>
+          </span>
+          <span className="text-accent">→</span>
+        </button>
+        <div className="px-1 pt-2 text-[0.62rem] tracking-wider text-mist-500 uppercase">Séance en dehors du programme</div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {free.map((f) => (
+            <button
+              key={f.label}
+              onClick={() => onPick(f.make())}
+              className="rounded-2xl bg-white/5 px-4 py-3 text-left hairline transition active:scale-[0.99] hover:bg-white/8"
+            >
+              <span className="block text-sm text-mist-100">{f.label}</span>
+              <span className="block text-xs text-mist-500">{f.hint}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </Sheet>
+  )
+}
+
 /* ── Éditeur de séance ──────────────────────────────────────────────── */
 
 function WorkoutEditor({
@@ -550,23 +516,25 @@ function WorkoutEditor({
   const data = useSoma()
   const [w, setW] = useState<Workout>(workout)
   const patch = (p: Partial<Workout>) => setW((prev) => ({ ...prev, ...p }))
-  /* Une séance vierge propose de reprendre une séance déjà faite. */
-  const [fresh, setFresh] = useState(
-    () => !workout.title && !workout.sets?.length && !workout.run && !workout.cardio,
-  )
-  const recent = useMemo(
-    () => sortTemplates(data.templates).filter((t) => t.items.length || t.run || t.cardio).slice(0, 8),
-    [data.templates],
-  )
+  const [more, setMore] = useState(false)
 
   const kindOptions = useMemo(
     () => [
-      ...KINDS.filter((k) => k !== 'custom').map((k) => ({ value: k, label: WORKOUT_KIND_LABEL[k] })),
+      ...KINDS.filter((k) => k !== 'custom').flatMap((k) =>
+        k === 'cardio'
+          ? [{ value: 'cardio', label: 'Cardio (vélo, marche…)' }, { value: 'cardio:natation', label: 'Natation' }]
+          : [{ value: k, label: WORKOUT_KIND_LABEL[k] }],
+      ),
       ...data.workoutTypes.map((t) => ({ value: `custom:${t.id}`, label: t.name })),
     ],
     [data.workoutTypes],
   )
-  const kindValue = w.kind === 'custom' && w.customTypeId ? `custom:${w.customTypeId}` : w.kind
+  const kindValue =
+    w.kind === 'custom' && w.customTypeId
+      ? `custom:${w.customTypeId}`
+      : w.kind === 'cardio' && w.cardio?.modality === 'natation'
+        ? 'cardio:natation'
+        : w.kind
   const customType = data.workoutTypes.find((t) => t.id === w.customTypeId)
 
   const timeStr = useMemo(() => {
@@ -615,62 +583,20 @@ function WorkoutEditor({
           <Button variant="primary" full onClick={save}>
             Enregistrer
           </Button>
-          {confirmDelete ? (
-            <Button variant="danger" onClick={() => void remove()}>
-              Oui, supprimer
-            </Button>
-          ) : (
-            <Button variant="danger" onClick={() => setConfirmDelete(true)}>
-              Supprimer
-            </Button>
-          )}
+          {data.workouts.some((x) => x.id === w.id) &&
+            (confirmDelete ? (
+              <Button variant="danger" onClick={() => void remove()}>
+                Oui, supprimer
+              </Button>
+            ) : (
+              <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+                Supprimer
+              </Button>
+            ))}
         </div>
       }
     >
       <div className="space-y-3 pb-2">
-        {fresh && recent.length > 0 && (
-          <div className="rounded-xl bg-accent/6 p-3 hairline">
-            <div className="mb-2 text-[0.68rem] tracking-wider text-mist-500 uppercase">
-              Refaire une séance
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {recent.map((tpl) => (
-                <button
-                  key={tpl.id}
-                  onClick={() => {
-                    setW((prev) =>
-                      workoutFromTemplate(
-                        tpl,
-                        { id: prev.id, day: prev.day, startedAt: prev.startedAt },
-                        () => uid('set'),
-                      ),
-                    )
-                    setFresh(false)
-                  }}
-                  className="rounded-lg bg-white/6 px-3 py-2 text-sm text-mist-100 hairline transition active:scale-95 hover:bg-white/10"
-                >
-                  {tpl.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {data.program && (
-          <ProgramQuickPick
-            onApply={(b) => {
-              setW((prev) => ({
-                ...prev,
-                title: prev.title?.trim() ? `${prev.title} + ${b.title}` : b.title,
-                kind: prev.sets?.length ? prev.kind : b.kind,
-                durationMin: prev.sets?.length ? prev.durationMin + b.durationMin : b.durationMin,
-                sets: [...(prev.sets ?? []), ...b.sets],
-                notes: [prev.notes, b.notes].filter(Boolean).join('\n'),
-                program: [...(prev.program ?? []), ...b.program],
-              }))
-              setFresh(false)
-            }}
-          />
-        )}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Type de séance">
             <Select
@@ -678,6 +604,10 @@ function WorkoutEditor({
               onChange={(v) => {
                 if (v.startsWith('custom:')) {
                   patch({ kind: 'custom', customTypeId: v.slice(7) })
+                } else if (v === 'cardio:natation') {
+                  patch({ kind: 'cardio', customTypeId: undefined, cardio: { ...(w.cardio ?? { modality: 'natation' }), modality: 'natation' } })
+                } else if (v === 'cardio') {
+                  patch({ kind: 'cardio', customTypeId: undefined, cardio: { ...(w.cardio ?? { modality: 'velo' }), modality: w.cardio?.modality === 'natation' ? 'velo' : (w.cardio?.modality ?? 'velo') } })
                 } else {
                   patch({ kind: v as WorkoutKind, customTypeId: undefined })
                 }
@@ -685,14 +615,7 @@ function WorkoutEditor({
               options={kindOptions}
             />
           </Field>
-          <Field
-            label="Titre"
-            hint={
-              w.title?.trim()
-                ? 'Gardée dans « Mes séances » pour la refaire en un clic.'
-                : 'Donne un titre pour la retrouver dans « Mes séances ».'
-            }
-          >
+          <Field label="Titre" optional>
             <TextInput
               value={w.title ?? ''}
               onChange={(e) => patch({ title: e.target.value })}
@@ -715,10 +638,21 @@ function WorkoutEditor({
               suffix="min"
             />
           </Field>
-          <Field label={`RPE global · ${w.rpe ?? 7}/10`}>
-            <Stepper value={w.rpe ?? 7} onChange={(v) => patch({ rpe: v })} min={1} max={10} />
-          </Field>
         </div>
+
+        {/* Détails facultatifs, repliés : l'essentiel d'abord. */}
+        <button
+          onClick={() => setMore((m) => !m)}
+          aria-expanded={more}
+          className="text-xs text-mist-500 hover:text-mist-300"
+        >
+          {more ? '▾' : '▸'} Plus de détails (effort, ressenti, séance prévue)
+        </button>
+        {more && (
+          <div className="space-y-3 rounded-xl bg-white/3 p-3 hairline">
+        <Field label={`Effort (RPE) · ${w.rpe ?? 7}/10`}>
+          <Stepper value={w.rpe ?? 7} onChange={(v) => patch({ rpe: v })} min={1} max={10} />
+        </Field>
 
         <Field label="Ressenti" group>
           <div className="flex gap-1.5">
@@ -744,6 +678,8 @@ function WorkoutEditor({
           </span>
           <Toggle checked={!!w.planned} onChange={(v) => patch({ planned: v })} label="Séance prévue" />
         </div>
+          </div>
+        )}
 
         {/* ── Détails par type ── */}
         {(w.kind === 'street' || w.kind === 'muscu' || w.kind === 'abdos' || w.kind === 'mobilite') && (
@@ -1463,7 +1399,7 @@ function CardioEditor({ w, patch }: { w: Workout; patch: (p: Partial<Workout>) =
   const cardio: CardioDetail = w.cardio ?? { modality: 'velo' }
   const setCardio = (p: Partial<CardioDetail>) => patch({ cardio: { ...cardio, ...p } })
   return (
-    <Card title="Cardio libre">
+    <Card title={cardio.modality === 'natation' ? 'Natation' : 'Cardio libre'}>
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
         <Field label="Modalité">
           <Select
@@ -1472,17 +1408,37 @@ function CardioEditor({ w, patch }: { w: Workout; patch: (p: Partial<Workout>) =
             options={CARDIO_MODALITIES.map((m) => ({ value: m.id, label: m.label }))}
           />
         </Field>
-        <Field label="Distance" optional>
-          <Stepper
-            value={(cardio.distanceM ?? 0) / 1000}
-            onChange={(v) => setCardio({ distanceM: Math.round(v * 1000) })}
-            step={0.5}
-            min={0}
-            max={500}
-            precision={2}
-            suffix="km"
-          />
-        </Field>
+        {cardio.modality === 'natation' ? (
+          <Field
+            label="Distance nagée"
+            hint={
+              cardio.distanceM && w.durationMin
+                ? `Allure ≈ ${fmtClock(Math.round((w.durationMin * 60) / (cardio.distanceM / 100)))} / 100 m`
+                : undefined
+            }
+          >
+            <Stepper
+              value={cardio.distanceM ?? 0}
+              onChange={(v) => setCardio({ distanceM: v })}
+              step={50}
+              min={0}
+              max={20000}
+              suffix="m"
+            />
+          </Field>
+        ) : (
+          <Field label="Distance" optional>
+            <Stepper
+              value={(cardio.distanceM ?? 0) / 1000}
+              onChange={(v) => setCardio({ distanceM: Math.round(v * 1000) })}
+              step={0.5}
+              min={0}
+              max={500}
+              precision={2}
+              suffix="km"
+            />
+          </Field>
+        )}
         <Field label="Intensité" optional>
           <Stepper
             value={cardio.intensity ?? 5}
