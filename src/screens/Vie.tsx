@@ -144,8 +144,8 @@ function SportCard() {
     <section aria-label="Sport et récupération" className="glass rounded-[var(--radius-card)] p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-[0.95rem] font-medium text-mist-100">Sport & récupération</h3>
-        <button onClick={() => navigate('sport')} className="text-xs text-accent">
-          Tableau sport →
+        <button onClick={() => navigate('tableau')} className="text-xs text-accent">
+          Tableau de bord →
         </button>
       </div>
       <div className="flex justify-around">

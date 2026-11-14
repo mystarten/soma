@@ -7,6 +7,12 @@ import {
   Cell,
   Line,
   LineChart,
+  Pie,
+  PieChart,
+  PolarAngleAxis,
+  PolarGrid,
+  Radar,
+  RadarChart,
   ReferenceLine,
   ResponsiveContainer,
   Scatter,
@@ -341,5 +347,51 @@ export function Spark({
         strokeLinejoin="round"
       />
     </svg>
+  )
+}
+
+/** Radar 0 → 100 : profil de forme d'un coup d'œil. */
+export function RadarProfile({ data, color = 'var(--accent)', height = 220 }: { data: { axis: string; value: number }[]; color?: string; height?: number }) {
+  return (
+    <div style={{ height }} className="w-full">
+      <ResponsiveContainer>
+        <RadarChart data={data} outerRadius="72%">
+          <PolarGrid stroke="rgba(255,255,255,0.1)" />
+          <PolarAngleAxis dataKey="axis" tick={{ fill: '#8a9bb8', fontSize: 11 }} />
+          <Radar dataKey="value" stroke={color} fill={color} fillOpacity={0.28} strokeWidth={2} isAnimationActive={false} />
+        </RadarChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+/** Anneau de répartition avec légende en pourcentages. */
+export function Donut({ parts, height = 170 }: { parts: { name: string; value: number; color: string }[]; height?: number }) {
+  const total = parts.reduce((a, b) => a + b.value, 0) || 1
+  return (
+    <div className="flex items-center gap-4">
+      <div style={{ height, width: height }} className="shrink-0">
+        <ResponsiveContainer>
+          <PieChart>
+            <Pie data={parts} dataKey="value" innerRadius="62%" outerRadius="92%" paddingAngle={2} stroke="none" isAnimationActive={false}>
+              {parts.map((p) => (
+                <Cell key={p.name} fill={p.color} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <ul className="min-w-0 flex-1 space-y-1.5 text-xs">
+        {parts.map((p) => (
+          <li key={p.name} className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-mist-300">
+              <span className="inline-block h-2 w-2 rounded-full" style={{ background: p.color }} />
+              {p.name}
+            </span>
+            <span className="tnum text-mist-100">{Math.round((p.value / total) * 100)} %</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

@@ -1,3 +1,4 @@
+import { InsightsCard } from './PerfTabs'
 import { useMemo } from 'react'
 import { useSoma } from '../hooks/useSoma'
 import { Ring } from '../components/ui/Ring'
@@ -67,6 +68,9 @@ export function Overview() {
 
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="md:col-span-2 xl:col-span-3">
+        <InsightsCard />
+      </div>
       <Card title="Aujourd’hui" className="md:col-span-2 xl:col-span-1">
         <div className="flex justify-around">
           <Ring
