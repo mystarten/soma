@@ -154,5 +154,6 @@ export function overloadSeries(today: DayKey, ctx: OverloadContext, days = 28): 
 
 /** Le bon moment pour retester un record : frais, peu chargé, récupération haute. */
 export function goodTimeForTest(res: OverloadResult, recovery7: number | null): boolean {
-  return res.score !== null && res.score < 40 && recovery7 !== null && recovery7 >= 65
+  /* Pas de test si un signal est net (ex. grosse dette de sommeil), même quand le total reste bas. */
+  return res.score !== null && res.score < 40 && recovery7 !== null && recovery7 >= 65 && res.components.every((c) => c.score === null || c.score < 60)
 }
