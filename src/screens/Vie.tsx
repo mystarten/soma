@@ -14,6 +14,7 @@ import { useRotation } from '../components/program/useRotation'
 import { useGoogle } from '../integrations/useGoogle'
 import { whoopConnectedFlag } from '../integrations/whoop'
 import { AgendaPanel, MailPanel } from '../components/vie/GooglePanels'
+import WeekGlance from '../components/vie/WeekGlance'
 import KeyMetrics from '../components/vie/KeyMetrics'
 import RecentWorkouts from '../components/vie/RecentWorkouts'
 import NextSessions from '../components/vie/NextSessions'
@@ -214,6 +215,7 @@ export default function Vie() {
       {/* Gauche : à venir, séances */}
       <div className="flex min-w-0 flex-col gap-3 lg:col-start-2 xl:col-start-1 xl:row-start-1">
         <PlanningPanel />
+        <WeekGlance />
         <NextSessions compact />
         <GoogleOnHome />
       </div>

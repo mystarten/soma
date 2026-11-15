@@ -17,6 +17,37 @@ import {
 const TONE: Record<Insight['tone'], string> = { good: '#41e08a', watch: '#ffc24b', info: '#8fb4ff' }
 const DAY_LABEL = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
 
+type Tone = 'good' | 'watch' | 'info'
+
+/** L'essentiel en deux secondes : un verdict en gros, quatre chiffres clés. Le détail vient en dessous. */
+function Headline({ tone, title, text, tiles }: { tone: Tone; title: string; text: string; tiles: { label: string; value: string; unit?: string; sub?: string; tone?: Tone }[] }) {
+  return (
+    <Card className="lg:col-span-2">
+      <div className="flex items-start gap-3">
+        <span className="mt-1.5 h-3 w-3 shrink-0 rounded-full" style={{ background: TONE[tone], boxShadow: `0 0 12px ${TONE[tone]}` }} />
+        <div>
+          <p className="text-lg leading-tight font-semibold text-mist-100 sm:text-xl">{title}</p>
+          <p className="mt-0.5 text-sm text-mist-300">{text}</p>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {tiles.map((t) => (
+          <div key={t.label} className="rounded-2xl bg-white/4 px-4 py-3 hairline">
+            <div className="text-[0.68rem] tracking-wide text-mist-500 uppercase">{t.label}</div>
+            <div className="mt-1 flex items-baseline gap-1">
+              <span className="text-3xl leading-none font-semibold tnum" style={{ color: t.tone ? TONE[t.tone] : 'var(--color-mist-100)' }}>{t.value}</span>
+              {t.unit && <span className="text-sm text-mist-500">{t.unit}</span>}
+            </div>
+            {t.sub && <div className="mt-1 text-[0.7rem] text-mist-500">{t.sub}</div>}
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+const r0 = (v: number | null) => (v === null ? '—' : String(Math.round(v)))
+
 function Empty({ children }: { children: string }) {
   return <p className="py-6 text-center text-xs text-mist-500">{children}</p>
 }
@@ -84,21 +115,22 @@ export function RecoveryTab() {
   }, [profile, data.settings.sleepGoalHours, data.sleepScore])
   const hasAny = days.some((d) => by.get(d)?.recovery !== undefined)
 
+  const [pRec, pHrv, , pSleep] = profile
+  const deepPct = stages?.deep ?? null
+  const goalH = data.settings.sleepGoalHours
+  const recTone: Tone = pRec.now === null ? 'info' : pRec.now >= 67 ? 'good' : pRec.now >= 34 ? 'info' : 'watch'
+  const headline = pRec.now === null ? 'En attente des données WHOOP' : pRec.now >= 67 ? 'Tu récupères bien' : pRec.now >= 34 ? 'Récupération moyenne' : 'Ton corps demande du calme'
+  const hrvWord = pHrv.deltaPct === null ? '' : ` VFC ${pHrv.deltaPct >= 0 ? 'en hausse' : 'en baisse'} (${pHrv.deltaPct >= 0 ? '+' : ''}${pHrv.deltaPct.toFixed(0)} %).`
+  const sleepWord = pSleep.now === null ? '' : ` Nuits de ${pSleep.now.toFixed(1)} h pour ${goalH} h visées.`
   return (
     <div className="grid gap-3 lg:grid-cols-2">
+      <Headline tone={recTone} title={headline} text={`Moyenne des 7 derniers jours.${hrvWord}${sleepWord}`.trim()} tiles={[
+        { label: 'Récupération', value: r0(pRec.now), unit: '%', sub: 'moyenne 7 jours', tone: pRec.now === null ? undefined : pRec.now >= 67 ? 'good' : pRec.now >= 34 ? 'info' : 'watch' },
+        { label: 'VFC', value: r0(pHrv.now), unit: 'ms', sub: pHrv.base === null ? undefined : `ta base : ${Math.round(pHrv.base)} ms`, tone: pHrv.deltaPct === null ? undefined : pHrv.deltaPct >= 0 ? 'good' : 'watch' },
+        { label: 'Nuit moyenne', value: pSleep.now === null ? '—' : pSleep.now.toFixed(1), unit: 'h', sub: `objectif ${goalH} h`, tone: pSleep.now === null ? undefined : pSleep.now >= goalH - 0.25 ? 'good' : 'watch' },
+        { label: 'Sommeil profond', value: deepPct === null ? '—' : deepPct.toFixed(0), unit: '%', sub: 'de la nuit · norme 13 – 23 %', tone: deepPct === null ? undefined : deepPct >= 13 ? 'good' : 'watch' },
+      ]} />
       <Card title="Forme du moment" subtitle="7 derniers jours comparés à ta base de 30 jours">
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {profile.map((p) => {
-            const good = p.deltaPct === null ? null : p.higherBetter ? p.deltaPct >= 0 : p.deltaPct <= 0
-            return (
-              <div key={p.label} className="rounded-xl bg-white/4 p-3 hairline">
-                <Stat label={p.label} value={p.now === null ? '—' : p.label === 'Sommeil' ? p.now.toFixed(1) : Math.round(p.now)} unit={p.unit}
-                  color={good === null ? undefined : good ? '#41e08a' : '#ffc24b'}
-                  hint={p.deltaPct === null ? undefined : `${p.deltaPct >= 0 ? '+' : ''}${p.deltaPct.toFixed(0)} % vs base`} />
-              </div>
-            )
-          })}
-        </div>
         <RadarProfile data={radar} height={210} />
       </Card>
 
@@ -149,8 +181,22 @@ export function EffortTab() {
   const total = zones.reduce((a, b) => a + b, 0)
   const zoneColors = ['#4f5f7a', '#27e0c0', '#41e08a', '#ffc24b', '#ff8f45']
 
+  const cur = weeks[weeks.length - 1]
+  const prev = weeks[weeks.length - 2]
+  const minutes = cur.force + cur.course + cur.cardio + cur.autre
+  const strains = lastDays(today, 7).map((d) => data.checkinByDay.get(d)?.whoopDayStrain).filter((v): v is number => typeof v === 'number')
+  const avgStrain = strains.length ? strains.reduce((a, b) => a + b, 0) / strains.length : null
+  const ratio = data.balance.ratio
+  const effTone: Tone = ratio > 1.5 ? 'watch' : 'good'
+  const effTitle = ratio > 1.5 ? 'Tu montes vite en charge' : ratio && ratio < 0.8 ? 'Semaine plutôt calme' : 'Charge dans la zone confortable'
   return (
     <div className="grid gap-3 lg:grid-cols-2">
+      <Headline tone={effTone} title={effTitle} text={`Cette semaine : ${cur.sessions} séance${cur.sessions > 1 ? 's' : ''}${prev ? ` (${prev.sessions} la semaine passée)` : ''}. Ta charge récente est ${ratio ? `${ratio.toFixed(2)} fois ta charge habituelle` : 'encore en construction'}.`} tiles={[
+        { label: 'Séances', value: String(cur.sessions), sub: `${prev?.sessions ?? 0} la semaine passée` },
+        { label: 'Temps', value: minutes >= 60 ? `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}` : `${minutes}`, unit: minutes >= 60 ? '' : 'min', sub: 'cette semaine' },
+        { label: 'Strain moyen', value: avgStrain === null ? '—' : avgStrain.toFixed(1), unit: '/21', sub: '7 jours · WHOOP', tone: avgStrain === null ? undefined : avgStrain > 16 ? 'watch' : 'info' },
+        { label: 'Charge récente', value: ratio ? ratio.toFixed(2) : '—', sub: ratio > 1.5 ? 'montée rapide' : ratio && ratio < 0.8 ? 'phase calme' : 'zone confortable', tone: effTone },
+      ]} />
       <Card title="Volume par semaine" subtitle="Minutes d’entraînement par type, 10 semaines">
         <Bars data={weeks.map((w) => ({ day: w.start, force: w.force, course: w.course, cardio: w.cardio, autre: w.autre }))} stacked
           series={[{ key: 'force', color: 'var(--accent)', name: 'Force', unit: 'min' }, { key: 'course', color: '#ff8f45', name: 'Course', unit: 'min' }, { key: 'cardio', color: '#27e0c0', name: 'Cardio / natation', unit: 'min' }, { key: 'autre', color: '#4f5f7a', name: 'Autre', unit: 'min' }]} height={210} />
@@ -224,8 +270,18 @@ export function ProgressTab() {
   const weight = useMemo(() => lastDays(today, 90).map((d) => ({ day: d, kg: data.checkinByDay.get(d)?.weightKg ?? null })), [today, data.checkinByDay])
   const progDone = data.programMarks.length + data.workouts.filter((w) => w.program?.length).length
 
+  const activeGoals = data.goalProgress.filter((p) => p.goal.active)
+  const tenus = activeGoals.filter((p) => p.status === 'ok').length
+  const sessions4 = done.slice(-4).reduce((a, c) => a + c.sessions, 0)
+  const pTone: Tone = !activeGoals.length ? 'info' : tenus / activeGoals.length >= 0.6 ? 'good' : 'info'
   return (
     <div className="grid gap-3 lg:grid-cols-2">
+      <Headline tone={pTone} title={!activeGoals.length ? 'Définis tes objectifs pour suivre ta progression' : `${tenus} objectif${tenus > 1 ? 's' : ''} sur ${activeGoals.length} tenu${tenus > 1 ? 's' : ''} cette période`} text={streak >= 2 ? `${streak} semaines d’affilée avec 2 séances ou plus : la régularité est là.` : 'La régularité fait progresser plus que l’intensité : vise 2 à 3 séances chaque semaine.'} tiles={[
+        { label: 'Objectifs tenus', value: `${tenus}/${activeGoals.length}`, tone: pTone },
+        { label: 'Série', value: String(streak), unit: 'sem.', sub: '2 séances ou plus', tone: streak >= 3 ? 'good' : undefined },
+        { label: '4 dernières semaines', value: String(sessions4), unit: 'séances' },
+        { label: 'Programme', value: String(progDone), unit: 'séances', sub: 'cochées au total' },
+      ]} />
       <Card title="Où j’en suis de mes objectifs" subtitle="Cette semaine et ce mois, d’après ce que tu as défini" className="lg:col-span-2" action={<button onClick={() => navigate('objectifs')} className="text-xs text-accent">Modifier →</button>}>
         {data.goalProgress.filter((p) => p.goal.active).length === 0 ? (
           <Empty>Aucun objectif pour l’instant : ajoute-les dans l’onglet Objectifs.</Empty>

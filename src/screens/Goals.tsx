@@ -138,10 +138,6 @@ export default function Goals() {
     <div className="mx-auto w-full max-w-6xl">
       {toast.node}
 
-      <div className="mb-3">
-        <BigGoal />
-      </div>
-
       <Card className="mb-3">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -245,6 +241,10 @@ export default function Goals() {
             </Card>
           )
         })}
+      </div>
+
+      <div className="mt-4">
+        <BigGoal />
       </div>
 
       <p className="mt-3 px-2 text-center text-[0.68rem] text-mist-700">

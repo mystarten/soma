@@ -136,6 +136,28 @@ export default function Analysis() {
         <Segmented value={range} onChange={setRange} options={RANGES} />
       </div>
 
+      <Card className="mb-3" title="Ce qu’il faut retenir" subtitle="Les liens entre tes nuits, tes efforts et ta récupération">
+        <ul className="mt-3 space-y-2 text-sm text-mist-100">
+          {[
+            { r: correlations.rSleep, text: 'Plus tu dors, mieux tu récupères le lendemain', neg: 'Dormir plus ne change pas (ou nuit) à ta récupération' },
+            { r: correlations.rLoad, text: 'Un effort fort est suivi d’une récupération plus basse', neg: '' },
+            { r: correlations.rHrv, text: 'Quand la VFC est haute, ta FC de repos est basse', neg: '' },
+          ].map((c, i) => {
+            const strength = c.r === null ? null : Math.abs(c.r) >= 0.5 ? 'net' : Math.abs(c.r) >= 0.25 ? 'modéré' : 'faible'
+            const expected = i === 0 ? (c.r ?? 0) > 0 : i === 1 ? (c.r ?? 0) < 0 : (c.r ?? 0) < 0
+            return (
+              <li key={i} className="flex items-start gap-2">
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: strength === null ? '#5a6c86' : strength === 'faible' ? '#5a6c86' : expected ? '#41e08a' : '#ffc24b' }} />
+                <span>
+                  {c.text}
+                  <span className="text-mist-500"> · {strength === null ? 'pas assez de données' : strength === 'faible' ? 'lien faible chez toi' : `lien ${strength}${expected ? '' : ' (inverse de l’attendu)'}`}</span>
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      </Card>
+
       <div className="grid gap-3 lg:grid-cols-2">
         <Card title="Charge par jour" subtitle="0 → 21, durée × intensité + volume">
           <Bars
