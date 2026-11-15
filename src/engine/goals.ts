@@ -38,6 +38,25 @@ export interface GoalContext {
 
 const RUN_5K_ID = 'run_5k'
 
+const SESSION_GAP_MIN = 60
+
+/** Séances distinctes : deux enregistrements qui se touchent (à moins d'une heure d'écart) ne font qu'une séance. */
+export function distinctSessions(ws: Workout[]): Workout[] {
+  const sorted = [...ws].sort((a, b) => a.startedAt.localeCompare(b.startedAt))
+  const out: Workout[] = []
+  let end = 0
+  for (const w of sorted) {
+    const start = new Date(w.startedAt).getTime()
+    if (out.length && start - end <= SESSION_GAP_MIN * 60_000) {
+      end = Math.max(end, start + w.durationMin * 60_000)
+      continue
+    }
+    out.push(w)
+    end = start + w.durationMin * 60_000
+  }
+  return out
+}
+
 export const SOCLE_LABEL: Record<NonNullable<Goal['socle']>, string> = {
   street: 'Street workout',
   jambes: 'Jambes',
@@ -127,23 +146,27 @@ export function evaluateGoal(
   let hasData = true
   let detail: string | undefined
   let series: GoalProgress['series']
+  let matched: Workout[] | undefined
   let unit = goal.unit ?? ''
 
   switch (goal.kind) {
     case 'sessions_count': {
-      actual = workouts.filter((w) => w.cardio?.modality !== 'marche').length
+      matched = distinctSessions(workouts.filter((w) => w.cardio?.modality !== 'marche'))
+      actual = matched.length
       unit = unit || 'séances'
       break
     }
     case 'sessions_by_kind': {
-      actual = workouts.filter((w) => w.kind === goal.workoutKind).length
+      matched = distinctSessions(workouts.filter((w) => w.kind === goal.workoutKind))
+      actual = matched.length
       unit = unit || 'séances'
       detail = goal.workoutKind ? WORKOUT_KIND_LABEL[goal.workoutKind] : undefined
       break
     }
     case 'sessions_socle': {
       const so = goal.socle ?? 'street'
-      actual = workouts.filter((w) => countsForSocle(w, so)).length
+      matched = distinctSessions(workouts.filter((w) => countsForSocle(w, so)))
+      actual = matched.length
       unit = unit || 'séances'
       detail = SOCLE_LABEL[so]
       break
@@ -302,6 +325,7 @@ export function evaluateGoal(
     label: unit,
     detail,
     series,
+    matched,
   }
 }
 

@@ -386,6 +386,8 @@ export interface GoalProgress {
   label: string
   detail?: string
   series?: { label: string; planned: number; actual: number }[]
+  /** Séances prises en compte (objectifs de nombre de séances) : pour vérifier d'où vient le chiffre. */
+  matched?: Workout[]
 }
 
 /* ── Objectif à date (compte à rebours) ────────────────────────────────── */

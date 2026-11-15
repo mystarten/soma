@@ -309,6 +309,8 @@ export function workoutRowToWorkout(row: Record<string, string>): Workout | null
   const mapped = mapActivity(activity)
   /* Une marche n'est pas une séance : la montre en crée une dès qu'on marche un peu. */
   if (mapped.modality === 'marche') return null
+  /* Activité inconnue : on n'invente pas une séance de cardio. */
+  if (mapped.modality === 'autre') return null
   const strain = num(pick(row, 'Activity Strain', 'activity strain', 'strain'))
   const avgHr = num(pick(row, 'Average HR (bpm)', 'average hr'))
   const maxHr = num(pick(row, 'Max HR (bpm)', 'max hr'))

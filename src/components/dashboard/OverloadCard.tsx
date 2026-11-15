@@ -40,6 +40,7 @@ function Gauge({ value, threshold, color }: { value: number | null; threshold: n
   )
 }
 
+const verdict = (s: number | null) => (s === null ? 'pas de données' : s < 20 ? 'très bien' : s < 40 ? 'bien' : s < 60 ? 'à surveiller' : 'élevé')
 const barColor = (s: number | null) => (s === null ? '#3b4a63' : s >= 60 ? '#ff8f45' : s >= 35 ? '#ffc24b' : '#41e08a')
 
 /** Charge de fond : la fatigue accumulée sur plusieurs semaines, et quand faire une décharge. */
@@ -120,13 +121,14 @@ export default function OverloadCard() {
       </div>
 
       <div className="mt-4 border-t border-white/6 pt-3">
-        <p className="mb-2 text-xs font-medium text-mist-300">Ce qui compose ce chiffre</p>
+        <p className="text-xs font-medium text-mist-300">Ce qui compose ce chiffre</p>
+        <p className="mb-2 text-[0.68rem] text-mist-500">Chaque barre mesure la <b>fatigue</b> de ce signal : <b>plus c’est bas, mieux c’est</b>. 0 % = aucun signe de fatigue.</p>
         <ul className="grid gap-x-6 gap-y-2.5 md:grid-cols-2">
           {now.components.map((c) => (
             <li key={c.key}>
               <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
                 <span className="text-mist-100">{c.label}</span>
-                <span className="tnum text-mist-300">{c.score === null ? '—' : `${Math.round(c.score)} %`}</span>
+                <span className="tnum" style={{ color: barColor(c.score) }}>{verdict(c.score)}{c.score === null ? '' : ` · ${Math.round(c.score)} %`}</span>
               </div>
               <ProgressBar ratio={(c.score ?? 0) / 100} color={barColor(c.score)} />
               <p className="mt-0.5 text-[0.66rem] text-mist-500">{c.detail}</p>

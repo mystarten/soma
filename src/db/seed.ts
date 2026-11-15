@@ -105,6 +105,11 @@ async function migrations(): Promise<void> {
     for (const w of walks) await deleteWorkout(w.id)
     await db.meta.put({ key: 'whoop_walks_removed_v1', value: nowIso() })
   }
+  if (!(await db.meta.get('whoop_other_removed_v1'))) {
+    const others = (await db.workouts.toArray()).filter((w) => !w.deleted && w.source === 'whoop' && w.cardio?.modality === 'autre')
+    for (const w of others) await deleteWorkout(w.id)
+    await db.meta.put({ key: 'whoop_other_removed_v1', value: nowIso() })
+  }
   await mergeProgramWithWhoop()
   if (!(await db.meta.get('gymnastics_street_v1'))) {
     const rows = (await db.workouts.toArray()).filter(

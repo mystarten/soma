@@ -120,6 +120,7 @@ export default function Goals() {
   const [choosing, setChoosing] = useState(false)
   const [period, setPeriod] = useState<GoalPeriod>('week')
   const [why, setWhy] = useState(false)
+  const [openList, setOpenList] = useState<string | null>(null)
   const toast = useToast()
 
   const progress = useMemo(
@@ -227,6 +228,24 @@ export default function Goals() {
                 </div>
                 <ProgressBar ratio={p.ratio} color={color} />
               </div>
+
+              {p.matched && p.matched.length > 0 && (
+                <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => setOpenList(openList === p.goal.id ? null : p.goal.id)} className="text-[0.7rem] text-accent">
+                    {openList === p.goal.id ? 'Masquer' : `Voir les ${p.matched.length} séance${p.matched.length > 1 ? 's' : ''} comptée${p.matched.length > 1 ? 's' : ''}`}
+                  </button>
+                  {openList === p.goal.id && (
+                    <ul className="mt-1.5 space-y-1 text-[0.7rem] text-mist-300">
+                      {p.matched.map((w) => (
+                        <li key={w.id} className="flex justify-between gap-2 rounded-lg bg-white/4 px-2.5 py-1.5">
+                          <span className="truncate">{format(parseDay(w.day), 'EEE d', { locale: fr })} · {w.title || WORKOUT_KIND_LABEL[w.kind]}</span>
+                          <span className="shrink-0 text-mist-500">{w.durationMin} min · {w.source === 'whoop' ? 'WHOOP' : 'saisie'}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
 
               {p.series && p.series.length > 0 && (
                 <div className="mt-2">

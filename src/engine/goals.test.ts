@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { alignmentScore, countsForSocle, evaluateGoal, goalPeriod, goalScore, weeklySentence } from './goals'
+import { alignmentScore, countsForSocle, distinctSessions, evaluateGoal, goalPeriod, goalScore, weeklySentence } from './goals'
 import type { Goal } from '../types'
 import { EXERCISES, makeCheckIn, makeSet, makeWorkout } from '../test/fixtures'
 import { lastDays } from './time'
@@ -206,5 +206,15 @@ describe('objectifs', () => {
     expect(r).not.toBeNull()
     expect(r!).toBeGreaterThan(0.4)
     expect(goalScore(g, ctx(), '2025-06-25')).toBe(0)
+  })
+
+  it('deux enregistrements qui se touchent ne font qu’une séance', () => {
+    const a = makeWorkout({ id: 'a', day: '2025-06-24', startedAt: '2025-06-24T17:00:00.000Z', durationMin: 30, kind: 'street' })
+    const b = makeWorkout({ id: 'b', day: '2025-06-24', startedAt: '2025-06-24T17:45:00.000Z', durationMin: 20, kind: 'street' })
+    const c = makeWorkout({ id: 'c', day: '2025-06-24', startedAt: '2025-06-24T21:00:00.000Z', durationMin: 40, kind: 'street' })
+    expect(distinctSessions([a, b, c])).toHaveLength(2)
+    const p = evaluateGoal(goal({ kind: 'sessions_socle', socle: 'street', target: 5, direction: 'min' }), '2025-06-23', '2025-06-29', ctx({ workouts: [a, b, c] }))
+    expect(p.actual).toBe(2)
+    expect(p.matched).toHaveLength(2)
   })
 })
