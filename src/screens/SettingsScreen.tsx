@@ -45,6 +45,8 @@ import {
 } from '../db/repo'
 import { uid } from '../db/db'
 import { generateDemoData, removeDemoData } from '../db/demo'
+import PageHero, { IconTitle } from '../components/ui/PageHero'
+import { whoopConnectedFlag } from '../integrations/whoop'
 import { DEFAULT_FATIGUE_CONFIG, ZONE_LABEL, ZONE_SHORT } from '../engine/fatigueConfig'
 import { defaultHrZones } from '../engine/cardio'
 import { WORKOUT_KIND_LABEL } from '../engine/muscleMap'
@@ -89,11 +91,21 @@ export default function SettingsScreen({ param }: { param?: string }) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
       {toast.node}
+      <PageHero
+        icon="gear"
+        title="Réglages"
+        text="Ton profil, tes appareils connectés et tes données. Tout reste sur ton appareil."
+        stats={[
+          { label: 'Poids', value: String(s.weightKg ?? 70), unit: 'kg' },
+          { label: 'WHOOP', value: whoopConnectedFlag() ? 'connecté' : 'non relié' },
+          { label: 'Nuit visée', value: String(s.sleepGoalHours), unit: 'h' },
+        ]}
+      />
 
       {/* ── Profil ── */}
-      <Card title="Profil" subtitle="Ces valeurs servent au calcul de la charge et de la fatigue">
+      <Card title={<IconTitle icon="user">Profil</IconTitle>} subtitle="Ces valeurs servent au calcul de la charge et de la fatigue">
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field label="Taille" hint="Jamais écrite dans le code.">
             <Stepper
@@ -147,14 +159,14 @@ export default function SettingsScreen({ param }: { param?: string }) {
       </Card>
 
       {/* ── Records ── */}
-      <Card title="Records" subtitle="Tractions, pompes, dips, 5 km… se modifient dans Séances → Records.">
+      <Card title={<IconTitle icon="dumbbell">Records</IconTitle>} subtitle="Tractions, pompes, dips, 5 km… se modifient dans Séances → Records.">
         <Button className="mt-2" onClick={() => navigate('seances')}>
           Ouvrir Séances
         </Button>
       </Card>
 
       {/* ── Préférences ── */}
-      <Card title="Préférences">
+      <Card title={<IconTitle icon="sliders">Préférences</IconTitle>}>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field label="Début de semaine" group>
             <Segmented
@@ -207,7 +219,7 @@ export default function SettingsScreen({ param }: { param?: string }) {
       </Card>
 
       {/* ── Zones de FC ── */}
-      <Card title="Zones de fréquence cardiaque">
+      <Card title={<IconTitle icon="heart">Zones de fréquence cardiaque</IconTitle>}>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field label="FC max">
             <Stepper
@@ -247,7 +259,7 @@ export default function SettingsScreen({ param }: { param?: string }) {
       </Card>
 
       {/* ── Objectifs ── */}
-      <Card title="Objectifs" subtitle="Ton grand objectif, ta nuit visée et tes objectifs de la semaine se règlent dans Tableau de bord → Objectifs.">
+      <Card title={<IconTitle icon="target">Objectifs</IconTitle>} subtitle="Ton grand objectif, ta nuit visée et tes objectifs de la semaine se règlent dans Tableau de bord → Objectifs.">
         <Button className="mt-2" onClick={() => navigate('objectifs')}>
           Ouvrir les objectifs
         </Button>
@@ -403,7 +415,7 @@ export default function SettingsScreen({ param }: { param?: string }) {
       <GoogleSettings />
 
       {/* ── Données ── */}
-      <Card title="Mes données">
+      <Card title={<IconTitle icon="database">Mes données</IconTitle>}>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button
             onClick={async () => {

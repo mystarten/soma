@@ -15,8 +15,9 @@ import {
   verifyItems,
 } from '../engine/knowledge'
 import { saveNotes } from '../db/repo'
-import { Badge, Button, Card, Dot, EmptyState, Sheet, TextInput, useToast } from '../components/ui/primitives'
+import { Badge, Button, Card, Dot, Sheet, TextInput, useToast } from '../components/ui/primitives'
 import { NoteEditor, NoteReader, newNote } from '../components/knowledge/NoteViews'
+import PageHero, { Icon } from '../components/ui/PageHero'
 
 const AMBER = '#ffc24b'
 
@@ -70,6 +71,16 @@ export default function Knowledge() {
   return (
     <div className="mx-auto w-full max-w-4xl">
       {toast.node}
+      <PageHero
+        icon="brain"
+        title="Mon cerveau"
+        text="Tout ce que l’appli sait de toi : blessures, alimentation, programme, habitudes. Chaque fiche devient un neurone."
+        stats={[
+          { label: 'Fiches', value: String(data.notes.length) },
+          { label: 'Axes', value: String(groups.filter((g) => g.axe.slug).length) },
+          { label: 'À trancher', value: String(verify.length) },
+        ]}
+      />
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="min-w-[14rem] flex-1">
           <TextInput
@@ -86,17 +97,33 @@ export default function Knowledge() {
       </div>
 
       {data.notes.length === 0 ? (
-        <Card>
-          <EmptyState
-            title="Ton cerveau est vide pour l’instant"
-            hint="Importe ce que Claude sait de toi, ou crée une première fiche. Chaque fiche devient un neurone dans le réseau du cerveau."
-            action={
-              <Button variant="primary" className="mt-2" onClick={() => setImporting(true)}>
-                Importer depuis Claude
-              </Button>
-            }
-          />
-        </Card>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button onClick={() => setImporting(true)} className="glass flex items-start gap-3 rounded-[var(--radius-card)] p-4 text-left transition active:scale-[0.99] sm:col-span-2">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-accent/15 text-accent"><Icon name="link" size={22} /></span>
+            <span>
+              <span className="block text-base font-medium text-mist-100">Importer ce que Claude sait de toi</span>
+              <span className="block text-sm text-mist-500">Le plus rapide pour démarrer : tout est classé automatiquement en fiches.</span>
+            </span>
+          </button>
+          {[
+            { t: 'Blessures et douleurs', d: 'Ce qui fait mal, depuis quand, ce qui soulage.' },
+            { t: 'Alimentation', d: 'Repas types, protéines, horaires, ce qui te réussit.' },
+            { t: 'Sommeil et récupération', d: 'Tes habitudes de coucher, ce qui change ta nuit.' },
+            { t: 'Mon programme', d: 'Pourquoi ces séances, tes règles de roulement.' },
+          ].map((x) => (
+            <button
+              key={x.t}
+              onClick={() => setEditing({ ...newNote(), title: x.t })}
+              className="glass flex items-start gap-3 rounded-[var(--radius-card)] p-4 text-left transition active:scale-[0.99]"
+            >
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/6 text-mist-300"><Icon name="book" size={18} /></span>
+              <span>
+                <span className="block text-sm font-medium text-mist-100">{x.t}</span>
+                <span className="block text-xs text-mist-500">{x.d}</span>
+              </span>
+            </button>
+          ))}
+        </div>
       ) : results ? (
         <Card title={`${results.length} résultat${results.length > 1 ? 's' : ''}`} subtitle={`pour « ${query.trim()} »`}>
           <div className="mt-2 space-y-0.5">

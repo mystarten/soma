@@ -46,6 +46,9 @@ import { recommendedLoadKg } from '../engine/coach'
 import { groupByExercise, summarizeSets } from '../engine/sets'
 import { DEFAULT_REST_SEC } from '../engine/templates'
 import { navigate } from '../lib/router'
+import PageHero from '../components/ui/PageHero'
+import { MiniGauge } from '../components/ui/Ring'
+import { streetStreak, weeklyEffort } from '../engine/performance'
 
 const KINDS: WorkoutKind[] = ['street', 'muscu', 'course', 'cardio', 'abdos', 'mobilite', 'custom']
 const RUN_TYPES: RunType[] = ['footing', 'tempo', 'fractionne', 'cotes', 'sortie_longue', 'course', 'test']
@@ -65,6 +68,16 @@ function emptyWorkout(kind: WorkoutKind = 'street'): Workout {
     source: 'manual',
     updatedAt: now.toISOString(),
   }
+}
+
+const KIND_ACCENT: Record<string, string> = {
+  street: '#35e3ff',
+  muscu: '#9b7bff',
+  course: '#41e08a',
+  cardio: '#27e0c0',
+  abdos: '#ffc24b',
+  mobilite: '#8fb4ff',
+  custom: '#c8ef5a',
 }
 
 export default function Workouts({
@@ -115,9 +128,23 @@ export default function Workouts({
     return [...map.entries()]
   }, [data.workouts])
 
+  const weekRows = weeklyEffort(data.workouts, data.today, 2, data.settings.weekStartsOn)
+  const wk = weekRows[1]
+  const wkMin = wk.force + wk.course + wk.cardio + wk.autre
+  const streak = streetStreak(data.workouts, data.today)
   return (
     <div className="mx-auto w-full max-w-3xl">
       {toast.node}
+      <PageHero
+        icon="dumbbell"
+        title="Mes séances"
+        text="Le programme au centre, le journal de tout ce que tu as fait."
+        stats={[
+          { label: 'Cette semaine', value: String(wk.sessions), unit: wk.sessions > 1 ? 'séances' : 'séance' },
+          { label: 'Temps', value: wkMin >= 60 ? `${Math.floor(wkMin / 60)} h ${String(wkMin % 60).padStart(2, '0')}` : `${wkMin}`, unit: wkMin >= 60 ? '' : 'min' },
+          { label: 'Street d’affilée', value: String(streak.days), unit: streak.days > 1 ? 'jours' : 'jour' },
+        ]}
+      />
       <div className="mb-3 flex items-center justify-between gap-2">
         <Segmented
           value={tab}
@@ -283,8 +310,10 @@ function WorkoutRow({
   /* Séance importée sans détail : on propose de la compléter. */
   const needsDetail =
     setCount === 0 && ['street', 'muscu', 'abdos'].includes(workout.kind) && !workout.planned
+  const accent = KIND_ACCENT[workout.kind] ?? 'var(--accent)'
   return (
-    <Card>
+    <Card className="!pl-5">
+      <span className="absolute top-3 bottom-3 left-0 w-1 rounded-r-full" style={{ background: accent, boxShadow: `0 0 12px ${accent}` }} aria-hidden />
       <div className="flex items-start justify-between gap-3">
         <button onClick={onEdit} className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
@@ -327,7 +356,9 @@ function WorkoutRow({
           )}
         </button>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <Badge color="var(--accent)">{load.toFixed(1)} / 21</Badge>
+          <MiniGauge ratio={load / 21} color={accent} size={46}>
+            {load.toFixed(1)}
+          </MiniGauge>
           {!workout.program?.length && (
             <Button variant="ghost" className="px-2.5 py-1.5 text-[0.7rem]" onClick={onDuplicate}>
               Dupliquer

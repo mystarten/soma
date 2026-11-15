@@ -2,7 +2,7 @@ import type { CustomMetric, Settings, WeekdayPlan, WorkoutTypeDef } from '../typ
 import { EXERCISE_LIBRARY, TEMPLATE_SEEDS } from '../engine/muscleMap'
 import { db, nowIso } from './db'
 import { backfillTemplates, deleteGoal, deleteWorkout, getSettings, saveWorkout, saveWorkouts } from './repo'
-import { planMerges } from '../engine/merge'
+import { planFragments, planMerges } from '../engine/merge'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Amorçage du premier lancement : bibliothèque d'exercices, modèles,
@@ -99,6 +99,12 @@ async function migrations(): Promise<void> {
     if (rows.length) await saveWorkouts(rows.map((w) => ({ ...w, kind: 'street' as const, cardio: undefined, title: 'Street workout' })))
     await db.meta.put({ key: 'gymnastics_title_v2', value: nowIso() })
   }
+  if (!(await db.meta.get('whoop_walks_removed_v1'))) {
+    /* La montre classe chaque marche en « activité » : ce ne sont pas des séances. */
+    const walks = (await db.workouts.toArray()).filter((w) => !w.deleted && w.source === 'whoop' && (w.cardio?.modality === 'marche' || /walk|march/i.test(w.title ?? '')))
+    for (const w of walks) await deleteWorkout(w.id)
+    await db.meta.put({ key: 'whoop_walks_removed_v1', value: nowIso() })
+  }
   await mergeProgramWithWhoop()
   if (!(await db.meta.get('gymnastics_street_v1'))) {
     const rows = (await db.workouts.toArray()).filter(
@@ -152,12 +158,18 @@ export function referencePaceSecPerKm(settings: Settings): number | undefined {
   return ref.holdSec / 5
 }
 
-/** Fusionne en base les doublons « séance du programme + séance de la montre » (voir engine/merge). */
+/** Fusionne en base les activités découpées de la montre, puis les doublons « séance du programme + séance de la montre ». */
 export async function mergeProgramWithWhoop(): Promise<number> {
+  let n = 0
+  for (const f of planFragments(await db.workouts.toArray())) {
+    await saveWorkout(f.keep)
+    for (const d of f.drop) await deleteWorkout(d.id)
+    n++
+  }
   const plans = planMerges(await db.workouts.toArray())
   for (const p of plans) {
     await saveWorkout(p.keep)
     await deleteWorkout(p.drop.id)
   }
-  return plans.length
+  return n + plans.length
 }

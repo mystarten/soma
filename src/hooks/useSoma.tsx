@@ -66,6 +66,8 @@ export interface SomaData {
   observations: Observation[]
   goalProgress: GoalProgress[]
   alignment: number
+  /** Régularité : moyenne sur les 4 dernières semaines terminées. */
+  alignmentAvg: number
   syncState: SyncState
   /** Horodatage recalculé toutes les minutes, pour que le corps « vive ». */
   nowMs: number
@@ -172,6 +174,7 @@ export function SomaProvider({ children }: { children: ReactNode }) {
         return evaluateGoal(g, from, to, goalCtx)
       })
     const alignment = alignmentScore(liveGoals, goalCtx, today)
+    const alignmentAvg = alignmentScore(liveGoals, goalCtx, today, 'average')
 
     return {
       ready: seeded,
@@ -206,6 +209,7 @@ export function SomaProvider({ children }: { children: ReactNode }) {
       observations,
       goalProgress,
       alignment,
+      alignmentAvg,
       syncState,
       nowMs,
     }

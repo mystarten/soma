@@ -55,7 +55,7 @@ export function countsForSocle(w: Workout, socle: NonNullable<Goal['socle']>): b
   if (socle === 'abdos') return w.kind === 'abdos'
   if (socle === 'course') return w.kind === 'course'
   if (socle === 'natation') return w.kind === 'cardio' && w.cardio?.modality === 'natation'
-  if (socle === 'cardio') return (w.kind === 'cardio' && w.cardio?.modality !== 'natation') || w.kind === 'course'
+  if (socle === 'cardio') return (w.kind === 'cardio' && w.cardio?.modality !== 'natation' && w.cardio?.modality !== 'marche') || w.kind === 'course'
   return false
 }
 
@@ -131,7 +131,7 @@ export function evaluateGoal(
 
   switch (goal.kind) {
     case 'sessions_count': {
-      actual = workouts.length
+      actual = workouts.filter((w) => w.cardio?.modality !== 'marche').length
       unit = unit || 'séances'
       break
     }
@@ -337,12 +337,23 @@ export function goalScore(goal: Goal, ctx: GoalContext, today: DayKey): number |
   return ratios.length ? mean(ratios) : null
 }
 
-/** Score Alignement : moyenne des objectifs actifs, pondérée par leur importance (0 → 100). */
-export function alignmentScore(goals: Goal[], ctx: GoalContext, today: DayKey): number {
+/** Avancement (0 → 1) de la période en cours : ce que montre la carte de l'objectif. null = pas de données. */
+export function goalCurrent(goal: Goal, ctx: GoalContext, today: DayKey): number | null {
+  const { from, to } = goalPeriod(goal, today, ctx.weekStartsOn)
+  const p = evaluateGoal(goal, from, to, ctx)
+  return p.status === 'empty' ? null : clamp(p.ratio, 0, 1)
+}
+
+/**
+ * Score du plan (0 → 100) : moyenne des objectifs actifs, pondérée par leur importance.
+ * `current` : avancement de la semaine / du mois en cours (ce que montrent les cartes).
+ * `average` : régularité sur les 4 dernières semaines terminées.
+ */
+export function alignmentScore(goals: Goal[], ctx: GoalContext, today: DayKey, mode: 'current' | 'average' = 'current'): number {
   let num = 0
   let den = 0
   for (const goal of goals.filter((g) => g.active && !g.deleted)) {
-    const r = goalScore(goal, ctx, today)
+    const r = mode === 'current' ? goalCurrent(goal, ctx, today) : goalScore(goal, ctx, today)
     if (r === null) continue
     num += r * goal.weight
     den += goal.weight

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { planMerges } from './merge'
+import { planFragments, planMerges } from './merge'
 import { makeWorkout } from '../test/fixtures'
 
 describe('fusion programme + montre', () => {
@@ -19,5 +19,15 @@ describe('fusion programme + montre', () => {
     const other = makeWorkout({ id: 'p1', day: '2026-11-13', kind: 'street', source: 'manual', program: [{ code: 'T4', week: 1 }] })
     const legs = makeWorkout({ id: 'p2', day: '2026-11-14', kind: 'muscu', source: 'manual', program: [{ code: 'J1', week: 1 }] })
     expect(planMerges([whoop, other, legs])).toHaveLength(0)
+  })
+  it('regroupe les activités de la montre découpées à moins d’une heure', () => {
+    const a = makeWorkout({ id: 'a', day: '2026-11-14', startedAt: '2026-11-14T17:00:00.000Z', durationMin: 14, kind: 'street', source: 'whoop', whoopStrain: 4 })
+    const b = makeWorkout({ id: 'b', day: '2026-11-14', startedAt: '2026-11-14T17:20:00.000Z', durationMin: 40, kind: 'street', source: 'whoop', whoopStrain: 9 })
+    const c = makeWorkout({ id: 'c', day: '2026-11-14', startedAt: '2026-11-14T21:00:00.000Z', durationMin: 30, kind: 'street', source: 'whoop' })
+    const plans = planFragments([a, b, c])
+    expect(plans).toHaveLength(1)
+    expect(plans[0].keep.durationMin).toBe(54)
+    expect(plans[0].keep.whoopStrain).toBe(9)
+    expect(plans[0].drop.map((w) => w.id)).toEqual(['b'])
   })
 })

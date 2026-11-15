@@ -7,6 +7,7 @@ import { DEFAULT_RECORD_ROWS } from '../engine/records'
 import { Bars, Donut, RadarProfile, SmoothLines } from '../components/charts/charts'
 import { exerciseRecords } from '../engine/load'
 import { addDayKey, lastDays } from '../engine/time'
+import { sleepRegularity } from '../engine/sleep'
 import { movingAverage } from '../engine/stats'
 import {
   buildInsights, consistency, perceivedVsMeasured, perceptionGap, polarisation, recoveryAfterStrain,
@@ -128,6 +129,7 @@ export function RecoveryTab() {
     const s = by.get(day)?.sleep
     return { day, profond: s?.deepMin ? s.deepMin / 60 : null, paradoxal: s?.remMin ? s.remMin / 60 : null, leger: s?.lightMin ? s.lightMin / 60 : null }
   }), [by, today])
+  const reg = useMemo(() => sleepRegularity(by, today), [by, today])
   const radar = useMemo(() => {
     const clamp = (v: number) => Math.max(0, Math.min(100, v))
     const rel = (p: (typeof profile)[number], good: boolean) => (p.now === null || p.base === null ? 0 : clamp(60 + (good ? 1 : -1) * (p.deltaPct ?? 0) * 3))
@@ -137,9 +139,9 @@ export function RecoveryTab() {
       { axis: 'VFC', value: rel(hrv, true) },
       { axis: 'FC repos', value: rel(rhr, false) },
       { axis: 'Sommeil', value: slp.now === null ? 0 : clamp((slp.now / data.settings.sleepGoalHours) * 100) },
-      ...(data.sleepScore.score > 0 && data.sleepScore.consistencyPart > 0 ? [{ axis: 'Régularité', value: clamp(data.sleepScore.consistencyPart) }] : []),
+      ...(reg !== null ? [{ axis: 'Régularité', value: clamp(reg) }] : []),
     ]
-  }, [profile, data.settings.sleepGoalHours, data.sleepScore])
+  }, [profile, data.settings.sleepGoalHours, reg])
   const hasAny = days.some((d) => by.get(d)?.recovery !== undefined)
 
   const [pRec, pHrv, , pSleep] = profile

@@ -141,13 +141,14 @@ export default function Goals() {
       <Card className="mb-3">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <div className="text-[0.68rem] tracking-wider text-mist-500 uppercase">Score de ton plan</div>
+            <div className="text-[0.68rem] tracking-wider text-mist-500 uppercase">Score de ton plan · cette semaine</div>
             <div className="flex items-baseline gap-2">
               <span className="text-4xl font-semibold tnum" style={{ color: data.alignment >= 80 ? '#41e08a' : data.alignment >= 60 ? '#ffc24b' : '#ffb02e' }}>
                 {counted.length ? data.alignment : '—'}
               </span>
               <span className="text-sm text-mist-500">/ 100</span>
             </div>
+            {counted.length > 0 && <p className="mt-0.5 text-xs text-mist-500">Régularité sur les 4 dernières semaines : <span className="text-mist-300">{data.alignmentAvg} %</span></p>}
             <button onClick={() => setWhy((v) => !v)} className="mt-1 text-xs text-accent">
               {why ? 'Masquer' : 'Comment est-il calculé ?'}
             </button>
@@ -159,8 +160,8 @@ export default function Goals() {
         {why && (
           <div className="mt-3 space-y-2 border-t border-white/6 pt-3 text-xs leading-relaxed text-mist-300">
             <p>Chaque objectif actif donne un pourcentage : <b>ce que tu as fait ÷ ce que tu as visé</b>, au maximum 100 %. Faire plus que prévu ne compense pas un autre objectif.</p>
-            <p>Un objectif de <b>semaine</b> compte la moyenne de tes 4 dernières semaines terminées (la semaine en cours ne pénalise jamais). Un objectif de <b>mois</b> compte le mois en cours.</p>
-            <p>Le score est la moyenne de tous les objectifs, chacun pesant selon son <b>importance</b> (faible, normale, élevée). Un objectif mis en pause ou sans donnée ne compte pas.</p>
+            <p>Le <b>score</b> est l’avancement de la <b>semaine en cours</b> (ou du mois pour les objectifs mensuels), c’est-à-dire ce que montrent les cartes. Il est la moyenne de tous les objectifs, chacun pesant selon son <b>importance</b>. Un objectif en pause ou sans donnée ne compte pas.</p>
+            <p>La <b>régularité</b>, en dessous, est la moyenne de tes 4 dernières semaines terminées : elle dit si tu tiens le rythme dans la durée.</p>
             {data.goals.filter((g) => g.active).length > 0 && (
               <ul className="space-y-1 pt-1">
                 {data.goals.filter((g) => g.active).map((g) => {
