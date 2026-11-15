@@ -322,7 +322,7 @@ export function workoutRowToWorkout(row: Record<string, string>): Workout | null
     startedAt,
     durationMin: Math.round(durationMin),
     kind: mapped.kind,
-    title: activity || undefined,
+    title: /gymnas/i.test(activity ?? '') ? 'Street workout' : activity || undefined,
     whoopStrain: strain !== undefined ? clamp(strain, 0, 21) : undefined,
     avgHr,
     maxHr,

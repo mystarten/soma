@@ -123,6 +123,15 @@ export default function SettingsScreen({ param }: { param?: string }) {
               max={2020}
             />
           </Field>
+          <Field label="Années d’entraînement" hint="Pour adapter les conseils à ton niveau.">
+            <Stepper value={s.trainingYears ?? 1} onChange={(v) => void patch({ trainingYears: v })} min={0} max={40} step={0.5} precision={1} suffix="ans" />
+          </Field>
+          <Field label="Protéines par jour" hint="Ta moyenne habituelle, à peu près.">
+            <Stepper value={s.proteinG ?? 100} onChange={(v) => void patch({ proteinG: v })} min={30} max={300} step={5} suffix="g" />
+          </Field>
+          <Field label="Un repos tous les… jours" hint="Sert au conseil « repos ou séance ».">
+            <Stepper value={s.restEvery ?? 3} onChange={(v) => void patch({ restEvery: v })} min={2} max={7} suffix="j" />
+          </Field>
           <Field label="Niveau de référence">
             <Select
               value={s.level}

@@ -39,6 +39,7 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [dismissed, setDismissed] = useState(readDismissed)
   const dateLabel = (d?: string) => (d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '')
+  const [adjust, setAdjust] = useState(false)
   const nothingDone = stats.done === 0 && !dismissed
 
   return (
@@ -58,7 +59,14 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
         </div>
       </Card>
 
-      {nothingDone && <SetupCard program={program} onDone={(n) => toast.show(`${n} semaines marquées comme faites`)} onDismiss={() => {
+      {!nothingDone && (
+        <button onClick={() => setAdjust((v) => !v)} className="self-start text-xs text-accent">
+          {adjust ? 'Fermer' : 'Ajuster où j’en suis (ex. « je suis à la semaine 7 »)'}
+        </button>
+      )}
+
+      {(nothingDone || adjust) && <SetupCard program={program} onDone={(n) => { setAdjust(false); toast.show(`${n} semaines marquées comme faites`) }} onDismiss={() => {
+        setAdjust(false)
         try {
           window.localStorage.setItem(SETUP_KEY, '1')
         } catch {

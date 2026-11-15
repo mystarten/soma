@@ -4,8 +4,10 @@ import { ProgressBar } from '../ui/primitives'
 import { navigate } from '../../lib/router'
 import { STATUS_COLOR } from '../../engine/goals'
 import { addDayKey } from '../../engine/time'
-import { consistency, streakWeeks, weeklyEffort } from '../../engine/performance'
+import { recoveryProfile, restAdvice, streetStreak, weeklyEffort } from '../../engine/performance'
+import { workoutLoad } from '../../engine/load'
 
+const ADV = { good: '#41e08a', watch: '#ffc24b', info: '#8fb4ff' } as const
 const LETTERS = ['D', 'L', 'M', 'M', 'J', 'V', 'S']
 const fmtMin = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, '0')}` : `${Math.round(m)} min`)
 
@@ -19,7 +21,19 @@ export default function WeekGlance() {
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDayKey(cur.start, i)), [cur.start])
   const doneDays = new Set(data.workouts.filter((w) => !w.planned && !w.backfill).map((w) => w.day))
   const minutes = cur.force + cur.course + cur.cardio + cur.autre
-  const streak = streakWeeks(consistency(data.workouts, today, 12, settings.weekStartsOn), 2)
+  const street = useMemo(() => streetStreak(data.workouts, today), [data.workouts, today])
+  const advice = useMemo(() => {
+    const last = [...data.workouts].filter((w) => !w.planned).sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0]
+    const hrv = recoveryProfile(data.checkinByDay, today).find((p) => p.label === 'VFC')
+    return restAdvice({
+      streak: street.days,
+      todayDone: street.todayDone,
+      restEvery: settings.restEvery ?? 3,
+      recovery: data.checkinByDay.get(today)?.recovery ?? null,
+      lastLoad: last && (last.day === today || last.day === addDayKey(today, -1)) ? (last.whoopStrain ?? workoutLoad(last, data.loadCtx)) : 0,
+      hrvDeltaPct: hrv?.deltaPct ?? null,
+    })
+  }, [data.workouts, data.checkinByDay, data.loadCtx, today, street, settings.restEvery])
   const goals = data.goalProgress.filter((p) => p.goal.active && p.goal.period === 'week').slice(0, 3)
 
   return (
@@ -27,6 +41,10 @@ export default function WeekGlance() {
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-[0.95rem] font-medium text-mist-100">Ma semaine</h3>
         <button onClick={() => navigate('objectifs')} className="text-xs text-accent">Objectifs →</button>
+      </div>
+      <div className="mb-3 rounded-xl px-3 py-2" style={{ background: `${ADV[advice.tone]}1a`, borderLeft: `3px solid ${ADV[advice.tone]}` }}>
+        <p className="text-sm font-medium text-mist-100">{advice.title}</p>
+        <p className="text-xs text-mist-300">{advice.detail}</p>
       </div>
       <div className="flex justify-between">
         {days.map((d) => {
@@ -52,8 +70,8 @@ export default function WeekGlance() {
           <div className="text-[0.62rem] text-mist-500">d’entraînement</div>
         </div>
         <div className="rounded-xl bg-white/4 py-2 hairline">
-          <div className="text-lg font-semibold tnum text-mist-100">{streak}</div>
-          <div className="text-[0.62rem] text-mist-500">sem. de suite (2+ séances)</div>
+          <div className="text-lg font-semibold tnum text-mist-100">{street.days}</div>
+          <div className="text-[0.62rem] text-mist-500">jour{street.days > 1 ? 's' : ''} de street d’affilée</div>
         </div>
       </div>
       {goals.length > 0 ? (

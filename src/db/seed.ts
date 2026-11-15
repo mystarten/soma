@@ -1,7 +1,8 @@
 import type { CustomMetric, Settings, WeekdayPlan, WorkoutTypeDef } from '../types'
 import { EXERCISE_LIBRARY, TEMPLATE_SEEDS } from '../engine/muscleMap'
 import { db, nowIso } from './db'
-import { backfillTemplates, deleteGoal, getSettings, saveWorkouts } from './repo'
+import { backfillTemplates, deleteGoal, deleteWorkout, getSettings, saveWorkout, saveWorkouts } from './repo'
+import { planMerges } from '../engine/merge'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Amorçage du premier lancement : bibliothèque d'exercices, modèles,
@@ -93,6 +94,12 @@ async function migrations(): Promise<void> {
     }
     await db.meta.put({ key: 'goals_cleanup_v2', value: nowIso() })
   }
+  if (!(await db.meta.get('gymnastics_title_v2'))) {
+    const rows = (await db.workouts.toArray()).filter((w) => !w.deleted && w.source === 'whoop' && /gymnas/i.test(w.title ?? ''))
+    if (rows.length) await saveWorkouts(rows.map((w) => ({ ...w, kind: 'street' as const, cardio: undefined, title: 'Street workout' })))
+    await db.meta.put({ key: 'gymnastics_title_v2', value: nowIso() })
+  }
+  await mergeProgramWithWhoop()
   if (!(await db.meta.get('gymnastics_street_v1'))) {
     const rows = (await db.workouts.toArray()).filter(
       (w) => !w.deleted && w.source === 'whoop' && /gymnas/i.test(w.title ?? '') && w.kind !== 'street',
@@ -143,4 +150,14 @@ export function referencePaceSecPerKm(settings: Settings): number | undefined {
   const ref = settings.references.find((r) => r.exerciseId === RUN_5K_REFERENCE_ID)
   if (!ref?.holdSec) return undefined
   return ref.holdSec / 5
+}
+
+/** Fusionne en base les doublons « séance du programme + séance de la montre » (voir engine/merge). */
+export async function mergeProgramWithWhoop(): Promise<number> {
+  const plans = planMerges(await db.workouts.toArray())
+  for (const p of plans) {
+    await saveWorkout(p.keep)
+    await deleteWorkout(p.drop.id)
+  }
+  return plans.length
 }

@@ -10,7 +10,7 @@ import { addDayKey, lastDays } from '../engine/time'
 import { movingAverage } from '../engine/stats'
 import {
   buildInsights, consistency, perceivedVsMeasured, perceptionGap, polarisation, recoveryAfterStrain,
-  recoveryBySleep, recoveryByWeekday, recoveryProfile, sleepStageShare, streakWeeks, trendOf, weeklyEffort, zoneTotals,
+  proteinCheck, recoveryBySleep, recoveryByWeekday, recoveryProfile, sleepStageShare, streakWeeks, trendOf, weeklyEffort, zoneTotals,
   type Insight,
 } from '../engine/performance'
 
@@ -79,6 +79,33 @@ export function InsightsCard({ max = 4 }: { max?: number }) {
   )
 }
 
+/** Ce que l'appli sait de toi pour personnaliser les conseils : niveau, habitudes, protéines. */
+function ProfileCard() {
+  const data = useSoma()
+  const s = data.settings
+  const w = s.weightKg ?? 70
+  const prot = s.proteinG ? proteinCheck(s.proteinG, w) : null
+  return (
+    <Card className="lg:col-span-2" title="Conseils adaptés à toi" subtitle="Les repères de récupération sont comparés à TA moyenne (pas à une moyenne générale)" action={<button onClick={() => navigate('reglages')} className="text-xs text-accent">Modifier mon profil →</button>}>
+      <ul className="mt-3 grid gap-2 text-xs text-mist-300 sm:grid-cols-3">
+        <li className="rounded-xl bg-white/4 px-3 py-2 hairline">
+          <div className="text-[0.65rem] tracking-wide text-mist-500 uppercase">Entraînement</div>
+          <div className="text-sm text-mist-100">{s.trainingYears !== undefined ? `${s.trainingYears} an${s.trainingYears >= 2 ? 's' : ''}` : 'à renseigner'} · repos tous les {s.restEvery ?? 3} jours</div>
+        </li>
+        <li className="rounded-xl bg-white/4 px-3 py-2 hairline">
+          <div className="text-[0.65rem] tracking-wide text-mist-500 uppercase">Protéines</div>
+          <div className="text-sm text-mist-100">{s.proteinG ? `~${s.proteinG} g / jour · ${prot!.perKg.toFixed(1)} g/kg` : 'à renseigner'}</div>
+          {prot && <div className="mt-0.5 text-[0.68rem] text-mist-500">{prot.verdict === 'bas' ? `Repère pour progresser en force : ${prot.low} à ${prot.high} g. Tu es un peu en dessous : ça peut ralentir la récupération musculaire.` : prot.verdict === 'ok' ? 'Dans la plage utile pour progresser en force.' : 'Au-dessus du nécessaire : pas de bénéfice supplémentaire.'}</div>}
+        </li>
+        <li className="rounded-xl bg-white/4 px-3 py-2 hairline">
+          <div className="text-[0.65rem] tracking-wide text-mist-500 uppercase">Ce qui est personnalisé</div>
+          <div className="mt-0.5 text-[0.68rem] text-mist-500">VFC, FC de repos et récupération : comparées à ta base des 30 derniers jours. Sommeil : à ton objectif d’heures. Phases de sommeil : normes générales.</div>
+        </li>
+      </ul>
+    </Card>
+  )
+}
+
 export function RecoveryTab() {
   const data = useSoma()
   const { checkinByDay: by, today } = data
@@ -130,6 +157,7 @@ export function RecoveryTab() {
         { label: 'Nuit moyenne', value: pSleep.now === null ? '—' : pSleep.now.toFixed(1), unit: 'h', sub: `objectif ${goalH} h`, tone: pSleep.now === null ? undefined : pSleep.now >= goalH - 0.25 ? 'good' : 'watch' },
         { label: 'Sommeil profond', value: deepPct === null ? '—' : deepPct.toFixed(0), unit: '%', sub: 'de la nuit · norme 13 – 23 %', tone: deepPct === null ? undefined : deepPct >= 13 ? 'good' : 'watch' },
       ]} />
+      <ProfileCard />
       <Card title="Forme du moment" subtitle="7 derniers jours comparés à ta base de 30 jours">
         <RadarProfile data={radar} height={210} />
       </Card>

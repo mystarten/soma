@@ -2,6 +2,7 @@ import type { CheckIn, DayKey, Workout } from '../types'
 import { addDayKey, lastDays } from './time'
 import { mean, pearson } from './stats'
 import { sleepHours } from './sleep'
+import { socleOf } from './rotation'
 
 /* Analyses croisées WHOOP × séances saisies. Fonctions pures, testables. */
 
@@ -293,3 +294,46 @@ export function buildInsights(input: {
 }
 
 export { pearson }
+
+/* ── Enchaînement et repos ─────────────────────────────────────────────── */
+
+const isStreet = (w: Workout) => !w.backfill && !w.planned && (w.kind === 'street' || (w.program ?? []).some((r) => socleOf(r.code) === 'street'))
+
+/** Jours de street d'affilée (en comptant aujourd'hui, ou hier si aujourd'hui n'a pas encore de séance). */
+export function streetStreak(workouts: Workout[], today: DayKey): { days: number; todayDone: boolean; lastDay: DayKey | null } {
+  const days = new Set(workouts.filter(isStreet).map((w) => w.day))
+  const todayDone = days.has(today)
+  let cursor = todayDone ? today : addDayKey(today, -1)
+  let n = 0
+  while (days.has(cursor)) {
+    n++
+    cursor = addDayKey(cursor, -1)
+  }
+  const last = [...days].sort().pop() ?? null
+  return { days: n, todayDone, lastDay: last }
+}
+
+export interface RestAdvice { tone: 'good' | 'watch' | 'info'; title: string; detail: string }
+
+/** Conseil du jour : s'entraîner, alléger ou se reposer, d'après l'enchaînement, la récupération et la dernière charge. */
+export function restAdvice(i: { streak: number; todayDone: boolean; restEvery: number; recovery: number | null; lastLoad: number; hrvDeltaPct: number | null }): RestAdvice {
+  const { streak, todayDone, restEvery, recovery, lastLoad, hrvDeltaPct } = i
+  const heavy = lastLoad >= 14
+  /* Une grosse séance compte pour une journée et demie. */
+  const effective = streak + (heavy ? 0.5 : 0)
+  const low = recovery !== null && recovery < 34
+  const hrvDown = hrvDeltaPct !== null && hrvDeltaPct <= -8
+  const when = todayDone ? 'demain' : 'aujourd’hui'
+  if (low) return { tone: 'watch', title: `Repos conseillé ${when}`, detail: `Récupération à ${Math.round(recovery!)} % : laisse le corps reprendre, marche ou mobilité.` }
+  if (effective >= restEvery) return { tone: 'watch', title: `Jour de repos conseillé ${when}`, detail: `${streak} jour${streak > 1 ? 's' : ''} de street d’affilée${heavy ? ' dont une grosse séance' : ''} : tu t’étais fixé un repos tous les ${restEvery} jours.` }
+  if (effective >= restEvery - 1 && (hrvDown || (recovery !== null && recovery < 60) || heavy))
+    return { tone: 'info', title: `Séance légère ou repos ${when}`, detail: `${streak} jour${streak > 1 ? 's' : ''} d’affilée${hrvDown ? ', VFC en baisse' : recovery !== null && recovery < 60 ? `, récupération à ${Math.round(recovery)} %` : ', dernière séance lourde'} : écoute ton corps.` }
+  if (recovery !== null && recovery >= 67 && !hrvDown) return { tone: 'good', title: `Bon pour une vraie séance ${when}`, detail: `Récupération à ${Math.round(recovery)} %${streak ? `, ${streak} jour${streak > 1 ? 's' : ''} d’affilée` : ''} : tu peux pousser.` }
+  return { tone: 'info', title: `Séance normale possible ${when}`, detail: recovery !== null ? `Récupération à ${Math.round(recovery)} % : vas-y sans forcer.` : 'Pas encore de récupération du jour.' }
+}
+
+/** Repère de protéines : g/kg et plage utile pour l'entraînement de force (1,6 – 2,2 g/kg). */
+export function proteinCheck(grams: number, weightKg: number): { perKg: number; low: number; high: number; verdict: 'bas' | 'ok' | 'haut' } {
+  const perKg = grams / weightKg
+  return { perKg, low: Math.round(1.6 * weightKg), high: Math.round(2.2 * weightKg), verdict: perKg < 1.6 ? 'bas' : perKg > 2.2 ? 'haut' : 'ok' }
+}

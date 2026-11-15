@@ -77,6 +77,7 @@ export default function BodyView({
   const [render3d, setRender3d] = useState(false)
   /** Vrai quand on est assez près du cerveau pour voir les neurones. */
   const [deep, setDeep] = useState(false)
+  const [zonesOpen, setZonesOpen] = useState(false)
   const [diveCommand, setDiveCommand] = useState<{ to: number; nonce: number }>()
   const diveTo = (to: number) => setDiveCommand((c) => ({ to, nonce: (c?.nonce ?? 0) + 1 }))
   /** Va voir une région du corps de près (cœur, épaule, genou…). */
@@ -371,7 +372,12 @@ export default function BodyView({
           <div className="flex flex-wrap items-center gap-1.5">
             <Segmented value={layer} onChange={setLayer} options={LAYERS} size="sm" />
             {!compact && use3d && (
-              <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Voir de près">
+              <button onClick={() => setZonesOpen((v) => !v)} className="rounded-lg bg-white/6 px-2.5 py-1.5 text-xs text-mist-300 hairline sm:hidden" aria-expanded={zonesOpen}>
+                Zones {zonesOpen ? '▴' : '▾'}
+              </button>
+            )}
+            {!compact && use3d && (
+              <div className={`${zonesOpen ? 'flex' : 'hidden sm:flex'} flex-wrap items-center gap-1`} role="group" aria-label="Voir de près">
                 {REGIONS.map((r) => (
                   <button
                     key={r.label}

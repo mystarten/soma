@@ -6,6 +6,7 @@ import type { WhoopImportPreview } from '../types'
 import { Badge, Button, Card, Stat, useToast } from '../components/ui/primitives'
 import { buildWhoopPreview, type WhoopFileInput } from '../engine/whoop'
 import { looksLikeZip, readZip } from '../lib/unzip'
+import { mergeProgramWithWhoop } from '../db/seed'
 import { recordImport, saveCheckIns, saveWorkouts } from '../db/repo'
 import { uid } from '../db/db'
 import { parseDay } from '../engine/time'
@@ -63,7 +64,10 @@ export default function WhoopImport() {
     setBusy(true)
     try {
       if (preview.days.length) await saveCheckIns(preview.days)
-      if (preview.workouts.length) await saveWorkouts(preview.workouts)
+      if (preview.workouts.length) {
+    await saveWorkouts(preview.workouts)
+    await mergeProgramWithWhoop()
+  }
       await recordImport({
         id: uid('imp'),
         importedAt: new Date().toISOString(),

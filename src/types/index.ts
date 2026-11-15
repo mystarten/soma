@@ -533,6 +533,11 @@ export interface Settings {
   hrZones: HrZones
   sleepGoalHours: number
   weekStartsOn: 0 | 1
+  /** Profil sportif : sert aux conseils de repos et de récupération. */
+  trainingYears?: number
+  proteinG?: number
+  /** Un jour de repos tous les N jours d'entraînement. */
+  restEvery?: number
   units: 'metric' | 'imperial'
   accent: string
   bodyRender: '3d' | '2d'

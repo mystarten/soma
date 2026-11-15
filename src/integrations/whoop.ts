@@ -3,6 +3,7 @@ import { buildWhoopPreview } from '../engine/whoop'
 import { dayKey } from '../engine/time'
 import { apiToFiles, type WhoopApiData } from './whoopApi'
 import { db, nowIso, uid } from '../db/db'
+import { mergeProgramWithWhoop } from '../db/seed'
 import { recordImport, saveCheckIns, saveWorkouts } from '../db/repo'
 
 /* Connexion WHOOP : tout passe par la fonction Supabase « whoop » (le secret WHOOP n'est jamais dans le navigateur). */
@@ -148,7 +149,10 @@ export async function whoopSync(
   if (cleaned.length) await saveCheckIns(cleaned)
   const preview = buildWhoopPreview(files, { checkins: [...checkins.filter((c) => !cleaned.some((x) => x.day === c.day)), ...cleaned], workouts })
   if (preview.days.length) await saveCheckIns(preview.days)
-  if (preview.workouts.length) await saveWorkouts(preview.workouts)
+  if (preview.workouts.length) {
+    await saveWorkouts(preview.workouts)
+    await mergeProgramWithWhoop()
+  }
   await recordImport({
     id: uid('imp'),
     importedAt: nowIso(),

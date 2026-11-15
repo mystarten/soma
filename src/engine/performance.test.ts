@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CheckIn, Workout } from '../types'
 import { addDayKey } from './time'
-import { buildInsights, consistency, perceptionGap, polarisation, recoveryAfterStrain, recoveryProfile, sleepStageShare, streakWeeks, trendOf, weeklyEffort } from './performance'
+import { proteinCheck, restAdvice, streetStreak, buildInsights, consistency, perceptionGap, polarisation, recoveryAfterStrain, recoveryProfile, sleepStageShare, streakWeeks, trendOf, weeklyEffort } from './performance'
 
 const today = '2026-03-18'
 const ci = (day: string, p: Partial<CheckIn>): CheckIn => ({ id: day, day, source: 'whoop', updatedAt: '2026-01-01T00:00:00Z', ...p })
@@ -59,5 +59,24 @@ describe('performance', () => {
     expect(ins[0].weight).toBeGreaterThanOrEqual(ins[ins.length - 1].weight)
     expect(ins.some((i) => i.id === 'hrv' && i.tone === 'watch')).toBe(true)
     expect(ins.some((i) => i.id === 'sleep')).toBe(true)
+  })
+
+  it('compte les jours de street d’affilée', () => {
+    const ws = [0, 1, 2, 4].map((i) => wk(addDayKey(today, -i), { kind: 'street', title: String(i) }))
+    expect(streetStreak(ws, today).days).toBe(3)
+    expect(streetStreak(ws.slice(1), today)).toMatchObject({ days: 2, todayDone: false })
+    expect(streetStreak([], today).days).toBe(0)
+  })
+  it('conseille repos, séance légère ou séance pleine', () => {
+    const base = { streak: 0, todayDone: false, restEvery: 3, recovery: 80, lastLoad: 8, hrvDeltaPct: 0 }
+    expect(restAdvice({ ...base, streak: 3 }).title).toContain('repos')
+    expect(restAdvice({ ...base, recovery: 20 }).tone).toBe('watch')
+    expect(restAdvice({ ...base, streak: 2, recovery: 55 }).title).toContain('légère')
+    expect(restAdvice(base).tone).toBe('good')
+  })
+  it('juge les protéines au kilo', () => {
+    expect(proteinCheck(100, 70).verdict).toBe('bas')
+    expect(proteinCheck(130, 70).verdict).toBe('ok')
+    expect(proteinCheck(130, 70).low).toBe(112)
   })
 })
