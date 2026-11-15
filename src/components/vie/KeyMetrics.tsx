@@ -63,13 +63,13 @@ export default function KeyMetrics() {
         <Tile label="Paradoxal" value={c?.sleep?.remMin ? fmtH(c.sleep.remMin) : '—'} hint={rem.hint} good={rem.good} />
       </div>
       {hasHrv && (
-        <div className="mt-4">
+        <div className="mt-3">
           <p className="mb-1 text-xs text-mist-300">VFC et FC de repos <span className="text-mist-500">· 14 jours</span></p>
           <SmoothLines data={hrvRhr} series={[{ key: 'vfc', color: '#27e0c0', name: 'VFC', unit: 'ms' }, { key: 'fc', color: '#ff8f45', name: 'FC repos', unit: 'bpm' }]} height={100} />
         </div>
       )}
       {hasStages && (
-        <div className="mt-3">
+        <div className="mt-3 hidden [@media(min-height:860px)]:block">
           <p className="mb-1 text-xs text-mist-300">Phases de sommeil <span className="text-mist-500">· 7 nuits</span></p>
           <Bars data={stages} stacked series={[{ key: 'profond', color: '#6b4bff', name: 'Profond', unit: 'h' }, { key: 'paradoxal', color: '#27e0c0', name: 'Paradoxal', unit: 'h' }, { key: 'leger', color: '#4f5f7a', name: 'Léger', unit: 'h' }]} height={90} hideY />
         </div>

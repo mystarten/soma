@@ -147,17 +147,6 @@ export default function SettingsScreen({ param }: { param?: string }) {
       {/* ── Préférences ── */}
       <Card title="Préférences">
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Field label="Objectif de sommeil">
-            <Stepper
-              value={s.sleepGoalHours}
-              onChange={(v) => void patch({ sleepGoalHours: v })}
-              step={0.25}
-              precision={2}
-              min={5}
-              max={12}
-              suffix="h"
-            />
-          </Field>
           <Field label="Début de semaine" group>
             <Segmented
               value={String(s.weekStartsOn)}
@@ -248,53 +237,11 @@ export default function SettingsScreen({ param }: { param?: string }) {
         </Button>
       </Card>
 
-      {/* ── Compte à rebours ── */}
-      <Card title="Objectif à date" subtitle="Affiché sur l’accueil">
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <Field label="Nom">
-            <TextInput
-              value={s.countdown?.name ?? ''}
-              onChange={(e) =>
-                void patch({
-                  countdown: {
-                    name: e.target.value,
-                    date: s.countdown?.date ?? todayKey(),
-                    discipline: s.countdown?.discipline,
-                  },
-                })
-              }
-            />
-          </Field>
-          <Field label="Date">
-            <TextInput
-              type="date"
-              value={s.countdown?.date ?? ''}
-              onChange={(e) =>
-                void patch({
-                  countdown: {
-                    name: s.countdown?.name ?? 'Objectif',
-                    date: e.target.value,
-                    discipline: s.countdown?.discipline,
-                  },
-                })
-              }
-            />
-          </Field>
-          <Field label="Discipline" optional>
-            <TextInput
-              value={s.countdown?.discipline ?? ''}
-              onChange={(e) =>
-                void patch({
-                  countdown: {
-                    name: s.countdown?.name ?? 'Objectif',
-                    date: s.countdown?.date ?? todayKey(),
-                    discipline: e.target.value,
-                  },
-                })
-              }
-            />
-          </Field>
-        </div>
+      {/* ── Objectifs ── */}
+      <Card title="Objectifs" subtitle="Ton grand objectif, ta nuit visée et tes objectifs de la semaine se règlent dans Tableau de bord → Objectifs.">
+        <Button className="mt-2" onClick={() => navigate('objectifs')}>
+          Ouvrir les objectifs
+        </Button>
       </Card>
 
       {/* ── Bibliothèques ── */}

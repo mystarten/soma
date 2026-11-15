@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { alignmentScore, evaluateGoal, goalPeriod, weeklySentence } from './goals'
+import { alignmentScore, countsForSocle, evaluateGoal, goalPeriod, goalScore, weeklySentence } from './goals'
 import type { Goal } from '../types'
 import { EXERCISES, makeCheckIn, makeSet, makeWorkout } from '../test/fixtures'
 import { lastDays } from './time'
@@ -176,5 +176,35 @@ describe('objectifs', () => {
     const s = weeklySentence([p], 35)
     expect(s).not.toMatch(/raté|échec|mauvais/i)
     expect(weeklySentence([], 0)).toMatch(/données/)
+  })
+
+  it('compte les séances par famille (programme ou type de séance)', () => {
+    const street = makeWorkout({ day: '2025-06-23', startedAt: '2025-06-23T18:00:00.000Z', kind: 'street' })
+    const legs = makeWorkout({ day: '2025-06-24', startedAt: '2025-06-24T18:00:00.000Z', kind: 'muscu', program: [{ code: 'J1', week: 1 }] })
+    expect(countsForSocle(street, 'street')).toBe(true)
+    expect(countsForSocle(legs, 'jambes')).toBe(true)
+    expect(countsForSocle(legs, 'street')).toBe(false)
+    const p = evaluateGoal(goal({ kind: 'sessions_socle', socle: 'jambes', target: 2, direction: 'min' }), '2025-06-23', '2025-06-29', ctx({ workouts: [street, legs] }))
+    expect(p.actual).toBe(1)
+    expect(p.ratio).toBeCloseTo(0.5)
+  })
+
+  it('un record visé tient compte des records saisis à la main', () => {
+    const g = goal({ kind: 'performance', exerciseId: 'ex_pullup', target: 40, direction: 'min' })
+    const exId = EXERCISES[0].id
+    const p = evaluateGoal({ ...g, exerciseId: exId }, '2025-06-01', '2025-06-30', ctx({ references: [{ exerciseId: exId, reps: 34 }] }))
+    expect(p.actual).toBe(34)
+    const fiveK = evaluateGoal(goal({ kind: 'performance', exerciseId: 'run_5k', target: 20, direction: 'max' }), '2025-06-01', '2025-06-30', ctx({ references: [{ exerciseId: 'run_5k', holdSec: 1260 }] }))
+    expect(fiveK.actual).toBeCloseTo(21)
+    expect(fiveK.ratio).toBeLessThan(1)
+  })
+
+  it('le score ignore la semaine en cours quand des semaines sont terminées', () => {
+    const g = goal({ kind: 'sessions_count', target: 2, direction: 'min' })
+    const workouts = ['2025-06-16', '2025-06-17', '2025-06-09', '2025-06-10'].map((day) => makeWorkout({ day, startedAt: `${day}T18:00:00.000Z` }))
+    const r = goalScore(g, ctx({ workouts }), '2025-06-25')
+    expect(r).not.toBeNull()
+    expect(r!).toBeGreaterThan(0.4)
+    expect(goalScore(g, ctx(), '2025-06-25')).toBe(0)
   })
 })

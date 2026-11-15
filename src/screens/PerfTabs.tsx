@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useSoma } from '../hooks/useSoma'
-import { Card, Select, Stat } from '../components/ui/primitives'
+import { Card, ProgressBar, Select, Stat } from '../components/ui/primitives'
+import { navigate } from '../lib/router'
+import { STATUS_COLOR } from '../engine/goals'
+import { DEFAULT_RECORD_ROWS } from '../engine/records'
 import { Bars, Donut, RadarProfile, SmoothLines } from '../components/charts/charts'
 import { exerciseRecords } from '../engine/load'
 import { addDayKey, lastDays } from '../engine/time'
@@ -76,7 +79,7 @@ export function RecoveryTab() {
       { axis: 'VFC', value: rel(hrv, true) },
       { axis: 'FC repos', value: rel(rhr, false) },
       { axis: 'Sommeil', value: slp.now === null ? 0 : clamp((slp.now / data.settings.sleepGoalHours) * 100) },
-      { axis: 'Régularité', value: clamp(data.sleepScore.score > 0 ? data.sleepScore.consistencyPart : 0) },
+      ...(data.sleepScore.score > 0 && data.sleepScore.consistencyPart > 0 ? [{ axis: 'Régularité', value: clamp(data.sleepScore.consistencyPart) }] : []),
     ]
   }, [profile, data.settings.sleepGoalHours, data.sleepScore])
   const hasAny = days.some((d) => by.get(d)?.recovery !== undefined)
@@ -223,7 +226,25 @@ export function ProgressTab() {
 
   return (
     <div className="grid gap-3 lg:grid-cols-2">
-      <Card title="Régularité" subtitle="Séances par semaine, 12 semaines">
+      <Card title="Où j’en suis de mes objectifs" subtitle="Cette semaine et ce mois, d’après ce que tu as défini" className="lg:col-span-2" action={<button onClick={() => navigate('objectifs')} className="text-xs text-accent">Modifier →</button>}>
+        {data.goalProgress.filter((p) => p.goal.active).length === 0 ? (
+          <Empty>Aucun objectif pour l’instant : ajoute-les dans l’onglet Objectifs.</Empty>
+        ) : (
+          <ul className="mt-3 grid gap-x-6 gap-y-3 md:grid-cols-2">
+            {data.goalProgress.filter((p) => p.goal.active).map((p) => (
+              <li key={p.goal.id}>
+                <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
+                  <span className="truncate text-mist-100">{p.goal.name}</span>
+                  <span className="tnum text-mist-300">{Math.round(p.actual * 10) / 10} / {p.target} {p.label}</span>
+                </div>
+                <ProgressBar ratio={p.ratio} color={STATUS_COLOR[p.status]} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card title="Régularité" subtitle="Nombre de séances faites chaque semaine">
         <div className="mt-3 grid grid-cols-3 gap-3">
           <div className="rounded-xl bg-white/4 p-3 hairline"><Stat label="Série" value={streak} unit="sem." hint="2 séances ou plus" color={streak >= 3 ? '#41e08a' : undefined} /></div>
           <div className="rounded-xl bg-white/4 p-3 hairline"><Stat label="Moyenne" value={done.length ? (done.reduce((a, c) => a + c.sessions, 0) / done.length).toFixed(1) : '—'} unit="/ sem." /></div>
@@ -232,7 +253,7 @@ export function ProgressTab() {
         <Bars data={cons.map((c) => ({ day: c.start, s: c.sessions }))} series={[{ key: 's', color: 'var(--accent)', name: 'Séances' }]} height={150} />
       </Card>
 
-      <Card title="Force" subtitle="Meilleure performance de la semaine" action={practiced.length > 0 ? <div className="w-40"><Select value={active} onChange={setExId} options={practiced.map((e) => ({ value: e.id, label: e.name }))} /></div> : undefined}>
+      <Card title="Force" subtitle="Ta meilleure performance de chaque semaine. Le « 1RM » est la charge maximale que tu pourrais soulever une fois, estimée à partir de tes séries." action={practiced.length > 0 ? <div className="w-40"><Select value={active} onChange={setExId} options={practiced.map((e) => ({ value: e.id, label: e.name }))} /></div> : undefined}>
         {practiced.length === 0 ? <Empty>Les exercices que tu notes en séance apparaissent ici.</Empty> : (
           <>
             <SmoothLines data={exSeries} series={[{ key: 'rm', color: '#41e08a', name: '1RM estimé', unit: 'kg' }, { key: 'reps', color: '#9b7bff', name: 'Max reps' }]} height={190} />
@@ -258,8 +279,21 @@ export function ProgressTab() {
         <SmoothLines data={weight} series={[{ key: 'kg', color: '#8fb4ff', name: 'Poids', unit: 'kg' }]} height={150} />
       </Card>
 
-      <Card title="Aussi dans tes records" subtitle="Tous tes repères se modifient dans Séances → Records">
-        <p className="mt-3 text-xs text-mist-300">Tractions, pompes, gainage, 5 km… tes meilleurs chiffres restent à jour là-bas et alimentent ces courbes.</p>
+      <Card title="Mes records" subtitle="Modifiables dans Séances → Records" action={<button onClick={() => navigate('seances')} className="text-xs text-accent">Modifier →</button>}>
+        <ul className="mt-3 grid grid-cols-2 gap-2">
+          {data.settings.references.map((r) => {
+            const row = DEFAULT_RECORD_ROWS.find((x) => x.id === r.exerciseId)
+            const label = row?.label ?? data.exercises.find((e) => e.id === r.exerciseId)?.name
+            if (!label) return null
+            const value = r.exerciseId === 'run_5k' && r.holdSec ? `${Math.floor(r.holdSec / 60)}:${String(r.holdSec % 60).padStart(2, '0')}` : r.holdSec ? `${r.holdSec} s` : r.reps ? `${r.reps}${r.loadKg ? ` × ${r.loadKg} kg` : ''}` : '—'
+            return (
+              <li key={r.exerciseId} className="rounded-xl bg-white/4 px-3 py-2 hairline">
+                <div className="truncate text-[0.65rem] tracking-wide text-mist-500 uppercase">{label}</div>
+                <div className="text-lg font-semibold tnum text-mist-100">{value}</div>
+              </li>
+            )
+          })}
+        </ul>
       </Card>
     </div>
   )

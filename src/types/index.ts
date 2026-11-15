@@ -329,6 +329,7 @@ export type GoalPeriod = 'week' | 'month'
 export type GoalKind =
   | 'sessions_count'
   | 'sessions_by_kind'
+  | 'sessions_socle'
   | 'weekly_plan'
   | 'volume_km'
   | 'volume_reps'
@@ -360,6 +361,8 @@ export interface Goal {
   active: boolean
   /* champs contextuels selon kind */
   workoutKind?: WorkoutKind
+  /** Pour `sessions_socle` : quelle famille de séances compter. */
+  socle?: 'street' | 'jambes' | 'abdos' | 'cardio' | 'course' | 'natation'
   exerciseId?: Id
   customMetricId?: Id
   plan?: WeekdayPlan

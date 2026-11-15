@@ -1,8 +1,7 @@
-import type { CustomMetric, Goal, Settings, WeekdayPlan, WorkoutTypeDef } from '../types'
+import type { CustomMetric, Settings, WeekdayPlan, WorkoutTypeDef } from '../types'
 import { EXERCISE_LIBRARY, TEMPLATE_SEEDS } from '../engine/muscleMap'
-import { addDayKey, todayKey } from '../engine/time'
-import { db, nowIso, uid } from './db'
-import { backfillTemplates, getSettings } from './repo'
+import { db, nowIso } from './db'
+import { backfillTemplates, deleteGoal, getSettings, saveWorkouts } from './repo'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Amorçage du premier lancement : bibliothèque d'exercices, modèles,
@@ -51,93 +50,6 @@ const METRIC_SEEDS: Omit<CustomMetric, 'updatedAt'>[] = [
   { id: 'cm_cafeine', name: 'Caféine', unit: 'tasses', min: 0, max: 8, color: '#ffc24b', higherIsBetter: false },
 ]
 
-function exampleGoals(level: Settings['level']): Goal[] {
-  const sessionsPerWeek = level === 'debutant' ? 3 : level === 'intermediaire' ? 4 : 5
-  const kmPerWeek = level === 'debutant' ? 12 : level === 'intermediaire' ? 22 : 32
-  const pullTarget = level === 'debutant' ? 15 : level === 'intermediaire' ? 25 : 40
-  const g = (over: Omit<Goal, 'id' | 'updatedAt' | 'weight' | 'active'> & Partial<Goal>): Goal => ({
-    id: uid('goal'),
-    weight: 1,
-    active: true,
-    updatedAt: nowIso(),
-    ...over,
-  })
-  return [
-    g({
-      name: `${sessionsPerWeek} séances par semaine`,
-      kind: 'sessions_count',
-      period: 'week',
-      target: sessionsPerWeek,
-      direction: 'min',
-      unit: 'séances',
-      weight: 2,
-    }),
-    g({
-      name: 'Plan hebdomadaire',
-      kind: 'weekly_plan',
-      period: 'week',
-      target: 6,
-      direction: 'min',
-      plan: DEFAULT_WEEKLY_PLAN,
-      weight: 1.5,
-    }),
-    g({
-      name: `${kmPerWeek} km par semaine`,
-      kind: 'volume_km',
-      period: 'week',
-      target: kmPerWeek,
-      direction: 'min',
-      unit: 'km',
-    }),
-    g({
-      name: 'Sommeil moyen 7 h 30',
-      kind: 'sleep_hours',
-      period: 'week',
-      target: 7.5,
-      direction: 'min',
-      unit: 'h',
-      weight: 1.5,
-    }),
-    g({
-      name: '5 nuits au-dessus de 7 h',
-      kind: 'sleep_nights_above',
-      period: 'week',
-      target: 5,
-      direction: 'min',
-      threshold: 7,
-      unit: 'nuits',
-    }),
-    g({
-      name: 'Récupération moyenne ≥ 65 %',
-      kind: 'recovery_avg',
-      period: 'week',
-      target: 65,
-      direction: 'min',
-      unit: '%',
-    }),
-    g({
-      name: `${pullTarget} tractions strictes`,
-      kind: 'performance',
-      period: 'month',
-      target: pullTarget,
-      direction: 'min',
-      exerciseId: 'ex_tractions_pronation',
-      unit: 'reps',
-      deadline: addDayKey(todayKey(), 180),
-    }),
-    g({
-      name: '5 km sous 20 min',
-      kind: 'performance',
-      period: 'month',
-      target: 1,
-      direction: 'min',
-      unit: 'objectif',
-      deadline: addDayKey(todayKey(), 180),
-      active: false,
-    }),
-  ]
-}
-
 /** Références de départ, modifiables dans Réglages → Profil. */
 export const STARTING_REFERENCES: Settings['references'] = [
   { exerciseId: 'ex_tractions_pronation', reps: 31 },
@@ -154,6 +66,40 @@ export const STARTING_REFERENCES: Settings['references'] = [
 export async function ensureSeeded(): Promise<void> {
   await seedFirstRun()
   await backfillTemplates()
+  await migrations()
+}
+
+/** Anciens exemples d'objectifs préremplis (jamais choisis par l'utilisateur) : retirés une fois. */
+const SEEDED_GOAL_NAMES = [
+  /^\d+ séances par semaine$/,
+  /^Plan hebdomadaire$/,
+  /^\d+ km par semaine$/,
+  /^Sommeil moyen 7 h 30$/,
+  /^5 nuits au-dessus de 7 h$/,
+  /^Récupération moyenne ≥ 65 %$/,
+  /^\d+ tractions strictes$/,
+  /^5 km sous 20 min$/,
+]
+
+async function migrations(): Promise<void> {
+  if (!(await db.meta.get('goals_cleanup_v2'))) {
+    const goals = await db.goals.toArray()
+    const seen = new Set<string>()
+    for (const g of goals) {
+      if (g.deleted) continue
+      const key = `${g.name}|${g.kind}|${g.period}`
+      if (SEEDED_GOAL_NAMES.some((re) => re.test(g.name)) || seen.has(key)) await deleteGoal(g.id)
+      else seen.add(key)
+    }
+    await db.meta.put({ key: 'goals_cleanup_v2', value: nowIso() })
+  }
+  if (!(await db.meta.get('gymnastics_street_v1'))) {
+    const rows = (await db.workouts.toArray()).filter(
+      (w) => !w.deleted && w.source === 'whoop' && /gymnas/i.test(w.title ?? '') && w.kind !== 'street',
+    )
+    if (rows.length) await saveWorkouts(rows.map((w) => ({ ...w, kind: 'street' as const, cardio: undefined })))
+    await db.meta.put({ key: 'gymnastics_street_v1', value: nowIso() })
+  }
 }
 
 async function seedFirstRun(): Promise<void> {
@@ -187,16 +133,8 @@ async function seedFirstRun(): Promise<void> {
     await db.settings.put({
       ...settings,
       references: STARTING_REFERENCES,
-      countdown: settings.countdown ?? {
-        name: 'Objectif 40 tractions',
-        date: addDayKey(todayKey(), 180),
-        discipline: 'Street workout',
-      },
       updatedAt: nowIso(),
     })
-  }
-  if ((await db.goals.count()) === 0) {
-    await db.goals.bulkPut(exampleGoals(settings.level))
   }
 }
 

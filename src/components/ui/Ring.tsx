@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 
 /** Anneau animé façon WHOOP. */
 export function Ring({
@@ -12,6 +12,7 @@ export function Ring({
   unit,
   sublabel,
   delay = 0,
+  gradient,
 }: {
   value: number
   max?: number
@@ -23,7 +24,10 @@ export function Ring({
   unit?: string
   sublabel?: string
   delay?: number
+  /** Dégradé le long de l'arc : [début, fin]. */
+  gradient?: [string, string]
 }) {
+  const gid = useId().replace(/:/g, '')
   const [shown, setShown] = useState(0)
   const reduced = useRef(false)
 
@@ -47,6 +51,14 @@ export function Ring({
     <div className="flex flex-col items-center gap-1.5" style={{ width: size }}>
       <div className="relative" style={{ width: size, height: size }}>
         <svg width={size} height={size} className="-rotate-90">
+          {gradient && (
+            <defs>
+              <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor={gradient[0]} />
+                <stop offset="100%" stopColor={gradient[1]} />
+              </linearGradient>
+            </defs>
+          )}
           <circle
             cx={size / 2}
             cy={size / 2}
@@ -60,14 +72,14 @@ export function Ring({
             cy={size / 2}
             r={r}
             fill="none"
-            stroke={color}
+            stroke={gradient ? `url(#${gid})` : color}
             strokeWidth={thickness}
             strokeLinecap="round"
             strokeDasharray={c}
             strokeDashoffset={c * (1 - ratio)}
             style={{
               transition: 'stroke-dashoffset 1s cubic-bezier(0.22,0.75,0.28,1)',
-              filter: `drop-shadow(0 0 6px ${color})`,
+              filter: `drop-shadow(0 0 4px ${color}66)`,
             }}
           />
         </svg>

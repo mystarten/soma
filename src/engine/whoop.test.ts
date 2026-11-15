@@ -56,6 +56,7 @@ describe('parseur WHOOP', () => {
     expect(mapActivity('Running').kind).toBe('course')
     expect(mapActivity('Weightlifting').kind).toBe('muscu')
     expect(mapActivity('Functional Fitness').kind).toBe('street')
+    expect(mapActivity('Gymnastics').kind).toBe('street')
     expect(mapActivity('Cycling').modality).toBe('velo')
     expect(mapActivity('Yoga').kind).toBe('mobilite')
     expect(mapActivity('Zorglub').kind).toBe('cardio')

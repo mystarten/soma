@@ -3,6 +3,7 @@ import type {
   CustomMetric,
   DayKey,
   ExerciseDef,
+  ExerciseReference,
   Goal,
   GoalProgress,
   GoalStatus,
@@ -14,6 +15,7 @@ import { clamp, mean } from './stats'
 import { exerciseRecords, exerciseVolume, volumeSummary } from './load'
 import { sleepHours, sleepRegularity } from './sleep'
 import { WORKOUT_KIND_LABEL } from './muscleMap'
+import { socleOf } from './rotation'
 import { addDayKey, dayRange, parseDay, weekBounds } from './time'
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -30,6 +32,31 @@ export interface GoalContext {
   sleepGoalHours: number
   weekStartsOn: 0 | 1
   hrZones?: HrZones
+  /** Records saisis à la main (onglet Records) : comptent pour les objectifs « record visé ». */
+  references?: ExerciseReference[]
+}
+
+const RUN_5K_ID = 'run_5k'
+
+export const SOCLE_LABEL: Record<NonNullable<Goal['socle']>, string> = {
+  street: 'Street workout',
+  jambes: 'Jambes',
+  abdos: 'Abdos',
+  cardio: 'Cardio',
+  course: 'Course à pied',
+  natation: 'Natation',
+}
+
+/** Une séance compte-t-elle pour cette famille ? (programme : séances cochées ; sinon type de séance) */
+export function countsForSocle(w: Workout, socle: NonNullable<Goal['socle']>): boolean {
+  const fromProgram = (w.program ?? []).some((r) => socleOf(r.code) === socle)
+  if (fromProgram) return true
+  if (socle === 'street') return w.kind === 'street'
+  if (socle === 'abdos') return w.kind === 'abdos'
+  if (socle === 'course') return w.kind === 'course'
+  if (socle === 'natation') return w.kind === 'cardio' && w.cardio?.modality === 'natation'
+  if (socle === 'cardio') return (w.kind === 'cardio' && w.cardio?.modality !== 'natation') || w.kind === 'course'
+  return false
 }
 
 export const STATUS_LABEL: Record<GoalStatus, string> = {
@@ -49,6 +76,7 @@ export const STATUS_COLOR: Record<GoalStatus, string> = {
 export const GOAL_KIND_LABEL: Record<Goal['kind'], string> = {
   sessions_count: 'Nombre de séances',
   sessions_by_kind: 'Séances par type',
+  sessions_socle: 'Séances d’une famille',
   weekly_plan: 'Plan hebdomadaire',
   volume_km: 'Kilomètres',
   volume_reps: 'Répétitions sur un exercice',
@@ -113,6 +141,13 @@ export function evaluateGoal(
       detail = goal.workoutKind ? WORKOUT_KIND_LABEL[goal.workoutKind] : undefined
       break
     }
+    case 'sessions_socle': {
+      const so = goal.socle ?? 'street'
+      actual = workouts.filter((w) => countsForSocle(w, so)).length
+      unit = unit || 'séances'
+      detail = SOCLE_LABEL[so]
+      break
+    }
     case 'weekly_plan': {
       const plan = goal.plan ?? []
       const planned = plan.filter((p) => p.kind !== 'repos')
@@ -164,14 +199,23 @@ export function evaluateGoal(
     case 'performance': {
       /* Un record visé se mesure sur tout l'historique, pas sur la période. */
       const all = ctx.workouts.filter((w) => !w.deleted && !w.planned)
-      if (goal.exerciseId) {
+      const ref = ctx.references?.find((r) => r.exerciseId === goal.exerciseId)
+      if (goal.exerciseId === RUN_5K_ID) {
+        hasData = !!ref?.holdSec
+        actual = ref?.holdSec ? ref.holdSec / 60 : 0
+        unit = unit || 'min'
+        detail = '5 km'
+      } else if (goal.exerciseId) {
         const ex = ctx.exercises.find((e) => e.id === goal.exerciseId)
         const rec = exerciseRecords(goal.exerciseId, all, loadCtx)
-        actual = ex?.kind === 'static' ? rec.maxHoldSec : Math.max(rec.maxReps, rec.maxLoadKg)
-        if (ex?.kind !== 'static' && rec.maxReps >= rec.maxLoadKg) unit = unit || 'reps'
+        const hist = ex?.kind === 'static' ? rec.maxHoldSec : Math.max(rec.maxReps, rec.maxLoadKg)
+        const typed = ex?.kind === 'static' ? (ref?.holdSec ?? 0) : (ref?.reps ?? 0)
+        actual = Math.max(hist, typed)
+        if (ex?.kind !== 'static' && (typed > 0 || rec.maxReps >= rec.maxLoadKg)) unit = unit || 'reps'
         else if (ex?.kind === 'static') unit = unit || 's'
         else unit = unit || 'kg'
         detail = ex?.name
+        hasData = actual > 0
       } else {
         hasData = false
       }
@@ -273,27 +317,34 @@ export function goalPeriod(goal: Goal, day: DayKey, weekStartsOn: 0 | 1): { from
   return { from, to: `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}` }
 }
 
-/**
- * Score Alignement : moyenne pondérée des objectifs actifs
- * sur 4 semaines glissantes (0 → 100).
- */
+/** Part (0 → 1) de l'objectif tenue : moyenne des 4 dernières semaines terminées, ou du mois en cours. null = pas de données. */
+export function goalScore(goal: Goal, ctx: GoalContext, today: DayKey): number | null {
+  /* Semaines terminées d'abord : la semaine en cours n'est pas finie, elle ne doit pas faire baisser le score. */
+  const ratios: number[] = []
+  const offsets = goal.period === 'month' ? [0] : [1, 2, 3, 4]
+  for (const i of offsets) {
+    const anchor = addDayKey(today, -7 * i)
+    const { from, to } = goalPeriod(goal, anchor, ctx.weekStartsOn)
+    const p = evaluateGoal(goal, from, to, ctx)
+    if (p.status === 'empty') continue
+    ratios.push(clamp(p.ratio, 0, 1))
+  }
+  if (!ratios.length && goal.period === 'week') {
+    const { from, to } = goalPeriod(goal, today, ctx.weekStartsOn)
+    const p = evaluateGoal(goal, from, to, ctx)
+    if (p.status !== 'empty') ratios.push(clamp(p.ratio, 0, 1))
+  }
+  return ratios.length ? mean(ratios) : null
+}
+
+/** Score Alignement : moyenne des objectifs actifs, pondérée par leur importance (0 → 100). */
 export function alignmentScore(goals: Goal[], ctx: GoalContext, today: DayKey): number {
-  const active = goals.filter((g) => g.active && !g.deleted)
-  if (!active.length) return 0
   let num = 0
   let den = 0
-  for (const goal of active) {
-    const ratios: number[] = []
-    for (let i = 0; i < 4; i++) {
-      const anchor = addDayKey(today, -7 * i)
-      const { from, to } = goalPeriod(goal, anchor, ctx.weekStartsOn)
-      const p = evaluateGoal(goal, from, to, ctx)
-      if (p.status === 'empty') continue
-      ratios.push(clamp(p.ratio, 0, 1))
-      if (goal.period === 'month') break
-    }
-    if (!ratios.length) continue
-    num += mean(ratios) * goal.weight
+  for (const goal of goals.filter((g) => g.active && !g.deleted)) {
+    const r = goalScore(goal, ctx, today)
+    if (r === null) continue
+    num += r * goal.weight
     den += goal.weight
   }
   return den > 0 ? Math.round((num / den) * 100) : 0

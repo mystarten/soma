@@ -161,7 +161,7 @@ const ACTIVITY_MAP: { match: RegExp; to: ActivityMap }[] = [
     to: { kind: 'muscu', mix: KIND_FALLBACK_MIX.muscu },
   },
   {
-    match: /functional|crossfit|hiit|circuit|calisthen|street/,
+    match: /functional|crossfit|hiit|circuit|calisthen|street|gymnast|gymnas/,
     to: { kind: 'street', mix: KIND_FALLBACK_MIX.street },
   },
   { match: /core|abdo|plank/, to: { kind: 'abdos', mix: KIND_FALLBACK_MIX.abdos } },

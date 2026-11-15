@@ -7,8 +7,8 @@ import { navigate } from '../lib/router'
 import { taskLoad, tasksForView } from '../engine/tasks'
 import { morningLoad } from '../engine/load'
 import { bodySummary } from '../engine/fatigue'
-import { fatigueColor } from '../engine/fatigueConfig'
 import { zoneList } from '../engine/suggest'
+import { sleepHours } from '../engine/sleep'
 import { reviewDone, reviewWeekFor } from '../engine/review'
 import { useRotation } from '../components/program/useRotation'
 import { useGoogle } from '../integrations/useGoogle'
@@ -18,7 +18,9 @@ import KeyMetrics from '../components/vie/KeyMetrics'
 import RecentWorkouts from '../components/vie/RecentWorkouts'
 import NextSessions from '../components/vie/NextSessions'
 
+const fmtHm = (h: number) => `${Math.floor(h)} h ${String(Math.round((h % 1) * 60)).padStart(2, '0')}`
 const recoveryColor = (v: number) => (v >= 67 ? '#41e08a' : v >= 34 ? '#ffc24b' : '#ff5a5a')
+const recoveryGradient = (v: number): [string, string] => (v >= 67 ? ['#27e0c0', '#41e08a'] : v >= 34 ? ['#ffd36b', '#ff9f43'] : ['#ff8f45', '#ff5a5a'])
 
 /** Une seule information mise en avant, le reste reste discret. */
 function DayLine() {
@@ -127,6 +129,8 @@ function SportCard() {
   const load = morning.value
   const summary = useMemo(() => bodySummary(data.body), [data.body])
   const sleep = data.sleepScore.score
+  const slept = sleepHours(checkin)
+  const goalH = data.settings.sleepGoalHours
   return (
     <section aria-label="Sport et récupération" className="glass rounded-[var(--radius-card)] p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -141,21 +145,35 @@ function SportCard() {
           display={recovery === null ? '—' : String(Math.round(recovery))}
           unit="%"
           color={recovery === null ? '#5a6c86' : recoveryColor(recovery)}
+          gradient={recovery === null ? undefined : recoveryGradient(recovery)}
           label="Récup."
-          size={74}
+          size={78}
           thickness={7}
         />
-        <Ring value={load} max={21} display={load.toFixed(1)} unit="/21" label={morning.label === 'Hier' ? 'Charge hier' : 'Charge'} size={74} thickness={7} />
+        <Ring value={load} max={21} display={load.toFixed(1)} unit="/21" label={morning.label === 'Hier' ? 'Charge hier' : 'Charge'} color="#6bb7ff" gradient={['#27c7ff', '#9b7bff']} size={78} thickness={7} />
         <Ring
           value={sleep}
           display={sleep > 0 ? String(Math.round(sleep)) : '—'}
           unit="%"
-          color={sleep > 0 ? fatigueColor(100 - sleep) : '#5a6c86'}
+          color={sleep > 0 ? recoveryColor(sleep) : '#5a6c86'}
+          gradient={sleep > 0 ? recoveryGradient(sleep) : undefined}
           label="Sommeil"
-          size={74}
+          size={78}
           thickness={7}
         />
       </div>
+      {slept !== null && (
+        <div className="mt-3">
+          <div className="mb-1 flex items-baseline justify-between text-xs">
+            <span className="text-mist-300">Nuit</span>
+            <span className="tnum text-mist-100">{fmtHm(slept)} <span className="text-mist-500">/ {fmtHm(goalH)} visées</span></span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
+            <div className="h-full rounded-full" style={{ width: `${Math.min(100, (slept / goalH) * 100)}%`, background: slept >= goalH ? 'linear-gradient(90deg,#27e0c0,#41e08a)' : 'linear-gradient(90deg,#ffd36b,#ff9f43)' }} />
+          </div>
+          <p className="mt-1 text-[0.68rem] text-mist-500">{slept >= goalH ? 'Objectif atteint.' : `Il manquait ${fmtHm(goalH - slept)} pour ton objectif.`}</p>
+        </div>
+      )}
       <div className="mt-3 space-y-1 text-xs">
         {summary.careful.length > 0 && (
           <p className="text-mist-300">
@@ -191,13 +209,13 @@ export default function Vie() {
         <MorningBrief />
         <ReviewNudge />
         <BodyView hero />
+        <RecentWorkouts limit={3} compact />
       </div>
       {/* Gauche : à venir, séances */}
       <div className="flex min-w-0 flex-col gap-3 lg:col-start-2 xl:col-start-1 xl:row-start-1">
         <PlanningPanel />
-        <NextSessions />
+        <NextSessions compact />
         <GoogleOnHome />
-        <RecentWorkouts limit={3} />
       </div>
       {/* Droite : récupération */}
       <div className="flex min-w-0 flex-col gap-3 lg:col-start-2 xl:col-start-3 xl:row-start-1">

@@ -148,6 +148,7 @@ export function SomaProvider({ children }: { children: ReactNode }) {
       sleepGoalHours: settings.sleepGoalHours,
       weekStartsOn: settings.weekStartsOn,
       hrZones: settings.hrZones,
+      references: settings.references,
     }
 
     const prepared = prepareFatigue(fatigueCtx, nowMs)

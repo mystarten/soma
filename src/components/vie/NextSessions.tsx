@@ -7,7 +7,7 @@ import { WeekNote } from '../program/weekNote'
 import { useToast } from '../ui/primitives'
 
 /** Les séances dont c'est le tour, par socle, avec la coche rapide. Se range d'elle-même quand tout est fait. */
-export default function NextSessions() {
+export default function NextSessions({ compact = false }: { compact?: boolean }) {
   const data = useSoma()
   const { rotation } = useRotation()
   const toast = useToast()
@@ -30,7 +30,7 @@ export default function NextSessions() {
           <div key={g.socle}>
             <div className="mb-1 text-[0.62rem] tracking-wider text-mist-500 uppercase">{g.label}</div>
             <ul className="space-y-1">
-              {g.available.map((it) => (
+              {(compact ? g.available.slice(0, 1) : g.available).map((it) => (
                 <li key={it.code} className="flex items-center gap-2">
                   <span className="w-8 shrink-0 text-xs font-semibold text-accent tnum">{it.code}</span>
                   <span className="min-w-0 flex-1">
@@ -51,6 +51,9 @@ export default function NextSessions() {
                 </li>
               ))}
             </ul>
+            {compact && g.available.length > 1 && (
+              <p className="mt-0.5 pl-10 text-[0.64rem] text-mist-500">ou {g.available.slice(1).map((i) => i.code).join(', ')}</p>
+            )}
           </div>
         ))}
       </div>
