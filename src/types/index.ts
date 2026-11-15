@@ -538,6 +538,10 @@ export interface Settings {
   proteinG?: number
   /** Un jour de repos tous les N jours d'entraînement. */
   restEvery?: number
+  /** Seuil (en %) de la charge de fond à partir duquel une décharge est conseillée. */
+  deloadAt?: number
+  /** Semaine de décharge en cours, jusqu'à cette date incluse. */
+  deloadUntil?: DayKey
   units: 'metric' | 'imperial'
   accent: string
   bodyRender: '3d' | '2d'

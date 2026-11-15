@@ -28,7 +28,8 @@ export function CoachBanners({ light, onLight }: { light?: boolean; onLight?: (v
   const alert = loadAlert(data.balance)
   const lw = lightWeekAdvice(data.checkins, data.today)
   const showAlert = alert && alert.level !== 'ok'
-  if (!showAlert && !lw.active) return null
+  const deload = !!data.settings.deloadUntil && data.settings.deloadUntil >= data.today
+  if (!showAlert && !lw.active && !deload) return null
   return (
     <div className="flex flex-col gap-2">
       {showAlert && alert && (
@@ -37,11 +38,20 @@ export function CoachBanners({ light, onLight }: { light?: boolean; onLight?: (v
           <span className="text-mist-300">{alert.text}</span>
         </div>
       )}
-      {lw.active && (
+      {(lw.active || deload) && (
         <div className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2.5 text-xs hairline">
           <span className="text-mist-300">
-            <span className="font-medium text-[#ffc24b]">Semaine légère conseillée · </span>
-            récupération moyenne {Math.round(lw.avg)} % depuis 3 jours : un tiers de séries en moins, même charge.
+            {deload ? (
+              <>
+                <span className="font-medium text-[#ffc24b]">Semaine de décharge en cours · </span>
+                un tiers de séries en moins, même charge, aucune série à l’échec.
+              </>
+            ) : (
+              <>
+                <span className="font-medium text-[#ffc24b]">Semaine légère conseillée · </span>
+                récupération moyenne {Math.round(lw.avg)} % depuis 3 jours : un tiers de séries en moins, même charge.
+              </>
+            )}
           </span>
           {onLight && (
             <button

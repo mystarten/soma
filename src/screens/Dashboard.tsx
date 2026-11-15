@@ -1,4 +1,5 @@
 import { InsightsCard } from './PerfTabs'
+import OverloadCard from '../components/dashboard/OverloadCard'
 import { useMemo } from 'react'
 import { useSoma } from '../hooks/useSoma'
 import { Ring } from '../components/ui/Ring'
@@ -68,6 +69,9 @@ export function Overview() {
 
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="md:col-span-2 xl:col-span-3">
+        <OverloadCard />
+      </div>
       <div className="md:col-span-2 xl:col-span-3">
         <InsightsCard />
       </div>

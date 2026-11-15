@@ -35,7 +35,7 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
   const span = programSpan(program)
   const [tick, setTick] = useState<{ code: string; week: number } | null>(null)
   const [undo, setUndo] = useState<{ code: string; week: number } | null>(null)
-  const [light, setLight] = useState(false)
+  const [light, setLight] = useState(() => !!data.settings.deloadUntil && data.settings.deloadUntil >= data.today)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [dismissed, setDismissed] = useState(readDismissed)
   const dateLabel = (d?: string) => (d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '')

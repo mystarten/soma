@@ -6,6 +6,8 @@ import { STATUS_COLOR } from '../../engine/goals'
 import { addDayKey } from '../../engine/time'
 import { recoveryProfile, restAdvice, streetStreak, weeklyEffort } from '../../engine/performance'
 import { workoutLoad } from '../../engine/load'
+import { useOverload } from '../dashboard/useOverload'
+import { LEVEL_COLOR } from '../dashboard/OverloadCard'
 
 const ADV = { good: '#41e08a', watch: '#ffc24b', info: '#8fb4ff' } as const
 const LETTERS = ['D', 'L', 'M', 'M', 'J', 'V', 'S']
@@ -21,6 +23,7 @@ export default function WeekGlance() {
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDayKey(cur.start, i)), [cur.start])
   const doneDays = new Set(data.workouts.filter((w) => !w.planned && !w.backfill).map((w) => w.day))
   const minutes = cur.force + cur.course + cur.cardio + cur.autre
+  const ov = useOverload()
   const street = useMemo(() => streetStreak(data.workouts, today), [data.workouts, today])
   const advice = useMemo(() => {
     const last = [...data.workouts].filter((w) => !w.planned).sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0]
@@ -46,6 +49,12 @@ export default function WeekGlance() {
         <p className="text-sm font-medium text-mist-100">{advice.title}</p>
         <p className="text-xs text-mist-300">{advice.detail}</p>
       </div>
+      {ov.now.score !== null && (
+        <button onClick={() => navigate('tableau')} className="mb-3 flex w-full items-center justify-between gap-3 rounded-xl bg-white/4 px-3 py-2 text-left hairline">
+          <span className="text-xs text-mist-300">Charge de fond <span className="text-mist-500">· fatigue sur la durée</span></span>
+          <span className="text-sm font-semibold tnum" style={{ color: LEVEL_COLOR[ov.now.level] }}>{ov.now.score} %{ov.now.level === 'deload' ? ' · décharge conseillée' : ov.now.level === 'watch' ? ' · à surveiller' : ''}</span>
+        </button>
+      )}
       <div className="flex justify-between">
         {days.map((d) => {
           const done = doneDays.has(d)
