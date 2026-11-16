@@ -62,6 +62,8 @@ export default function SessionRunner({
   const ctx = useRef<AudioContext | null>(null)
   const lock = useRef<WakeLockSentinel | null>(null)
   const notified = useRef(false)
+  /** Secondes déjà annoncées par un bip pendant ce compte à rebours. */
+  const beeped = useRef<Set<number>>(new Set())
 
   /* ── Écran allumé, son, notifications ── */
   const acquire = useCallback(async () => {
@@ -87,7 +89,7 @@ export default function SessionRunner({
     [],
   )
 
-  const beep = useCallback((times = 1, freq = 880) => {
+  const beep = useCallback((times = 1, freq = 880, dur = 0.18) => {
     const c = ctx.current
     if (!c) return
     for (let i = 0; i < times; i++) {
@@ -99,10 +101,10 @@ export default function SessionRunner({
       g.connect(c.destination)
       const t = c.currentTime + i * 0.28
       o.start(t)
-      o.stop(t + 0.18)
+      o.stop(t + dur)
     }
     try {
-      navigator.vibrate?.(times > 1 ? [200, 100, 200, 100, 300] : 150)
+      navigator.vibrate?.(times > 1 ? [200, 100, 200, 100, 300] : 60)
     } catch {
       /* facultatif */
     }
@@ -150,6 +152,7 @@ export default function SessionRunner({
     setIdx(next)
     if (rest > 0) {
       notified.current = false
+      beeped.current.clear()
       setEndAt(Date.now() + rest * 1000)
       setNow(Date.now())
       setPhase('rest')
@@ -158,6 +161,20 @@ export default function SessionRunner({
     }
     void hold
   }
+
+  /* Décompte sonore : un bip à 10 s, puis un bip par seconde pour les 5 dernières, pour se préparer. */
+  useEffect(() => {
+    if (phase !== 'rest' && phase !== 'hold') return
+    const sec = Math.ceil(left)
+    if (sec <= 0 || beeped.current.has(sec)) return
+    if (sec === 10) {
+      beeped.current.add(sec)
+      beep(1, 660, 0.15)
+    } else if (sec >= 1 && sec <= 5) {
+      beeped.current.add(sec)
+      beep(1, 880, 0.12)
+    }
+  }, [left, phase, beep])
 
   /* Fin du repos ou de la tenue. */
   useEffect(() => {
@@ -269,6 +286,7 @@ export default function SessionRunner({
               full
               onClick={() => {
                 notified.current = false
+                beeped.current.clear()
                 setEndAt(Date.now() + (cur.holdSec ?? 0) * 1000)
                 setNow(Date.now())
                 setPhase('hold')
@@ -327,7 +345,7 @@ export default function SessionRunner({
           <p className="text-[6.5rem] leading-none font-semibold tnum text-accent">{fmtClock(left)}</p>
           <div className="flex gap-2">
             <Button onClick={() => setEndAt((e) => e - 15_000)}>− 15 s</Button>
-            <Button onClick={() => setEndAt((e) => e + 15_000)}>+ 15 s</Button>
+            <Button onClick={() => { beeped.current.clear(); setEndAt((e) => e + 15_000) }}>+ 15 s</Button>
             <Button variant="primary" onClick={() => { notified.current = true; setPhase('ready') }}>Passer</Button>
           </div>
           <div className="mt-3 w-full rounded-xl bg-white/4 p-3 text-left hairline">
