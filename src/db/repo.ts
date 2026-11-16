@@ -26,6 +26,8 @@ import { findTemplateByName, isRememberable, workoutToTemplate } from '../engine
 
 async function enqueue(table: SyncTable, rowId: string, payload: unknown, op: 'upsert' | 'delete') {
   try {
+    /* Une seule opération en attente par ligne : la dernière suffit (la file ne grossit pas). */
+    await db.syncQueue.where('rowId').equals(rowId).and((o) => o.table === table).delete()
     await db.syncQueue.add({ table, rowId, payload, op, updatedAt: nowIso() })
   } catch {
     /* La file de sync ne doit jamais bloquer une écriture locale. */

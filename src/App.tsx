@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { whoopHandleReturn } from './integrations/whoop'
 import WhoopAuto from './integrations/WhoopAuto'
+import StorageGuard from './components/StorageGuard'
 import ErrorBoundary, { autoReloadOnce } from './components/ErrorBoundary'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -118,6 +119,7 @@ export default function App() {
           </header>
 
           <WhoopAuto />
+          <StorageGuard />
           {whoopMsg && (
             <div role="status" className="mb-3 rounded-xl bg-accent/10 px-3 py-2 text-sm text-mist-100 hairline">
               {whoopMsg}{' '}

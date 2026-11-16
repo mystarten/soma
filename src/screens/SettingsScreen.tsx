@@ -46,6 +46,7 @@ import {
 import { uid } from '../db/db'
 import { generateDemoData, removeDemoData } from '../db/demo'
 import PageHero, { IconTitle } from '../components/ui/PageHero'
+import StoragePanel from '../components/StoragePanel'
 import { whoopConnectedFlag } from '../integrations/whoop'
 import { DEFAULT_FATIGUE_CONFIG, ZONE_LABEL, ZONE_SHORT } from '../engine/fatigueConfig'
 import { defaultHrZones } from '../engine/cardio'
@@ -413,6 +414,9 @@ export default function SettingsScreen({ param }: { param?: string }) {
       <SyncSettings param={param} />
       <WhoopSettings />
       <GoogleSettings />
+
+      {/* ── Stockage ── */}
+      <StoragePanel />
 
       {/* ── Données ── */}
       <Card title={<IconTitle icon="database">Mes données</IconTitle>}>

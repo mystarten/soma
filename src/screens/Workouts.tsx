@@ -145,7 +145,8 @@ export default function Workouts({
           { label: 'Street d’affilée', value: String(streak.days), unit: streak.days > 1 ? 'jours' : 'jour' },
         ]}
       />
-      <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="scroll-x max-w-full min-w-0">
         <Segmented
           value={tab}
           onChange={setTab}
@@ -156,6 +157,7 @@ export default function Workouts({
             { value: 'records', label: 'Records' },
           ]}
         />
+        </div>
         <Button variant="primary" onClick={() => setChoosing(true)}>
           + Séance
         </Button>

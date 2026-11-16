@@ -68,12 +68,15 @@ export async function undoDone(all: Workout[], code: string, week: number): Prom
 
 /** « J'en suis à la semaine N » par socle : crée les coches de rattrapage. */
 export async function saveProgress(program: Pick<Program, 'sessions'>, weeksBySocle: Record<string, number>): Promise<number> {
-  /* On remplace les anciennes coches de ces familles : « j'en suis à la semaine 7 » corrige un réglage précédent. */
+  /* On remplace les anciennes coches de ces familles : « j'en suis à la semaine 7 » corrige un réglage précédent.
+     Tout se fait d'un bloc : si l'écriture échoue (stockage plein), rien n'est modifié à moitié. */
   const socles = new Set(Object.keys(weeksBySocle).filter((k) => (weeksBySocle[k] ?? 0) > 0))
-  for (const old of await db.workouts.filter((w) => !!w.backfill && !w.deleted && (w.program ?? []).some((r) => socles.has(socleOf(r.code)))).toArray()) {
-    await deleteWorkout(old.id)
-  }
   const marks = backfillMarks(program, weeksBySocle, () => uid('mark'), new Date().toISOString())
-  if (marks.length) await saveWorkouts(marks)
+  await db.transaction('rw', db.workouts, db.syncQueue, async () => {
+    for (const old of await db.workouts.filter((w) => !!w.backfill && !w.deleted && (w.program ?? []).some((r) => socles.has(socleOf(r.code)))).toArray()) {
+      await deleteWorkout(old.id)
+    }
+    if (marks.length) await saveWorkouts(marks)
+  })
   return marks.length
 }

@@ -50,10 +50,21 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
         title={program.name}
         subtitle={span.start && span.end ? `Du ${dateLabel(span.start)} au ${dateLabel(span.end)}` : undefined}
       >
-        <div className="flex items-baseline justify-between text-xs text-mist-500">
-          <span>
-            {stats.done} / {stats.total} séances faites
-          </span>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+          {rotation.map((r) => {
+            const next = r.items.map((i) => i.nextWeek).filter((n): n is number => n !== null)
+            const cur = next.length ? Math.min(...next) : null
+            return (
+              <div key={r.socle} className="rounded-xl bg-white/4 px-3 py-2 hairline">
+                <div className="text-[0.62rem] tracking-wide text-mist-500 uppercase">{r.label}</div>
+                <div className="text-lg font-semibold tnum text-mist-100">{cur === null ? 'Terminé' : `Semaine ${cur}`}</div>
+                <div className="text-[0.66rem] text-mist-500">{r.doneTotal} cases cochées sur {r.weeksTotal}</div>
+              </div>
+            )
+          })}
+        </div>
+        <div className="mt-2 flex items-baseline justify-between text-[0.7rem] text-mist-500">
+          <span>Au total : {stats.done} cases cochées sur {stats.total} ({program.sessions.length} séances × {Math.round(stats.total / Math.max(1, program.sessions.length))} semaines)</span>
         </div>
         <div className="mt-1.5">
           <ProgressBar ratio={stats.total ? stats.done / stats.total : 0} />
