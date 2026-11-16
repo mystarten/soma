@@ -10,6 +10,7 @@ import SessionPreview from './SessionPreview'
 import TickSheet from './TickSheet'
 import { WeekNote } from './weekNote'
 import { useRotation } from './useRotation'
+import ProgramTable from './ProgramTable'
 import { saveProgress, undoDone } from './programActions'
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ const readDismissed = () => {
 export default function ProgramBoard({ program, onStart }: { program: Program; onStart: (w: BuiltWorkout, day?: string) => void }) {
   const data = useSoma()
   const toast = useToast()
-  const { rotation, all } = useRotation()
+  const { rotation, all, done } = useRotation()
   const stats = useMemo(() => programStats(program, all, data.today), [program, all, data.today])
   const span = programSpan(program)
   const [tick, setTick] = useState<{ code: string; week: number } | null>(null)
@@ -77,6 +78,8 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
 
       <CoachBanners light={light} onLight={setLight} />
 
+      <ProgramTable program={program} rotation={rotation} done={done} onTick={(code, week) => setTick({ code, week })} onUndo={(code, week) => setUndo({ code, week })} />
+
       {rotation.map((r) => (
         <Card
           key={r.socle}
@@ -99,12 +102,6 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
                 Plus tard, quand les autres sont faites : {r.waiting.map((i) => `${i.code} (S${i.nextWeek})`).join(' · ')}
               </p>
             )}
-            <History
-              items={r.items}
-              program={program}
-              onUndo={(code, week) => setUndo({ code, week })}
-              onTick={(code, week) => setTick({ code, week })}
-            />
           </div>
         </Card>
       ))}
@@ -201,67 +198,6 @@ function AvailableRow({ item, program, onTick }: { item: RotationItem; program: 
       )}
       {open && <SessionPreview session={session} week={item.nextWeek!} />}
     </li>
-  )
-}
-
-/* ── Historique et corrections (replié, grisé) ───────────────────────── */
-
-function History({
-  items,
-  program,
-  onUndo,
-  onTick,
-}: {
-  items: RotationItem[]
-  program: Program
-  onUndo: (code: string, week: number) => void
-  onTick: (code: string, week: number) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const total = items.reduce((a, i) => a + i.doneWeeks.length, 0)
-  if (!total && !open) {
-    return null
-  }
-  return (
-    <div className="mt-2 border-t border-white/6 pt-2">
-      <button onClick={() => setOpen((o) => !o)} className="text-[0.7rem] text-mist-700 hover:text-mist-500" aria-expanded={open}>
-        {open ? '▾' : '▸'} Faites ({total}) et corrections
-      </button>
-      {open && (
-        <ul className="mt-1.5 flex flex-col gap-2">
-          {items.map((it) => {
-            const session = program.sessions.find((s) => s.code === it.code)!
-            return (
-              <li key={it.code} className="opacity-80">
-                <div className="mb-1 text-[0.7rem] text-mist-500">
-                  {it.code} · {it.title}
-                </div>
-                <div className="scroll-x flex gap-1" role="group" aria-label={`Semaines de ${it.code}`}>
-                  {session.weeks.map((w) => {
-                    const isDone = it.doneWeeks.includes(w.n)
-                    return (
-                      <button
-                        key={w.n}
-                        onClick={() => (isDone ? onUndo(it.code, w.n) : onTick(it.code, w.n))}
-                        title={`${w.label}${w.light ? ' · légère' : ''}${w.test ? ' · test' : ''}${isDone ? ' · faite (toucher pour retirer)' : ' · toucher pour cocher'}`}
-                        className="grid h-7 min-w-7 shrink-0 place-items-center rounded-md text-[0.68rem] tnum"
-                        style={{
-                          background: isDone ? '#ffffff08' : '#ffffff0f',
-                          color: isDone ? '#56657d' : w.test ? '#6fa8ffb3' : w.light ? '#d6b25bb3' : '#b9c6dc',
-                          textDecoration: isDone ? 'line-through' : undefined,
-                        }}
-                      >
-                        {isDone ? `✓${w.n}` : w.n}
-                      </button>
-                    )
-                  })}
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </div>
   )
 }
 
