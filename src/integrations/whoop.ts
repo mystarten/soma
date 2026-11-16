@@ -114,13 +114,34 @@ export const whoopConnectedFlag = (): boolean => {
   }
 }
 
+type SyncResult = { days: number; workouts: number; withRecovery: number; received: { recovery: number; sleep: number; cycles: number; workouts: number } }
+
 /** Récupère les derniers jours depuis WHOOP et les ajoute (sans doublons, sans écraser tes saisies). */
-export async function whoopSync(
-  days = 30,
-): Promise<{ days: number; workouts: number; withRecovery: number; received: { recovery: number; sleep: number; cycles: number; workouts: number } }> {
+export async function whoopSync(days = 30): Promise<SyncResult> {
   const end = new Date()
   const start = new Date(end.getTime() - days * 86_400_000)
   const raw = await call<WhoopApiData>({ action: 'fetch', start: start.toISOString(), end: end.toISOString() })
+  return importRaw(raw, days)
+}
+
+/**
+ * Lit la dernière récupération gardée sur le serveur (remplie chaque jour par une tâche planifiée) :
+ * aucun appel à WHOOP depuis l'appareil. Renvoie null si le serveur n'a rien de récent.
+ */
+export async function whoopSyncFromServer(maxAgeHours = 26): Promise<(SyncResult & { fetchedAt: string }) | null> {
+  const sb = supabase()
+  if (!sb) return null
+  const { data, error } = await sb.from('whoop_cache').select('raw,fetched_at').maybeSingle()
+  if (error || !data) return null
+  const age = Date.now() - new Date(data.fetched_at as string).getTime()
+  if (age > maxAgeHours * 3_600_000) return null
+  const r = await importRaw(data.raw as WhoopApiData, 7)
+  return { ...r, fetchedAt: data.fetched_at as string }
+}
+
+async function importRaw(raw: WhoopApiData, days: number): Promise<SyncResult> {
+  const end = new Date()
+  const start = new Date(end.getTime() - days * 86_400_000)
   const received = { recovery: raw.recovery?.length ?? 0, sleep: raw.sleep?.length ?? 0, cycles: raw.cycles?.length ?? 0, workouts: raw.workouts?.length ?? 0 }
   const files = apiToFiles(raw)
   const remember = (r: Omit<WhoopLast, 'at'>) => {

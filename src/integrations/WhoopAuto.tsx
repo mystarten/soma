@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { useSoma } from '../hooks/useSoma'
-import { readWhoopLast, whoopConnected, whoopConnectedFlag, whoopSync } from './whoop'
+import { readWhoopLast, whoopConnected, whoopConnectedFlag, whoopSync, whoopSyncFromServer } from './whoop'
 
 /**
  * Récupération automatique : chaque jour à partir de 10 h (heure locale), dès que l'app est ouverte, et
  * toutes les 20 minutes tant qu'elle reste ouverte, jusqu'à ce que la récupération du jour soit là.
  * Elle reprend aussi les 3 derniers jours, ce qui complète la charge (strain) de la veille.
- * Une application fermée ne peut pas travailler en arrière-plan : la récupération se fait à l'ouverture.
+ * Le serveur récupère aussi WHOOP chaque heure (tâche planifiée) : à l'ouverture, l'appli lit simplement ce qu'il a gardé.
  */
 const HOUR = 10
 const RETRY_MS = 20 * 60_000
@@ -36,7 +36,11 @@ export default function WhoopAuto() {
       busy.current = true
       try {
         const connected = whoopConnectedFlag() || (await whoopConnected().catch(() => false))
-        if (connected && !stopped) await whoopSync(3)
+        if (connected && !stopped) {
+          /* D'abord ce que le serveur a déjà récupéré (tâche planifiée) ; WHOOP en direct seulement si ça manque. */
+          const fromServer = await whoopSyncFromServer().catch(() => null)
+          if (!fromServer || fromServer.withRecovery === 0) await whoopSync(3)
+        }
       } catch {
         /* silencieux : la carte WHOOP montre l'erreur à la demande */
       } finally {

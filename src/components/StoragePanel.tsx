@@ -21,10 +21,24 @@ export default function StoragePanel() {
             <li key={x.label} className="flex justify-between gap-3"><span>{x.label}</span><span className="tnum text-mist-100">{x.count}</span></li>
           ))}
           <li className="flex justify-between gap-3"><span>Modifications en attente de synchronisation</span><span className="tnum text-mist-100">{r.queue}</span></li>
+          <li className="flex justify-between gap-3"><span>Version de l’appli</span><span className="tnum text-mist-100">{__BUILD_DATE__}</span></li>
           <li className="flex justify-between gap-3"><span>Dernière récupération WHOOP</span><span className="tnum text-mist-100">{last ? new Date(last.at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'jamais'}</span></li>
         </ul>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button
+          onClick={async () => {
+            try {
+              for (const reg of await navigator.serviceWorker.getRegistrations()) await reg.unregister()
+              for (const k of await caches.keys()) await caches.delete(k)
+            } catch {
+              /* facultatif */
+            }
+            window.location.reload()
+          }}
+        >
+          Mettre à jour l’appli
+        </Button>
         <Button
           onClick={async () => {
             const x = await freeSpace()
