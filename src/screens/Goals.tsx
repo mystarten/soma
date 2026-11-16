@@ -23,6 +23,7 @@ import { deleteGoal, saveGoal, saveSettings } from '../db/repo'
 import { uid } from '../db/db'
 import { GOAL_KIND_LABEL, SOCLE_LABEL, STATUS_COLOR, STATUS_LABEL, evaluateGoal, goalPeriod, goalScore } from '../engine/goals'
 import { DEFAULT_RECORD_ROWS } from '../engine/records'
+import RecordsEditor from '../components/records/RecordsEditor'
 import { WORKOUT_KIND_LABEL } from '../engine/muscleMap'
 import { DEFAULT_WEEKLY_PLAN } from '../db/seed'
 import { parseDay, todayKey } from '../engine/time'
@@ -108,6 +109,32 @@ function BigGoal() {
         </div>
         <div className="w-40">
           <Stepper value={s.sleepGoalHours} onChange={(v) => void saveSettings({ sleepGoalHours: v })} step={0.25} precision={2} min={5} max={11} suffix="h" />
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+/** Mon rythme : ce qui règle les conseils de repos et de décharge. */
+function RhythmCard() {
+  const data = useSoma()
+  const s = data.settings
+  return (
+    <Card title="Mon rythme" subtitle="Règle les conseils de repos et de décharge">
+      <div className="mt-3 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-medium text-mist-300">Un jour de repos tous les…</div>
+            <div className="text-[0.68rem] text-mist-500">Après ce nombre de jours de street d’affilée, l’appli te conseille de te reposer</div>
+          </div>
+          <div className="w-36"><Stepper value={s.restEvery ?? 3} onChange={(v) => void saveSettings({ restEvery: v })} min={2} max={7} suffix="j" /></div>
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-white/6 pt-3">
+          <div>
+            <div className="text-xs font-medium text-mist-300">Alerte de décharge à partir de</div>
+            <div className="text-[0.68rem] text-mist-500">Charge de fond (Aperçu). Plus bas = plus prudent</div>
+          </div>
+          <div className="w-36"><Stepper value={s.deloadAt ?? 80} onChange={(v) => void saveSettings({ deloadAt: v })} min={50} max={95} step={5} suffix="%" /></div>
         </div>
       </div>
     </Card>
@@ -263,8 +290,10 @@ export default function Goals() {
         })}
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 flex flex-col gap-3">
+        <RecordsEditor />
         <BigGoal />
+        <RhythmCard />
       </div>
 
       <p className="mt-3 px-2 text-center text-[0.68rem] text-mist-700">

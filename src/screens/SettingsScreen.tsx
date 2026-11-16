@@ -52,7 +52,6 @@ import { DEFAULT_FATIGUE_CONFIG, ZONE_LABEL, ZONE_SHORT } from '../engine/fatigu
 import { defaultHrZones } from '../engine/cardio'
 import { WORKOUT_KIND_LABEL } from '../engine/muscleMap'
 import { todayKey } from '../engine/time'
-import { navigate } from '../lib/router'
 import {
   SYNC_CONFIGURED,
   SYNC_FROM_BROWSER,
@@ -97,7 +96,7 @@ export default function SettingsScreen({ param }: { param?: string }) {
       <PageHero
         icon="gear"
         title="Réglages"
-        text="Ton profil, tes appareils connectés et tes données. Tout reste sur ton appareil."
+        text="Ton profil santé et ce qui ne change pas. Tes objectifs et tes records sont dans Tableau de bord → Objectifs."
         stats={[
           { label: 'Poids', value: String(s.weightKg ?? 70), unit: 'kg' },
           { label: 'WHOOP', value: whoopConnectedFlag() ? 'connecté' : 'non relié' },
@@ -142,9 +141,6 @@ export default function SettingsScreen({ param }: { param?: string }) {
           <Field label="Protéines par jour" hint="Ta moyenne habituelle, à peu près.">
             <Stepper value={s.proteinG ?? 100} onChange={(v) => void patch({ proteinG: v })} min={30} max={300} step={5} suffix="g" />
           </Field>
-          <Field label="Un repos tous les… jours" hint="Sert au conseil « repos ou séance ».">
-            <Stepper value={s.restEvery ?? 3} onChange={(v) => void patch({ restEvery: v })} min={2} max={7} suffix="j" />
-          </Field>
           <Field label="Niveau de référence">
             <Select
               value={s.level}
@@ -157,13 +153,6 @@ export default function SettingsScreen({ param }: { param?: string }) {
             />
           </Field>
         </div>
-      </Card>
-
-      {/* ── Records ── */}
-      <Card title={<IconTitle icon="dumbbell">Records</IconTitle>} subtitle="Tractions, pompes, dips, 5 km… se modifient dans Séances → Records.">
-        <Button className="mt-2" onClick={() => navigate('seances')}>
-          Ouvrir Séances
-        </Button>
       </Card>
 
       {/* ── Préférences ── */}
@@ -256,13 +245,6 @@ export default function SettingsScreen({ param }: { param?: string }) {
           }
         >
           Recalculer depuis l’âge
-        </Button>
-      </Card>
-
-      {/* ── Objectifs ── */}
-      <Card title={<IconTitle icon="target">Objectifs</IconTitle>} subtitle="Ton grand objectif, ta nuit visée et tes objectifs de la semaine se règlent dans Tableau de bord → Objectifs.">
-        <Button className="mt-2" onClick={() => navigate('objectifs')}>
-          Ouvrir les objectifs
         </Button>
       </Card>
 

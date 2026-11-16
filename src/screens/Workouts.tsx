@@ -31,7 +31,6 @@ import {
 } from '../components/ui/primitives'
 import ProgramPanel from '../components/program/ProgramPanel'
 import CalendarScreen from './CalendarScreen'
-import RecordsEditor from '../components/records/RecordsEditor'
 import { deleteWorkout, rememberWorkout, saveWorkout } from '../db/repo'
 import { uid } from '../db/db'
 import {
@@ -400,7 +399,12 @@ function Records() {
 
   return (
     <div className="flex flex-col gap-3">
-      <RecordsEditor />
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-mist-300">Tes records se modifient maintenant dans <b className="text-mist-100">Tableau de bord → Objectifs</b>.</p>
+          <Button onClick={() => navigate('objectifs')}>Ouvrir mes records</Button>
+        </div>
+      </Card>
       {!practiced.length && !runs.length && (
         <Card>
           <EmptyState

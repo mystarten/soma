@@ -4,9 +4,10 @@ import type { ExerciseReference } from '../../types'
 import { DEFAULT_RECORD_ROWS, isWeighted, type RecordKind } from '../../engine/records'
 import { exerciseRecords } from '../../engine/load'
 import { fmtClock } from '../../engine/time'
-import { saveSettings } from '../../db/repo'
+import { saveExercise, saveSettings } from '../../db/repo'
+import { uid } from '../../db/db'
 import { RUN_5K_REFERENCE_ID } from '../../db/seed'
-import { Button, Card, Field, Select, Sheet, Stepper } from '../ui/primitives'
+import { Button, Card, Field, Segmented, Select, Sheet, Stepper, TextInput } from '../ui/primitives'
 
 /** Mes records : modifiables à la main. Ils servent de référence au calcul de l'effort et du 1RM. */
 export default function RecordsEditor() {
@@ -14,6 +15,8 @@ export default function RecordsEditor() {
   const refs = data.settings.references
   const [editing, setEditing] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
+  const [customName, setCustomName] = useState('')
+  const [customKind, setCustomKind] = useState<'reps' | 'static'>('reps')
 
   const rows = useMemo(() => {
     const known = new Map(DEFAULT_RECORD_ROWS.map((r) => [r.id, r]))
@@ -105,6 +108,34 @@ export default function RecordsEditor() {
                 options={[{ value: '', label: 'Choisir…' }, ...data.exercises.filter((e) => !e.archived && !rows.some((r) => r.id === e.id)).map((e) => ({ value: e.id, label: e.name }))]}
               />
             </Field>
+            <div className="rounded-xl bg-white/4 p-3 hairline">
+              <p className="mb-2 text-xs font-medium text-mist-300">Ou crée ton propre record</p>
+              <div className="space-y-2">
+                <TextInput value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="Ex. Traction à une main, 100 m nage…" />
+                <Segmented value={customKind} onChange={setCustomKind} options={[{ value: 'reps', label: 'Répétitions' }, { value: 'static', label: 'Tenue (secondes)' }]} />
+                <Button
+                  variant="primary"
+                  disabled={customName.trim().length < 2}
+                  onClick={async () => {
+                    const id = uid('ex')
+                    await saveExercise({
+                      id,
+                      name: customName.trim(),
+                      kind: customKind === 'static' ? 'static' : 'bodyweight',
+                      unit: customKind === 'static' ? 'seconds' : 'reps',
+                      group: 'Perso',
+                      mix: {},
+                      updatedAt: new Date().toISOString(),
+                    })
+                    setCustomName('')
+                    setAdding(false)
+                    setEditing(id)
+                  }}
+                >
+                  Créer et renseigner
+                </Button>
+              </div>
+            </div>
           </div>
         </Sheet>
       )}
