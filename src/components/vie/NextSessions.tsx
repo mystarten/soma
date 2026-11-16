@@ -3,6 +3,7 @@ import { useSoma } from '../../hooks/useSoma'
 import { navigate } from '../../lib/router'
 import { useRotation } from '../program/useRotation'
 import TickSheet from '../program/TickSheet'
+import SessionRunner from '../program/SessionRunner'
 import { WeekNote } from '../program/weekNote'
 import { useToast } from '../ui/primitives'
 
@@ -12,6 +13,7 @@ export default function NextSessions({ compact = false }: { compact?: boolean })
   const { rotation } = useRotation()
   const toast = useToast()
   const [tick, setTick] = useState<{ code: string; week: number } | null>(null)
+  const [run, setRun] = useState<{ code: string; week: number } | null>(null)
   if (!data.program) return null
   const groups = rotation.filter((r) => r.available.length)
   if (!groups.length) return null
@@ -40,6 +42,13 @@ export default function NextSessions({ compact = false }: { compact?: boolean })
                     </span>
                   </span>
                   <button
+                    onClick={() => setRun({ code: it.code, week: it.nextWeek! })}
+                    aria-label={`Lancer la séance guidée ${it.code}`}
+                    className="grid h-8 shrink-0 place-items-center rounded-lg bg-accent px-2.5 text-xs font-medium text-ink-950 transition active:scale-95"
+                  >
+                    ▶
+                  </button>
+                  <button
                     onClick={() => setTick({ code: it.code, week: it.nextWeek! })}
                     aria-label={`Marquer ${it.code} semaine ${it.nextWeek} comme faite`}
                     className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/6 text-mist-300 transition active:scale-95 hover:bg-accent/20 hover:text-accent"
@@ -57,6 +66,9 @@ export default function NextSessions({ compact = false }: { compact?: boolean })
           </div>
         ))}
       </div>
+      {run && data.program && (
+        <SessionRunner program={data.program} picks={[run]} onClose={() => setRun(null)} onSaved={(label) => toast.show(`${label} enregistrée ✓`)} />
+      )}
       {tick && data.program && (
         <TickSheet
           program={data.program}

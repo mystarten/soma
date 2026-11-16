@@ -11,6 +11,8 @@ import TickSheet from './TickSheet'
 import { WeekNote } from './weekNote'
 import { useRotation } from './useRotation'
 import ProgramTable from './ProgramTable'
+import ProgramEditor from './ProgramEditor'
+import SessionRunner from './SessionRunner'
 import { saveProgress, undoDone } from './programActions'
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -41,6 +43,8 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
   const [dismissed, setDismissed] = useState(readDismissed)
   const dateLabel = (d?: string) => (d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '')
   const [adjust, setAdjust] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [run, setRun] = useState<{ code: string; week: number } | null>(null)
   const nothingDone = stats.done === 0 && !dismissed
 
   return (
@@ -89,6 +93,10 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
 
       <CoachBanners light={light} onLight={setLight} />
 
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => setEditing(true)}>✎ Modifier mon programme</Button>
+      </div>
+
       <ProgramTable program={program} rotation={rotation} done={done} onTick={(code, week) => setTick({ code, week })} onUndo={(code, week) => setUndo({ code, week })} />
 
       {rotation.map((r) => (
@@ -102,7 +110,7 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
             {r.available.length > 0 ? (
               <ul className="divide-y divide-white/6">
                 {r.available.map((it) => (
-                  <AvailableRow key={it.code} item={it} program={program} onTick={() => setTick({ code: it.code, week: it.nextWeek! })} />
+                  <AvailableRow key={it.code} item={it} program={program} onTick={() => setTick({ code: it.code, week: it.nextWeek! })} onRun={() => setRun({ code: it.code, week: it.nextWeek! })} />
                 ))}
               </ul>
             ) : (
@@ -133,6 +141,8 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
         )}
       </div>
 
+      {run && <SessionRunner program={program} picks={[run]} light={light} onClose={() => setRun(null)} onSaved={(label) => toast.show(`${label} enregistrée ✓`)} />}
+      {editing && <ProgramEditor program={program} onClose={() => setEditing(false)} onSaved={() => toast.show('Programme enregistré')} />}
       {tick && (
         <TickSheet
           program={program}
@@ -177,7 +187,7 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
 
 /* ── Une séance dont c'est le tour ───────────────────────────────────── */
 
-function AvailableRow({ item, program, onTick }: { item: RotationItem; program: Program; onTick: () => void }) {
+function AvailableRow({ item, program, onTick, onRun }: { item: RotationItem; program: Program; onTick: () => void; onRun: () => void }) {
   const session = program.sessions.find((s) => s.code === item.code)!
   const [open, setOpen] = useState(false)
   const impact = useImpact([{ code: item.code, week: item.nextWeek! }], program.sessions)
@@ -191,6 +201,13 @@ function AvailableRow({ item, program, onTick }: { item: RotationItem; program: 
             Semaine {item.nextWeek}
             {item.week?.label ? ` · ${item.week.label}` : ''} <WeekNote week={item.week} /> · {open ? 'masquer' : 'voir le détail'}
           </span>
+        </button>
+        <button
+          onClick={onRun}
+          aria-label={`Lancer la séance guidée ${item.code} semaine ${item.nextWeek}`}
+          className="grid h-10 shrink-0 place-items-center rounded-xl bg-accent px-3 text-sm font-medium text-ink-950 transition active:scale-95"
+        >
+          ▶ Lancer
         </button>
         <button
           onClick={onTick}

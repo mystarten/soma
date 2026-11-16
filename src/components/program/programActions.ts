@@ -80,3 +80,43 @@ export async function saveProgress(program: Pick<Program, 'sessions'>, weeksBySo
   })
   return marks.length
 }
+
+export interface RunInput {
+  program: Pick<Program, 'sessions'>
+  picks: { code: string; week: number }[]
+  /** Séries réellement faites (valeurs saisies pendant la séance). */
+  sets: Workout['sets']
+  startedAt: string
+  durationMin: number
+  rpe: number
+  light?: boolean
+}
+
+/** Enregistre une séance menée avec le mode guidé : les séries réelles, la vraie durée, l'effort. */
+export async function saveRunWorkout(i: RunInput): Promise<Workout | null> {
+  const built = buildFromProgram(i.program, i.picks, () => uid('set'))
+  if (!built) return null
+  const w: Workout = {
+    id: uid('w'),
+    day: dayOf(i.startedAt),
+    startedAt: i.startedAt,
+    durationMin: Math.max(1, i.durationMin),
+    kind: built.kind,
+    title: i.light ? `${built.title} (légère)` : built.title,
+    rpe: i.rpe,
+    feeling: 3,
+    notes: built.notes,
+    sets: i.sets,
+    program: built.program,
+    source: 'manual',
+    updatedAt: new Date().toISOString(),
+  }
+  await saveWorkout(w)
+  await mergeProgramWithWhoop()
+  return w
+}
+
+const dayOf = (iso: string): string => {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
