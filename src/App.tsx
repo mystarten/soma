@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { BottomNav, SideRail } from './components/Nav'
 import Main from './screens/Main'
+import AuthScreen, { LOCAL_MODE_KEY } from './components/AuthScreen'
 import { navigate, useRoute } from './lib/router'
 import { useSoma } from './hooks/useSoma'
 import { SYNC_CONFIGURED } from './sync/supabase'
@@ -48,8 +49,17 @@ function SyncBanner() {
   return null
 }
 
+const localMode = (() => {
+  try {
+    return window.localStorage.getItem(LOCAL_MODE_KEY) === '1'
+  } catch {
+    return false
+  }
+})()
+
 export default function App() {
   const { route, param } = useRoute()
+  const { syncState } = useSoma()
 
   /* Un fichier de l'ancienne version a disparu (mise à jour publiée) : on se recharge une fois, proprement. */
   useEffect(() => {
@@ -71,6 +81,12 @@ export default function App() {
     if (route !== 'accueil' && route !== 'reglages') navigate('accueil')
   }, [route])
 
+  /* Sans compte, rien n'est affiché : chacun passe d'abord par la connexion. */
+  if (!localMode && !SYNC_CONFIGURED) return <AuthScreen />
+  if (SYNC_CONFIGURED && syncState.kind === 'signed-out') return <AuthScreen />
+  if (SYNC_CONFIGURED && syncState.kind === 'syncing' && !syncState.email)
+    return <div className="grid min-h-[100dvh] place-items-center text-sm text-mist-500">Connexion…</div>
+
   return (
     <div className="relative z-10 flex min-h-full">
       <SideRail current={route} />
@@ -79,14 +95,14 @@ export default function App() {
           className="mx-auto w-full max-w-[1680px] px-3 pt-safe sm:px-5"
           style={{ paddingBottom: 'calc(var(--nav-h) + var(--safe-bottom) + 1.5rem)' }}
         >
-          <header className="flex items-end justify-between gap-3 pt-2 pb-3">
+          <header className="flex flex-col gap-0.5 pt-2 pb-3 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
             <div>
               <h1 className="text-xl font-semibold text-mist-100 sm:text-2xl">{TITLES[route]}</h1>
               <p className="text-xs text-mist-500 capitalize">
                 {format(new Date(), 'EEEE d MMMM', { locale: fr })}
               </p>
             </div>
-            <div className="text-right">
+            <div className="sm:text-right">
               <SyncBanner />
             </div>
           </header>

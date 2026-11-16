@@ -77,7 +77,7 @@ export function Button({
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; full?: boolean }) {
   const base =
-    'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100'
+    'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100'
   const styles: Record<Variant, string> = {
     primary: 'text-ink-950 bg-accent glow-accent',
     soft: 'bg-white/6 text-mist-100 hairline hover:bg-white/10',
@@ -138,7 +138,7 @@ export function Segmented<T extends string>({
             aria-selected={active}
             onClick={() => onChange(o.value)}
             className={`rounded-lg transition ${
-              size === 'sm' ? 'px-2.5 py-1 text-[0.72rem]' : 'px-3 py-1.5 text-xs'
+              size === 'sm' ? 'min-h-9 px-3 py-1.5 text-xs sm:min-h-0 sm:px-2.5 sm:py-1 sm:text-[0.72rem]' : 'min-h-10 px-3.5 py-2 text-[0.82rem] sm:min-h-0 sm:px-3 sm:py-1.5 sm:text-xs'
             } ${
               active
                 ? 'bg-accent/18 text-accent shadow-[inset_0_0_0_1px_var(--accent-soft)]'
@@ -222,7 +222,7 @@ export function TextInput({
 }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={`w-full rounded-xl bg-ink-900/70 px-3.5 py-2.5 text-sm text-mist-100 tnum transition hairline outline-none placeholder:text-mist-700 focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)] ${className}`}
+      className={`w-full rounded-xl bg-ink-900/70 px-3.5 py-3 text-base text-mist-100 tnum transition hairline outline-none sm:py-2.5 sm:text-sm placeholder:text-mist-700 focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)] ${className}`}
       {...rest}
     />
   )
@@ -236,7 +236,7 @@ export function TextArea({
   return (
     <textarea
       rows={rows}
-      className={`w-full resize-y rounded-xl bg-ink-900/70 px-3.5 py-2.5 text-sm text-mist-100 transition hairline outline-none placeholder:text-mist-700 focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)] ${className}`}
+      className={`w-full resize-y rounded-xl bg-ink-900/70 px-3.5 py-3 text-base text-mist-100 transition hairline outline-none sm:py-2.5 sm:text-sm placeholder:text-mist-700 focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)] ${className}`}
       {...(rest as object)}
     />
   )
@@ -258,7 +258,7 @@ export function Select({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-full appearance-none rounded-xl bg-ink-900/70 py-2.5 pr-9 pl-3.5 text-sm text-mist-100 transition hairline outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)] ${className}`}
+        className={`w-full appearance-none rounded-xl bg-ink-900/70 py-3 pr-9 pl-3.5 text-base text-mist-100 transition hairline sm:py-2.5 sm:text-sm outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)] ${className}`}
       >
         {options.map((o) => (
           <option key={o.value} value={o.value} className="bg-ink-900">

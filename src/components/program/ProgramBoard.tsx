@@ -60,19 +60,32 @@ export default function ProgramBoard({ program }: { program: Program }) {
         <h2 className="mt-0.5 text-xl font-semibold text-mist-100">{advice.title}</h2>
         <p className="mt-0.5 text-sm text-mist-300">{advice.detail}</p>
         {!advice.rest && suggestion && (
-          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-black/25 p-3 hairline">
-            <span className="rounded-md bg-accent/15 px-2 py-1 text-sm font-semibold text-accent tnum">{suggestion.code}</span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-mist-100">{suggestion.title}</p>
-              <p className="text-[0.7rem] text-mist-500">Semaine {suggestion.nextWeek}{suggestion.week?.label ? ` · ${suggestion.week.label}` : ''} <WeekNote week={suggestion.week} /></p>
+          <div className="mt-3 rounded-2xl bg-black/25 p-3.5 hairline">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 shrink-0 rounded-lg bg-accent/15 px-2.5 py-1 text-base font-semibold text-accent tnum">{suggestion.code}</span>
+              <div className="min-w-0">
+                <p className="text-base leading-snug font-medium text-mist-100">{suggestion.title}</p>
+                <p className="mt-0.5 text-xs text-mist-500">Semaine {suggestion.nextWeek}{suggestion.week?.label ? ` · ${suggestion.week.label}` : ''} <WeekNote week={suggestion.week} /></p>
+              </div>
             </div>
-            <Button variant="primary" onClick={() => setRun({ code: suggestion.code, week: suggestion.nextWeek! })}>▶ Lancer</Button>
-            <Button onClick={() => setTick({ code: suggestion.code, week: suggestion.nextWeek! })}>✓ Déjà faite</Button>
+            <div className="mt-3 grid grid-cols-2 gap-2.5">
+              <Button variant="primary" className="!py-3.5 text-base" onClick={() => setRun({ code: suggestion.code, week: suggestion.nextWeek! })}>▶ Lancer</Button>
+              <Button className="!py-3.5 text-base" onClick={() => setTick({ code: suggestion.code, week: suggestion.nextWeek! })}>✓ Déjà faite</Button>
+            </div>
           </div>
         )}
         {!advice.rest && !suggestion && <p className="mt-2 text-sm text-mist-300">Tout le programme est fait. Bravo !</p>}
         {!advice.rest && others.length > 0 && (
-          <p className="mt-2 text-[0.7rem] text-mist-500">Aussi possible : {others.map((i) => `${i.code} (S${i.nextWeek})`).join(' · ')}</p>
+          <div className="mt-3">
+            <p className="mb-1.5 text-xs text-mist-500">Ou lance une autre séance :</p>
+            <div className="flex flex-wrap gap-2">
+              {others.map((i) => (
+                <button key={i.code} onClick={() => setRun({ code: i.code, week: i.nextWeek! })} className="min-h-10 rounded-xl bg-white/7 px-3 text-sm text-mist-100 hairline transition active:scale-95">
+                  ▶ {i.code} <span className="text-mist-500">S{i.nextWeek}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/8 pt-2.5">
           <span className="text-[0.7rem] text-mist-500">Repos conseillé après</span>
@@ -80,11 +93,10 @@ export default function ProgramBoard({ program }: { program: Program }) {
         </div>
       </section>
 
-      {!nothingDone && (
-        <button onClick={() => setAdjust((v) => !v)} className="self-start text-xs text-accent">
-          {adjust ? 'Fermer' : 'Ajuster où j’en suis (ex. « je suis à la semaine 7 »)'}
-        </button>
-      )}
+      <div className="grid grid-cols-2 gap-2.5">
+        <Button onClick={() => setEditing(true)}>✎ Modifier mon programme</Button>
+        <Button onClick={() => setAdjust((v) => !v)}>{adjust ? 'Fermer' : 'Où j’en suis ?'}</Button>
+      </div>
 
       {(nothingDone || adjust) && <SetupCard program={program} onDone={(n) => { setAdjust(false); toast.show(`${n} semaines marquées comme faites`) }} onDismiss={() => {
         setAdjust(false)
@@ -95,12 +107,6 @@ export default function ProgramBoard({ program }: { program: Program }) {
         }
         setDismissed(true)
       }} />}
-
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={() => setEditing(true)}>✎ Modifier mon programme</Button>
-      </div>
-
-      <ProgramTable program={program} rotation={rotation} done={done} onTick={(code, week) => setTick({ code, week })} onUndo={(code, week) => setUndo({ code, week })} />
 
       {rotation.map((r) => (
         <Card
@@ -127,6 +133,8 @@ export default function ProgramBoard({ program }: { program: Program }) {
           </div>
         </Card>
       ))}
+
+      <ProgramTable program={program} rotation={rotation} done={done} onTick={(code, week) => setTick({ code, week })} onUndo={(code, week) => setUndo({ code, week })} />
 
       <Card
         title={program.name}
@@ -219,32 +227,20 @@ function AvailableRow({ item, program, onTick, onRun }: { item: RotationItem; pr
   const session = program.sessions.find((s) => s.code === item.code)!
   const [open, setOpen] = useState(false)
   return (
-    <li className="py-3">
-      <div className="flex items-center gap-3">
-        <span className="w-9 shrink-0 rounded-md bg-accent/15 py-0.5 text-center text-sm font-semibold text-accent tnum">{item.code}</span>
-        <button onClick={() => setOpen((o) => !o)} className="min-w-0 flex-1 text-left" aria-expanded={open}>
-          <span className="block truncate text-sm text-mist-100">{item.title}</span>
-          <span className="block truncate text-[0.68rem] text-mist-500">
+    <li className="py-3.5">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-start gap-3 text-left" aria-expanded={open}>
+        <span className="mt-0.5 w-10 shrink-0 rounded-md bg-accent/15 py-1 text-center text-sm font-semibold text-accent tnum">{item.code}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[0.95rem] leading-snug text-mist-100">{item.title}</span>
+          <span className="mt-0.5 block text-xs text-mist-500">
             Semaine {item.nextWeek}
             {item.week?.label ? ` · ${item.week.label}` : ''} <WeekNote week={item.week} /> · {open ? 'masquer' : 'voir le détail'}
           </span>
-        </button>
-        <button
-          onClick={onRun}
-          aria-label={`Lancer la séance guidée ${item.code} semaine ${item.nextWeek}`}
-          className="grid h-10 shrink-0 place-items-center rounded-xl bg-accent px-3 text-sm font-medium text-ink-950 transition active:scale-95"
-        >
-          ▶ Lancer
-        </button>
-        <button
-          onClick={onTick}
-          aria-label={`Marquer ${item.code} semaine ${item.nextWeek} comme faite`}
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/6 text-mist-300 transition active:scale-95 hover:bg-accent/20 hover:text-accent"
-        >
-          <svg viewBox="0 0 20 20" className="h-5 w-5">
-            <path d="M5 10.5l3.2 3.2L15 6.8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
+        </span>
+      </button>
+      <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+        <Button variant="primary" onClick={onRun} aria-label={`Lancer la séance guidée ${item.code} semaine ${item.nextWeek}`}>▶ Lancer</Button>
+        <Button onClick={onTick} aria-label={`Marquer ${item.code} semaine ${item.nextWeek} comme faite`}>✓ Déjà faite</Button>
       </div>
       {open && <SessionPreview session={session} week={item.nextWeek!} />}
     </li>

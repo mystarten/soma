@@ -1,8 +1,11 @@
 import { useRef, useState } from 'react'
 import SyncSettings from '../components/SyncSettings'
+import { useSoma } from '../hooks/useSoma'
+import { signOut, syncNow } from '../sync/syncEngine'
+import { SYNC_CONFIGURED } from '../sync/supabase'
 import StoragePanel from '../components/StoragePanel'
 import { Button, Card, useToast } from '../components/ui/primitives'
-import { exportBackup, importBackup, wipeData } from '../db/repo'
+import { exportBackup, importBackup } from '../db/repo'
 import { todayKey } from '../engine/time'
 
 function download(name: string, content: string) {
@@ -14,6 +17,47 @@ function download(name: string, content: string) {
   URL.revokeObjectURL(url)
 }
 
+function AccountCard() {
+  const { syncState } = useSoma()
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+  const email = 'email' in syncState ? syncState.email : ''
+  return (
+    <Card title="Mon compte" subtitle="Tes programmes sont enregistrés dans ton compte et suivent sur tous tes appareils">
+      <div className="mt-3 flex flex-col gap-3">
+        <p className="text-sm text-mist-100">{email || 'Non connecté'}</p>
+        <p className="text-xs text-mist-500">
+          {syncState.kind === 'idle' ? `Synchronisé${syncState.pending ? ` · ${syncState.pending} modification(s) en attente` : ''}` : syncState.kind === 'syncing' ? 'Synchronisation…' : syncState.kind === 'error' ? `En attente : ${syncState.message}` : ''}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true)
+              await syncNow()
+              setBusy(false)
+              toast.show('Synchronisé')
+            }}
+          >
+            Synchroniser maintenant
+          </Button>
+          {SYNC_CONFIGURED && (
+            <Button
+              variant="danger"
+              onClick={async () => {
+                if (!window.confirm('Se déconnecter ? Tes programmes restent dans ton compte, mais ne seront plus affichés sur cet appareil.')) return
+                await signOut()
+              }}
+            >
+              Se déconnecter
+            </Button>
+          )}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 /** Réglages réduits à l'essentiel : synchronisation, sauvegarde et santé du stockage. */
 export default function SettingsScreen({ param }: { param?: string }) {
   const toast = useToast()
@@ -22,7 +66,15 @@ export default function SettingsScreen({ param }: { param?: string }) {
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
       {toast.node}
-      <SyncSettings param={param} />
+      <AccountCard />
+      {SYNC_CONFIGURED && (
+        <details className="rounded-[var(--radius-card)] p-4 hairline" open={!!param}>
+          <summary className="cursor-pointer text-sm text-mist-300">Serveur (réglages avancés)</summary>
+          <div className="mt-3">
+            <SyncSettings param={param} />
+          </div>
+        </details>
+      )}
       <Card title="Mes données" subtitle="Sauvegarde et restauration">
         <div className="mt-3 flex flex-wrap gap-2">
           <Button
@@ -53,16 +105,6 @@ export default function SettingsScreen({ param }: { param?: string }) {
             }}
           />
           <Button disabled={busy} onClick={() => file.current?.click()}>Importer (JSON)</Button>
-          <Button
-            variant="danger"
-            onClick={async () => {
-              if (!window.confirm('Supprimer toutes mes données sur cet appareil ?')) return
-              await wipeData()
-              toast.show('Données supprimées')
-            }}
-          >
-            Tout supprimer
-          </Button>
         </div>
       </Card>
       <StoragePanel />

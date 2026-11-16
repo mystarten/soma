@@ -29,10 +29,12 @@ const TABLES: SyncTable[] = [
 
 const LAST_SYNC_KEY = 'last_sync_at'
 const RESET_SEEN_KEY = 'reset_epoch_seen'
+const OWNER_KEY = 'local_owner'
 
 type Listener = (s: SyncState) => void
 const listeners = new Set<Listener>()
-let state: SyncState = SYNC_CONFIGURED ? { kind: 'signed-out' } : { kind: 'disabled' }
+/* Tant que la session n'est pas vérifiée, on est « en cours » : l'écran de connexion ne clignote pas. */
+let state: SyncState = SYNC_CONFIGURED ? { kind: 'syncing', email: '', pending: 0 } : { kind: 'disabled' }
 let running = false
 
 export function getSyncState(): SyncState {
@@ -116,6 +118,14 @@ export async function signInWithPassword(email: string, password: string): Promi
   if (error) throw error
 }
 
+/** Envoie un lien pour choisir un nouveau mot de passe. */
+export async function sendPasswordReset(email: string): Promise<void> {
+  const sb = supabase()
+  if (!sb) throw new Error('Synchronisation non configurée.')
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href.split('#')[0] })
+  if (error) throw error
+}
+
 /** Création du compte avec mot de passe (une seule fois). */
 export async function signUpWithPassword(email: string, password: string): Promise<void> {
   const sb = supabase()
@@ -138,7 +148,10 @@ export async function signOut(): Promise<void> {
   const sb = supabase()
   if (!sb) return
   await sb.auth.signOut()
-  await db.meta.delete(LAST_SYNC_KEY)
+  /* Les données restent dans le compte : on vide l'appareil pour que la personne suivante ne voie rien. */
+  await wipeLocalRows()
+  await db.meta.clear()
+  await ensureSeeded()
   setState({ kind: 'signed-out' })
 }
 
@@ -223,6 +236,16 @@ export async function syncNow(): Promise<void> {
     const email = session.user.email ?? ''
     const userId = session.user.id
     setState({ kind: 'syncing', email, pending: await pendingCount() })
+
+    /* Un appareil partagé : les données locales appartiennent à un seul compte. Si un autre compte se connecte,
+       elles sont effacées d'ici (elles restent dans le compte d'origine) avant toute synchronisation. */
+    const owner = (await db.meta.get(OWNER_KEY))?.value as string | undefined
+    if (owner && owner !== userId) {
+      await wipeLocalRows()
+      await db.meta.clear()
+      await ensureSeeded()
+    }
+    if (owner !== userId) await db.meta.put({ key: OWNER_KEY, value: userId })
 
     /* Remise à zéro faite depuis un autre appareil : les anciennes données de celui-ci ne doivent pas
        repartir dans le cloud. On les efface si cet appareil avait déjà synchronisé avant la remise à zéro. */

@@ -49,8 +49,61 @@ export default function ProgramTable({
   const afterTest = (n: number) => !!colInfo.get(n - 1)?.test
 
   return (
-    <Card title="Tableau du programme" subtitle="Toutes tes séances, semaine par semaine. Touche une case pour cocher ou retirer." padded={false}>
-      <div className="scroll-x px-3 pb-3 pt-2 sm:px-4">
+    <Card title="Mon avancement" subtitle="Semaine par semaine. Touche une case pour cocher ou retirer." padded={false}>
+      <div className="px-3 pb-3 pt-1 sm:hidden">
+        {socles.map((so) => (
+          <div key={so} className="mt-3">
+            <p className="mb-1.5 text-[0.68rem] font-semibold tracking-[0.14em] text-mist-500 uppercase">{SOCLE_LABEL[so] ?? so}</p>
+            <ul className="flex flex-col gap-3">
+              {program.sessions.filter((s) => socleOf(s.code) === so).map((s) => {
+                const d = done.get(s.code) ?? new Set<number>()
+                const next = nextOf(s.code)
+                return (
+                  <li key={s.code} className="rounded-2xl bg-white/4 p-3 hairline">
+                    <div className="mb-2 flex items-start gap-2.5">
+                      <span className="shrink-0 rounded-md bg-accent/15 px-2 py-0.5 text-sm font-semibold text-accent tnum">{s.code}</span>
+                      <span className="min-w-0 flex-1 text-sm leading-snug text-mist-100">{s.title}</span>
+                      <span className="shrink-0 text-xs text-mist-500 tnum">{d.size}/{s.weeks.length}</span>
+                    </div>
+                    <div className="grid grid-cols-6 gap-1.5">
+                      {s.weeks.map((w) => {
+                        const isDone = d.has(w.n)
+                        const isNext = next === w.n
+                        const tone = w.test ? BLUE : w.light ? AMBER : afterTest(w.n) ? GREEN : undefined
+                        return (
+                          <button
+                            key={w.n}
+                            onClick={() => (isDone ? onUndo(s.code, w.n) : onTick(s.code, w.n))}
+                            aria-label={`${s.code} semaine ${w.n}${w.test ? ' (test)' : ''}${w.light ? ' (décharge)' : ''} : ${isDone ? 'faite, toucher pour retirer' : 'toucher pour cocher'}`}
+                            className="flex h-12 flex-col items-center justify-center rounded-lg text-[0.8rem] leading-none tnum transition active:scale-95"
+                            style={
+                              isDone
+                                ? { background: `${GREEN}26`, color: GREEN, boxShadow: `inset 0 0 0 1px ${GREEN}55` }
+                                : isNext
+                                  ? { background: 'color-mix(in srgb, var(--accent) 16%, transparent)', color: 'var(--accent)', boxShadow: 'inset 0 0 0 1.5px var(--accent)' }
+                                  : { background: '#ffffff0a', color: tone ?? '#8a9bb8', boxShadow: tone ? `inset 0 0 0 1px ${tone}66` : undefined }
+                            }
+                          >
+                            <span className="font-semibold">{isDone ? '✓' : isNext ? '▶' : w.n}</span>
+                            <span className="mt-1 text-[0.55rem]">{isDone ? `S${w.n}` : w.test ? 'test' : w.light ? 'décharge' : `S${w.n}`}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ))}
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[0.68rem] text-mist-500">
+          <span><b style={{ color: GREEN }}>✓</b> faite</span>
+          <span><b className="text-accent">▶</b> prochaine</span>
+          <span><b style={{ color: AMBER }}>jaune</b> décharge</span>
+          <span><b style={{ color: BLUE }}>bleu</b> test</span>
+        </div>
+      </div>
+      <div className="scroll-x hidden px-3 pb-3 pt-2 sm:block sm:px-4">
         <table className="w-max border-separate border-spacing-y-1 text-xs">
           <thead>
             <tr>
