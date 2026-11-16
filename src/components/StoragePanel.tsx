@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button, Card } from './ui/primitives'
 import { IconTitle } from './ui/PageHero'
-import { freeSpace, storageReport, type StorageReport } from '../db/maintenance'
+import { freeSpace, storageReport, writeTest, type StorageReport } from '../db/maintenance'
 import { readWhoopLast } from '../integrations/whoop'
 import { exportBackup } from '../db/repo'
 import { resetEverything } from '../sync/syncEngine'
@@ -11,6 +11,7 @@ export default function StoragePanel() {
   const [r, setR] = useState<StorageReport | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [resetting, setResetting] = useState(false)
+  const [test, setTest] = useState<{ label: string; ok: boolean; detail: string }[] | null>(null)
   const refresh = () => void storageReport().then(setR)
   useEffect(refresh, [])
   const last = readWhoopLast()
@@ -51,8 +52,19 @@ export default function StoragePanel() {
         >
           Libérer de l’espace
         </Button>
+        <Button onClick={async () => setTest(await writeTest())}>Tester l’écriture</Button>
         {msg && <span className="text-xs text-mist-300">{msg}</span>}
       </div>
+      {test && (
+        <ul className="mt-3 space-y-1 text-xs">
+          {test.map((t) => (
+            <li key={t.label} className="flex justify-between gap-3">
+              <span className="text-mist-300">{t.label}</span>
+              <span className={t.ok ? 'text-[#41e08a]' : 'text-[#ff8f45]'}>{t.ok ? 'fonctionne' : t.detail}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="mt-4 rounded-xl border border-[#ff5a5a]/30 bg-[#ff5a5a]/6 p-3">
         <p className="text-sm font-medium text-mist-100">Repartir de zéro, partout</p>
         <p className="mt-0.5 text-xs text-mist-300">
