@@ -1,6 +1,8 @@
 import type { SyncState, SyncTable } from '../types'
 import { db, nowIso } from '../db/db'
 import { ROWS_TABLE, SYNC_CONFIGURED, supabase } from './supabase'
+import { ensureSeeded } from '../db/seed'
+import { saveSettings } from '../db/repo'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Local d'abord : chaque écriture part dans Dexie, puis une file pousse vers
@@ -26,6 +28,7 @@ const TABLES: SyncTable[] = [
 ]
 
 const LAST_SYNC_KEY = 'last_sync_at'
+const RESET_SEEN_KEY = 'reset_epoch_seen'
 
 type Listener = (s: SyncState) => void
 const listeners = new Set<Listener>()
@@ -157,6 +160,54 @@ async function enqueueAllLocal(): Promise<void> {
   }
 }
 
+/** Efface toutes les données locales (la file de synchro aussi) sans toucher à la configuration de connexion. */
+async function wipeLocalRows(): Promise<void> {
+  await db.transaction(
+    'rw',
+    [db.checkins, db.workouts, db.exercises, db.templates, db.workoutTypes, db.goals, db.metrics, db.settings, db.tasks, db.deadlines, db.notes, db.programs, db.reviews, db.injuries, db.imports, db.syncQueue, db.meta],
+    async () => {
+      for (const t of TABLES) await localTable(t).clear()
+      await db.imports.clear()
+      await db.syncQueue.clear()
+      await db.meta.delete(LAST_SYNC_KEY)
+    },
+  )
+}
+
+/**
+ * Repart de zéro partout : efface le cloud, puis cet appareil, puis remet les données de base.
+ * Les autres appareils effacent leurs anciennes données à leur prochaine synchronisation.
+ * Sans connexion cloud, ne remet à zéro que cet appareil.
+ */
+export async function resetEverything(): Promise<void> {
+  const epoch = nowIso()
+  const sb = supabase()
+  let signedIn = false
+  if (sb) {
+    const { data } = await sb.auth.getSession()
+    const uid = data.session?.user.id
+    if (uid) {
+      const { error } = await sb.from(ROWS_TABLE).delete().eq('user_id', uid)
+      if (error) throw error
+      signedIn = true
+    }
+  }
+  /* Base locale supprimée puis recréée : plus fiable qu'un effacement table par table. */
+  await db.delete()
+  await db.open()
+  try {
+    for (const k of Object.keys(window.localStorage)) {
+      if (k.startsWith('soma-') && k !== 'soma-sync-config' && k !== 'soma-whoop-connected') window.localStorage.removeItem(k)
+    }
+  } catch {
+    /* facultatif */
+  }
+  await ensureSeeded()
+  await saveSettings({ resetEpoch: epoch })
+  await db.meta.put({ key: RESET_SEEN_KEY, value: epoch })
+  if (signedIn) await syncNow()
+}
+
 /** Pousse la file locale, puis récupère les modifications distantes. */
 export async function syncNow(): Promise<void> {
   const sb = supabase()
@@ -172,6 +223,19 @@ export async function syncNow(): Promise<void> {
     const email = session.user.email ?? ''
     const userId = session.user.id
     setState({ kind: 'syncing', email, pending: await pendingCount() })
+
+    /* Remise à zéro faite depuis un autre appareil : les anciennes données de celui-ci ne doivent pas
+       repartir dans le cloud. On les efface si cet appareil avait déjà synchronisé avant la remise à zéro. */
+    const { data: remote } = await sb.from(ROWS_TABLE).select('data').eq('table_name', 'settings').eq('row_id', 'settings').maybeSingle()
+    const remoteEpoch = (remote?.data as { resetEpoch?: string } | null)?.resetEpoch
+    if (remoteEpoch) {
+      const seen = (await db.meta.get(RESET_SEEN_KEY))?.value as string | undefined
+      const lastSync = (await db.meta.get(LAST_SYNC_KEY))?.value as string | undefined
+      if (seen !== remoteEpoch) {
+        if (lastSync && lastSync < remoteEpoch) await wipeLocalRows()
+        await db.meta.put({ key: RESET_SEEN_KEY, value: remoteEpoch })
+      }
+    }
 
     /* 0. Première connexion sur cet appareil : tout ce qui existe déjà ici doit partir aussi
           (programme importé, séances, check-ins…), pas seulement ce qui sera modifié ensuite. */
