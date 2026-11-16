@@ -83,14 +83,15 @@ export function useImpact(picks: ProgramPick[], sessions: ProgramSession[]) {
 
 export function ImpactNotice({ impact }: { impact: ReturnType<typeof useImpact> }) {
   if (!impact.length) return null
+  /* Discret : une ligne légère, le détail apparaît au survol ou au toucher. */
   return (
-    <div className="rounded-xl bg-[#ffb02e14] px-3 py-2.5 text-xs" style={{ boxShadow: 'inset 0 0 0 1px #ffb02e40' }}>
-      {impact.map((w) => (
-        <p key={w.area} className="text-mist-300">
-          <span className="font-medium text-[#ffb02e]">{areaLabel(w.area)} ({SEVERITY_LABEL[w.severity]}) · </span>
-          concerne {w.exercises.join(', ')}. {SEVERITY_ADVICE[w.severity]}
-        </p>
+    <p className="text-[0.66rem] leading-snug text-mist-500">
+      {impact.map((w, i) => (
+        <span key={w.area} title={`Concerne ${w.exercises.join(', ')}. ${SEVERITY_ADVICE[w.severity]}`}>
+          {i > 0 ? ' · ' : ''}
+          <span className="text-[#ffb02e]/80" aria-hidden>⚠</span> {areaLabel(w.area)} ({SEVERITY_LABEL[w.severity]})
+        </span>
       ))}
-    </div>
+    </p>
   )
 }
