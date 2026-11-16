@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSoma } from '../hooks/useSoma'
-import { freeSpace, isQuotaError, storageReport } from '../db/maintenance'
+import { dbHealth, freeSpace, isQuotaError, storageReport } from '../db/maintenance'
 import { navigate } from '../lib/router'
 
 /**
@@ -11,6 +11,7 @@ export default function StorageGuard() {
   const data = useSoma()
   const [full, setFull] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [stuck, setStuck] = useState<string | null>(null)
   const syncQuota = data.syncState.kind === 'error' && /quota/i.test(data.syncState.message)
 
   useEffect(() => {
@@ -22,15 +23,26 @@ export default function StorageGuard() {
     }
     window.addEventListener('unhandledrejection', onReject)
     window.addEventListener('error', onError)
+    const t = window.setTimeout(() => void dbHealth().then((h) => { if (!h.ok) setStuck(h.detail) }), 2500)
     void storageReport().then((r) => {
       if (r.ratio !== null && r.ratio > 0.9) setFull(true)
     })
     return () => {
       window.removeEventListener('unhandledrejection', onReject)
       window.removeEventListener('error', onError)
+      window.clearTimeout(t)
     }
   }, [])
 
+  if (stuck)
+    return (
+      <div role="alert" className="mb-3 rounded-xl bg-[#ff8f45]/12 px-3.5 py-3 text-sm text-mist-100 hairline" style={{ boxShadow: 'inset 0 0 0 1px #ff8f4555' }}>
+        <p className="font-medium text-[#ff8f45]">La base de données de ce navigateur ne répond pas ({stuck})</p>
+        <p className="mt-0.5 text-xs text-mist-300">
+          Rien de ce que tu modifies ici ne s’enregistre. Ce n’est pas un problème de ton appli ni de ton disque : le stockage de ce Chrome est bloqué. Le plus rapide : ouvre Soma dans un autre navigateur (Edge, Firefox) et connecte-toi, tes données reviennent du cloud. Sinon, ferme complètement Chrome (toutes les fenêtres) et rouvre-le.
+        </p>
+      </div>
+    )
   if (!full && !syncQuota) return null
   return (
     <div role="alert" className="mb-3 rounded-xl bg-[#ff8f45]/12 px-3.5 py-3 text-sm text-mist-100 hairline" style={{ boxShadow: 'inset 0 0 0 1px #ff8f4555' }}>

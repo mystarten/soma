@@ -52,11 +52,12 @@ export default function StoragePanel() {
         >
           Libérer de l’espace
         </Button>
-        <Button onClick={async () => setTest(await writeTest())}>Tester l’écriture</Button>
+        <Button onClick={async () => { setTest([]); await writeTest(setTest) }}>Tester l’écriture</Button>
         {msg && <span className="text-xs text-mist-300">{msg}</span>}
       </div>
       {test && (
         <ul className="mt-3 space-y-1 text-xs">
+          {test.length === 0 && <li className="text-mist-500">Test en cours… (4 secondes maximum par étape)</li>}
           {test.map((t) => (
             <li key={t.label} className="flex justify-between gap-3">
               <span className="text-mist-300">{t.label}</span>

@@ -88,29 +88,45 @@ export const isQuotaError = (e: unknown): boolean => {
   return /quota/i.test(s)
 }
 
-/** Teste chaque type d'écriture séparément pour voir lequel est refusé par le navigateur. */
-export async function writeTest(): Promise<{ label: string; ok: boolean; detail: string }[]> {
+const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+  new Promise((resolve, reject) => {
+    const t = window.setTimeout(() => reject(new Error(`pas de réponse après ${ms / 1000} s`)), ms)
+    p.then((v) => { window.clearTimeout(t); resolve(v) }, (e) => { window.clearTimeout(t); reject(e) })
+  })
+
+/** La base de données du navigateur répond-elle ? (un blocage silencieux fait croire que « rien ne se passe ») */
+export async function dbHealth(ms = 4000): Promise<{ ok: boolean; detail: string }> {
+  try {
+    await withTimeout(db.meta.put({ key: 'health', value: Date.now() }), ms)
+    return { ok: true, detail: 'ok' }
+  } catch (e) {
+    return { ok: false, detail: e instanceof Error ? `${e.name !== 'Error' ? e.name + ' : ' : ''}${e.message}` : String(e) }
+  }
+}
+
+/** Teste chaque type d'écriture séparément, avec un délai maximal, et affiche chaque résultat dès qu'il arrive. */
+export async function writeTest(onStep: (r: { label: string; ok: boolean; detail: string }[]) => void): Promise<void> {
   const out: { label: string; ok: boolean; detail: string }[] = []
   const run = async (label: string, fn: () => Promise<void> | void) => {
     try {
-      await fn()
+      await withTimeout(Promise.resolve().then(fn), 4000)
       out.push({ label, ok: true, detail: 'ok' })
     } catch (e) {
-      out.push({ label, ok: false, detail: e instanceof Error ? `${e.name} : ${e.message}` : String(e) })
+      out.push({ label, ok: false, detail: e instanceof Error ? `${e.name !== 'Error' ? e.name + ' : ' : ''}${e.message}` : String(e) })
     }
+    onStep([...out])
   }
   await run('Mémoire du navigateur (localStorage)', () => {
     window.localStorage.setItem('soma-test', 'x'.repeat(2000))
     window.localStorage.removeItem('soma-test')
-  })
-  await run('Base de données (IndexedDB)', async () => {
-    await db.meta.put({ key: 'write_test', value: 'x'.repeat(20000) })
-    await db.meta.delete('write_test')
   })
   await run('Cache de l’appli (Cache Storage)', async () => {
     const c = await caches.open('soma-write-test')
     await c.put('/t', new Response('x'.repeat(20000)))
     await caches.delete('soma-write-test')
   })
-  return out
+  await run('Base de données (IndexedDB)', async () => {
+    await db.meta.put({ key: 'write_test', value: 'x'.repeat(20000) })
+    await db.meta.delete('write_test')
+  })
 }
