@@ -1,40 +1,18 @@
-import { Suspense, lazy, useEffect, useState } from 'react'
-import { whoopHandleReturn } from './integrations/whoop'
-import WhoopAuto from './integrations/WhoopAuto'
+import { Suspense, lazy, useEffect } from 'react'
 import StorageGuard from './components/StorageGuard'
 import ErrorBoundary, { autoReloadOnce } from './components/ErrorBoundary'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { BottomNav, MoreSheetContent, SideRail } from './components/Nav'
-import { Sheet } from './components/ui/primitives'
-import { useRoute } from './lib/router'
+import { BottomNav, SideRail } from './components/Nav'
+import Main from './screens/Main'
+import { navigate, useRoute } from './lib/router'
 import { useSoma } from './hooks/useSoma'
 import { SYNC_CONFIGURED } from './sync/supabase'
-import Vie from './screens/Vie'
-import BodyScreen from './screens/BodyScreen'
-import CheckInScreen from './screens/CheckInScreen'
 
-const Workouts = lazy(() => import('./screens/Workouts'))
-const Knowledge = lazy(() => import('./screens/Knowledge'))
-const Dashboard = lazy(() => import('./screens/DashboardTabs'))
-const WhoopImport = lazy(() => import('./screens/WhoopImport'))
 const SettingsScreen = lazy(() => import('./screens/SettingsScreen'))
 
 const TITLES: Record<string, string> = {
-  accueil: 'Vie',
-  sport: 'Sport',
-  taches: 'Tâches & échéances',
-  savoir: 'Savoir',
-  corps: 'Corps',
-  checkin: 'Check-in du matin',
-  seances: 'Séances',
-  calendrier: 'Calendrier',
-  objectifs: 'Objectifs',
-  analyses: 'Analyses',
-  suivi: 'Suivi de fond',
-  tableau: 'Tableau de bord',
-  revue: 'Revue de la semaine',
-  import: 'Import WHOOP',
+  accueil: 'Mon programme',
   reglages: 'Réglages',
 }
 
@@ -72,8 +50,6 @@ function SyncBanner() {
 
 export default function App() {
   const { route, param } = useRoute()
-  const [more, setMore] = useState(false)
-  const [whoopMsg, setWhoopMsg] = useState<string | null>(null)
 
   /* Un fichier de l'ancienne version a disparu (mise à jour publiée) : on se recharge une fois, proprement. */
   useEffect(() => {
@@ -90,13 +66,10 @@ export default function App() {
     document.body.style.overflow = ''
   }, [route])
 
-  /* Retour de la page d'autorisation WHOOP : le code est dans l'adresse. */
+  /* Les anciens écrans n'existent plus : tout renvoie à la page principale. */
   useEffect(() => {
-    if (!window.location.search.includes('code=')) return
-    void whoopHandleReturn().then((r) => {
-      if (r !== 'none') setWhoopMsg(r === 'done' ? 'WHOOP est connecté ✓' : r)
-    })
-  }, [])
+    if (route !== 'accueil' && route !== 'reglages') navigate('accueil')
+  }, [route])
 
   return (
     <div className="relative z-10 flex min-h-full">
@@ -118,40 +91,20 @@ export default function App() {
             </div>
           </header>
 
-          <WhoopAuto />
           <StorageGuard />
-          {whoopMsg && (
-            <div role="status" className="mb-3 rounded-xl bg-accent/10 px-3 py-2 text-sm text-mist-100 hairline">
-              {whoopMsg}{' '}
-              <button className="ml-2 text-accent" onClick={() => setWhoopMsg(null)}>OK</button>
-            </div>
-          )}
           <ErrorBoundary resetKey={route}>
           <Suspense
             fallback={
               <div className="py-16 text-center text-sm text-mist-700">Chargement…</div>
             }
           >
-            {(route === 'accueil' || route === 'taches') && <Vie />}
-            {route === 'savoir' && <Knowledge />}
-            {route === 'corps' && <BodyScreen />}
-            {route === 'checkin' && <CheckInScreen day={param} />}
-            {route === 'seances' && <Workouts key="seances" focusId={param} />}
-            {route === 'calendrier' && <Workouts key="cal" tab="calendrier" calDay={param} />}
-            {(route === 'tableau' || route === 'sport' || route === 'suivi') && <Dashboard key="apercu" />}
-            {route === 'analyses' && <Dashboard key="analyses" tab="analyses" />}
-            {route === 'objectifs' && <Dashboard key="objectifs" tab="objectifs" />}
-            {route === 'revue' && <Dashboard key="revue" tab="revue" />}
-            {route === 'import' && <WhoopImport />}
+            {route === 'accueil' && <Main />}
             {route === 'reglages' && <SettingsScreen param={param} />}
           </Suspense>
           </ErrorBoundary>
         </div>
       </main>
-      <BottomNav current={route} onMore={() => setMore(true)} />
-      <Sheet open={more} onClose={() => setMore(false)} title="Plus">
-        <MoreSheetContent onPick={() => setMore(false)} />
-      </Sheet>
+      <BottomNav current={route} />
     </div>
   )
 }

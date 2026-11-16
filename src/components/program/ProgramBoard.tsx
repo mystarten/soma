@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useSoma } from '../../hooks/useSoma'
 import type { Program } from '../../types'
-import { programSpan, programStats, type BuiltWorkout } from '../../engine/program'
+import { programSpan, programStats } from '../../engine/program'
+import { pickSuggestion, simpleAdvice, trainingStreak } from '../../engine/simpleAdvice'
 import { SOCLE_LABEL, SOCLE_ORDER, socleOf, type RotationItem } from '../../engine/rotation'
-import { deleteProgram } from '../../db/repo'
-import { Button, Card, ProgressBar, Sheet, Stepper, useToast } from '../ui/primitives'
-import { CoachBanners, ImpactNotice, useImpact } from './advice'
+import { deleteProgram, saveSettings } from '../../db/repo'
+import { Button, Card, ProgressBar, Segmented, Sheet, Stepper, useToast } from '../ui/primitives'
 import SessionPreview from './SessionPreview'
 import TickSheet from './TickSheet'
 import { WeekNote } from './weekNote'
@@ -30,7 +30,7 @@ const readDismissed = () => {
   }
 }
 
-export default function ProgramBoard({ program, onStart }: { program: Program; onStart: (w: BuiltWorkout, day?: string) => void }) {
+export default function ProgramBoard({ program }: { program: Program }) {
   const data = useSoma()
   const toast = useToast()
   const { rotation, all, done } = useRotation()
@@ -38,7 +38,6 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
   const span = programSpan(program)
   const [tick, setTick] = useState<{ code: string; week: number } | null>(null)
   const [undo, setUndo] = useState<{ code: string; week: number } | null>(null)
-  const [light, setLight] = useState(() => !!data.settings.deloadUntil && data.settings.deloadUntil >= data.today)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [dismissed, setDismissed] = useState(readDismissed)
   const dateLabel = (d?: string) => (d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '')
@@ -46,10 +45,89 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
   const [editing, setEditing] = useState(false)
   const [run, setRun] = useState<{ code: string; week: number } | null>(null)
   const nothingDone = stats.done === 0 && !dismissed
+  const light = false
+  const streak = useMemo(() => trainingStreak(data.workouts, data.today), [data.workouts, data.today])
+  const restEvery = data.settings.restEvery === 2 ? 2 : 3
+  const advice = simpleAdvice({ streak: streak.days, todayDone: streak.todayDone, restEvery })
+  const suggestion = useMemo(() => pickSuggestion(rotation), [rotation])
+  const others = rotation.flatMap((r) => r.available).filter((i) => i.code !== suggestion?.code)
 
   return (
     <div className="flex flex-col gap-3">
       {toast.node}
+      <section className="rounded-[var(--radius-card)] p-4 hairline" style={{ background: advice.rest ? 'linear-gradient(135deg,#2a1d0e,#0a101c)' : 'linear-gradient(135deg,color-mix(in srgb,var(--accent) 14%,#0a101c),#0a101c)' }}>
+        <p className="text-[0.68rem] tracking-wide text-mist-500 uppercase">Aujourd’hui</p>
+        <h2 className="mt-0.5 text-xl font-semibold text-mist-100">{advice.title}</h2>
+        <p className="mt-0.5 text-sm text-mist-300">{advice.detail}</p>
+        {!advice.rest && suggestion && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-black/25 p-3 hairline">
+            <span className="rounded-md bg-accent/15 px-2 py-1 text-sm font-semibold text-accent tnum">{suggestion.code}</span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-mist-100">{suggestion.title}</p>
+              <p className="text-[0.7rem] text-mist-500">Semaine {suggestion.nextWeek}{suggestion.week?.label ? ` · ${suggestion.week.label}` : ''} <WeekNote week={suggestion.week} /></p>
+            </div>
+            <Button variant="primary" onClick={() => setRun({ code: suggestion.code, week: suggestion.nextWeek! })}>▶ Lancer</Button>
+            <Button onClick={() => setTick({ code: suggestion.code, week: suggestion.nextWeek! })}>✓ Déjà faite</Button>
+          </div>
+        )}
+        {!advice.rest && !suggestion && <p className="mt-2 text-sm text-mist-300">Tout le programme est fait. Bravo !</p>}
+        {!advice.rest && others.length > 0 && (
+          <p className="mt-2 text-[0.7rem] text-mist-500">Aussi possible : {others.map((i) => `${i.code} (S${i.nextWeek})`).join(' · ')}</p>
+        )}
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/8 pt-2.5">
+          <span className="text-[0.7rem] text-mist-500">Repos conseillé après</span>
+          <Segmented value={String(restEvery)} onChange={(v) => void saveSettings({ restEvery: Number(v) })} options={[{ value: '2', label: '2 jours' }, { value: '3', label: '3 jours' }]} size="sm" />
+        </div>
+      </section>
+
+      {!nothingDone && (
+        <button onClick={() => setAdjust((v) => !v)} className="self-start text-xs text-accent">
+          {adjust ? 'Fermer' : 'Ajuster où j’en suis (ex. « je suis à la semaine 7 »)'}
+        </button>
+      )}
+
+      {(nothingDone || adjust) && <SetupCard program={program} onDone={(n) => { setAdjust(false); toast.show(`${n} semaines marquées comme faites`) }} onDismiss={() => {
+        setAdjust(false)
+        try {
+          window.localStorage.setItem(SETUP_KEY, '1')
+        } catch {
+          /* facultatif */
+        }
+        setDismissed(true)
+      }} />}
+
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => setEditing(true)}>✎ Modifier mon programme</Button>
+      </div>
+
+      <ProgramTable program={program} rotation={rotation} done={done} onTick={(code, week) => setTick({ code, week })} onUndo={(code, week) => setUndo({ code, week })} />
+
+      {rotation.map((r) => (
+        <Card
+          key={r.socle}
+          title={`À faire · ${r.label}`}
+          subtitle={`${r.doneTotal} / ${r.weeksTotal} semaines faites`}
+          padded={false}
+        >
+          <div className="px-3 pb-3 sm:px-4">
+            {r.available.length > 0 ? (
+              <ul className="divide-y divide-white/6">
+                {r.available.map((it) => (
+                  <AvailableRow key={it.code} item={it} program={program} onTick={() => setTick({ code: it.code, week: it.nextWeek! })} onRun={() => setRun({ code: it.code, week: it.nextWeek! })} />
+                ))}
+              </ul>
+            ) : (
+              <p className="py-3 text-sm text-mist-500">Tout est fait dans ce socle.</p>
+            )}
+            {r.waiting.length > 0 && (
+              <p className="mt-1 text-[0.7rem] text-mist-700">
+                Plus tard, quand les autres sont faites : {r.waiting.map((i) => `${i.code} (S${i.nextWeek})`).join(' · ')}
+              </p>
+            )}
+          </div>
+        </Card>
+      ))}
+
       <Card
         title={program.name}
         subtitle={span.start && span.end ? `Du ${dateLabel(span.start)} au ${dateLabel(span.end)}` : undefined}
@@ -75,55 +153,6 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
         </div>
       </Card>
 
-      {!nothingDone && (
-        <button onClick={() => setAdjust((v) => !v)} className="self-start text-xs text-accent">
-          {adjust ? 'Fermer' : 'Ajuster où j’en suis (ex. « je suis à la semaine 7 »)'}
-        </button>
-      )}
-
-      {(nothingDone || adjust) && <SetupCard program={program} onDone={(n) => { setAdjust(false); toast.show(`${n} semaines marquées comme faites`) }} onDismiss={() => {
-        setAdjust(false)
-        try {
-          window.localStorage.setItem(SETUP_KEY, '1')
-        } catch {
-          /* facultatif */
-        }
-        setDismissed(true)
-      }} />}
-
-      <CoachBanners light={light} onLight={setLight} />
-
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={() => setEditing(true)}>✎ Modifier mon programme</Button>
-      </div>
-
-      <ProgramTable program={program} rotation={rotation} done={done} onTick={(code, week) => setTick({ code, week })} onUndo={(code, week) => setUndo({ code, week })} />
-
-      {rotation.map((r) => (
-        <Card
-          key={r.socle}
-          title={r.label}
-          subtitle={`${r.doneTotal} / ${r.weeksTotal} semaines faites`}
-          padded={false}
-        >
-          <div className="px-3 pb-3 sm:px-4">
-            {r.available.length > 0 ? (
-              <ul className="divide-y divide-white/6">
-                {r.available.map((it) => (
-                  <AvailableRow key={it.code} item={it} program={program} onTick={() => setTick({ code: it.code, week: it.nextWeek! })} onRun={() => setRun({ code: it.code, week: it.nextWeek! })} />
-                ))}
-              </ul>
-            ) : (
-              <p className="py-3 text-sm text-mist-500">Tout est fait dans ce socle.</p>
-            )}
-            {r.waiting.length > 0 && (
-              <p className="mt-1 text-[0.7rem] text-mist-700">
-                Plus tard, quand les autres sont faites : {r.waiting.map((i) => `${i.code} (S${i.nextWeek})`).join(' · ')}
-              </p>
-            )}
-          </div>
-        </Card>
-      ))}
 
       <div className="flex justify-center pt-1">
         {confirmDelete ? (
@@ -151,7 +180,6 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
           light={light}
           onClose={() => setTick(null)}
           onDone={(label) => toast.show(`${label} faite ✓`)}
-          onDetail={(b, day) => onStart(b, day)}
         />
       )}
       {undo && (
@@ -190,7 +218,6 @@ export default function ProgramBoard({ program, onStart }: { program: Program; o
 function AvailableRow({ item, program, onTick, onRun }: { item: RotationItem; program: Program; onTick: () => void; onRun: () => void }) {
   const session = program.sessions.find((s) => s.code === item.code)!
   const [open, setOpen] = useState(false)
-  const impact = useImpact([{ code: item.code, week: item.nextWeek! }], program.sessions)
   return (
     <li className="py-3">
       <div className="flex items-center gap-3">
@@ -219,11 +246,6 @@ function AvailableRow({ item, program, onTick, onRun }: { item: RotationItem; pr
           </svg>
         </button>
       </div>
-      {impact.length > 0 && (
-        <div className="mt-2">
-          <ImpactNotice impact={impact} />
-        </div>
-      )}
       {open && <SessionPreview session={session} week={item.nextWeek!} />}
     </li>
   )

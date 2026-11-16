@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useSoma } from '../../hooks/useSoma'
 import type { ProgramSession } from '../../types'
-import { missingExercises, parseProgramDocument, type BuiltWorkout } from '../../engine/program'
+import { missingExercises, parseProgramDocument } from '../../engine/program'
 import { readDocx } from '../../lib/docx'
 import { saveExercise, saveProgram } from '../../db/repo'
 import { Button, Card, EmptyState } from '../ui/primitives'
@@ -13,11 +13,11 @@ import ProgramBoard from './ProgramBoard'
    indépendantes : aucun ordre imposé, on peut en combiner plusieurs le même jour.
    ────────────────────────────────────────────────────────────────────────── */
 
-export default function ProgramPanel({ onStart }: { onStart: (w: BuiltWorkout, day?: string) => void }) {
+export default function ProgramPanel() {
   const data = useSoma()
   const { program } = data
   if (!program) return <ImportCard />
-  return <ProgramBoard program={program} onStart={onStart} />
+  return <ProgramBoard program={program} />
 }
 
 /* ── Import ──────────────────────────────────────────────────────────── */

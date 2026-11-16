@@ -1,9 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useSoma } from '../../hooks/useSoma'
 import type { Program } from '../../types'
-import { buildFromProgram, type BuiltWorkout } from '../../engine/program'
-import { applyLight } from '../../engine/coach'
-import { uid } from '../../db/db'
 import { Button, Field, Sheet, Stepper, TextInput } from '../ui/primitives'
 import { tickSession } from './programActions'
 import { WeekNote } from './weekNote'
@@ -16,7 +13,6 @@ export default function TickSheet({
   light,
   onClose,
   onDone,
-  onDetail,
 }: {
   program: Program
   code: string
@@ -24,8 +20,6 @@ export default function TickSheet({
   light?: boolean
   onClose: () => void
   onDone: (label: string) => void
-  /** Ouvrir l'éditeur pour détailler les séries (option secondaire). */
-  onDetail: (b: BuiltWorkout, day: string) => void
 }) {
   const data = useSoma()
   const session = program.sessions.find((s) => s.code === code)
@@ -60,17 +54,6 @@ export default function TickSheet({
             }}
           >
             Séance faite ✓
-          </Button>
-          <Button
-            variant="ghost"
-            full
-            onClick={() => {
-              const built = buildFromProgram(program, [{ code, week }], () => uid('set'))
-              if (built) onDetail(light ? { ...built, sets: applyLight(built.sets), title: `${built.title} (légère)` } : built, day)
-              onClose()
-            }}
-          >
-            Détailler les séries d’abord
           </Button>
         </div>
       }

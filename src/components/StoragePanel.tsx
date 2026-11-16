@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Button, Card } from './ui/primitives'
 import { IconTitle } from './ui/PageHero'
 import { freeSpace, storageReport, writeTest, type StorageReport } from '../db/maintenance'
-import { readWhoopLast } from '../integrations/whoop'
 import { exportBackup } from '../db/repo'
 import { resetEverything } from '../sync/syncEngine'
 
@@ -14,7 +13,6 @@ export default function StoragePanel() {
   const [test, setTest] = useState<{ label: string; ok: boolean; detail: string }[] | null>(null)
   const refresh = () => void storageReport().then(setR)
   useEffect(refresh, [])
-  const last = readWhoopLast()
   const pct = r?.ratio === null || r?.ratio === undefined ? null : Math.round(r.ratio * 100)
   return (
     <Card title={<IconTitle icon="database">Stockage et santé</IconTitle>} subtitle="Ce qu’occupe Soma sur cet appareil">
@@ -26,7 +24,7 @@ export default function StoragePanel() {
           ))}
           <li className="flex justify-between gap-3"><span>Modifications en attente de synchronisation</span><span className="tnum text-mist-100">{r.queue}</span></li>
           <li className="flex justify-between gap-3"><span>Version de l’appli</span><span className="tnum text-mist-100">{__BUILD_DATE__}</span></li>
-          <li className="flex justify-between gap-3"><span>Dernière récupération WHOOP</span><span className="tnum text-mist-100">{last ? new Date(last.at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'jamais'}</span></li>
+
         </ul>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-2">

@@ -268,19 +268,3 @@ describe('résumé du corps', () => {
   })
 })
 
-describe('explication d’une zone chargée', async () => {
-  const { explainZone } = await import('./suggest')
-  it('dit quelle séance pèse, depuis quand, et l’effet de la nuit', () => {
-    const w = pullSession('2025-06-02T18:00:00.000Z')
-    const body = fatigueAt('2025-06-03T08:00:00.000Z', ctx({ workouts: [w], checkins: [badNight('2025-06-03')] }))
-    const lines = explainZone('dorsaux', body, { sleepHours: 4.5, sleepScore: 40, recovery: 32 })
-    expect(lines[0]).toMatch(/Surtout : .*Tractions.*il y a 14 h/)
-    expect(lines.join(' ')).toMatch(/récupération ralentie/)
-    expect(lines.join(' ')).toMatch(/Récupération du jour : 32 %/)
-    expect(lines.join(' ')).toMatch(/Retour au vert dans environ \d+ h/)
-  })
-  it('zone sans séance : message clair', () => {
-    const body = fatigueAt('2025-06-03T08:00:00.000Z', ctx())
-    expect(explainZone('mollets', body, { sleepHours: null, sleepScore: 0, recovery: null })[0]).toMatch(/Aucune séance/)
-  })
-})
