@@ -2,16 +2,17 @@ import { useState } from 'react'
 import { Button, Segmented, TextInput } from './ui/primitives'
 import { SYNC_CONFIGURED, saveSyncConfig, validateSyncConfig } from '../sync/supabase'
 import { sendPasswordReset, signInWithPassword, signUpWithPassword } from '../sync/syncEngine'
+import { toLoginId } from '../sync/username'
 
 /** Traduit les erreurs du serveur en phrases simples. */
 function friendly(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e)
-  if (/invalid login|invalid credentials/i.test(m)) return 'Email ou mot de passe incorrect.'
-  if (/already registered|already been registered/i.test(m)) return 'Un compte existe déjà avec cet email : choisis « Se connecter ».'
+  if (/invalid login|invalid credentials/i.test(m)) return 'Nom d’utilisateur ou mot de passe incorrect.'
+  if (/already registered|already been registered/i.test(m)) return 'Ce nom d’utilisateur est déjà pris. Choisis-en un autre, ou connecte-toi si c’est le tien.'
   if (/at least \d+ characters|weak/i.test(m)) return 'Le mot de passe doit faire au moins 6 caractères.'
   if (/rate limit|too many/i.test(m)) return 'Trop d’essais. Attends quelques minutes puis réessaie.'
   if (/not confirmed/i.test(m)) return 'Confirme d’abord ton email (regarde ta boîte mail), puis connecte-toi.'
-  if (/valid email|invalid format|unable to validate email/i.test(m)) return 'Cet email n’a pas l’air valide.'
+  if (/valid email|invalid format|unable to validate email/i.test(m)) return 'Ce nom d’utilisateur n’est pas accepté. Essaie avec des lettres et des chiffres seulement.'
   if (/fetch|network|failed/i.test(m)) return 'Pas de connexion au serveur. Vérifie ton réseau.'
   return m
 }
@@ -30,18 +31,20 @@ export default function AuthScreen() {
   const submit = async (ev: React.FormEvent) => {
     ev.preventDefault()
     if (busy) return
+    const login = toLoginId(email)
+    if ('error' in login) return setMsg({ kind: 'err', text: login.error })
     setBusy(true)
     setMsg(null)
     try {
       if (mode === 'up') {
         try {
-          await signUpWithPassword(email.trim(), password)
+          await signUpWithPassword(login.id, password)
         } catch (e) {
           /* « Compte créé. Connecte-toi » : on enchaîne directement la connexion. */
-          if (e instanceof Error && /^Compte créé/.test(e.message)) await signInWithPassword(email.trim(), password)
+          if (e instanceof Error && /^Compte créé/.test(e.message)) await signInWithPassword(login.id, password)
           else throw e
         }
-      } else await signInWithPassword(email.trim(), password)
+      } else await signInWithPassword(login.id, password)
     } catch (e) {
       setMsg({ kind: 'err', text: friendly(e) })
     } finally {
@@ -60,8 +63,8 @@ export default function AuthScreen() {
         <form onSubmit={submit} className="flex flex-col gap-3">
           <Segmented value={mode} onChange={setMode} options={[{ value: 'in', label: 'Se connecter' }, { value: 'up', label: 'Créer mon compte' }]} className="w-full justify-center [&>button]:flex-1" />
           <label className="text-xs text-mist-300">
-            Email
-            <TextInput className="mt-1" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="toi@exemple.fr" />
+            Nom d’utilisateur
+            <TextInput className="mt-1" type="text" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ton_pseudo" />
           </label>
           <label className="text-xs text-mist-300">
             Mot de passe {mode === 'up' && <span className="text-mist-500">(6 caractères minimum)</span>}
@@ -78,7 +81,7 @@ export default function AuthScreen() {
           <Button type="submit" variant="primary" full disabled={busy || !email || password.length < 6} className="!py-3.5 text-base">
             {busy ? 'Un instant…' : mode === 'up' ? 'Créer mon compte' : 'Me connecter'}
           </Button>
-          {mode === 'in' && (
+          {mode === 'in' && email.includes('@') && (
             <button
               type="button"
               className="text-center text-sm text-accent"
@@ -95,7 +98,7 @@ export default function AuthScreen() {
               Mot de passe oublié ?
             </button>
           )}
-          <p className="mt-2 text-center text-xs text-mist-500">Chaque compte a son propre espace : personne d’autre ne voit tes programmes.</p>
+          <p className="mt-2 text-center text-xs text-mist-500">Chaque personne a son propre espace : personne d’autre ne voit tes programmes. Retiens bien ton mot de passe, il ne peut pas être renvoyé.</p>
         </form>
       ) : (
         <Unconfigured />

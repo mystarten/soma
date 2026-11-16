@@ -3,6 +3,7 @@ import SyncSettings from '../components/SyncSettings'
 import { useSoma } from '../hooks/useSoma'
 import { signOut, syncNow } from '../sync/syncEngine'
 import { SYNC_CONFIGURED } from '../sync/supabase'
+import { displayName } from '../sync/username'
 import StoragePanel from '../components/StoragePanel'
 import { Button, Card, useToast } from '../components/ui/primitives'
 import { exportBackup, importBackup } from '../db/repo'
@@ -25,7 +26,7 @@ function AccountCard() {
   return (
     <Card title="Mon compte" subtitle="Tes programmes sont enregistrés dans ton compte et suivent sur tous tes appareils">
       <div className="mt-3 flex flex-col gap-3">
-        <p className="text-sm text-mist-100">{email || 'Non connecté'}</p>
+        <p className="text-sm text-mist-100">{email ? displayName(email) : 'Non connecté'}</p>
         <p className="text-xs text-mist-500">
           {syncState.kind === 'idle' ? `Synchronisé${syncState.pending ? ` · ${syncState.pending} modification(s) en attente` : ''}` : syncState.kind === 'syncing' ? 'Synchronisation…' : syncState.kind === 'error' ? `En attente : ${syncState.message}` : ''}
         </p>
