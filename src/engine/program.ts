@@ -223,6 +223,8 @@ export interface PlannedSet {
   loadKg?: number
   holdSec?: number
   distanceM?: number
+  /** Durée prévue en secondes (EMOM, rameur) quand le programme la donne. */
+  workSec?: number
   /** Précise l'exercice quand une case en mélange plusieurs (« tractions », « pompes »). */
   hint?: 'tractions' | 'pompes'
   restSec?: number
@@ -331,8 +333,8 @@ export function parseCell(textRaw: string, ctx: CellContext = {}): PlannedCell {
     const minutes = Number(m[1])
     return out({
       sets: [
-        { reps: Math.ceil(minutes / 2) * Number(m[2]), hint: 'tractions', note: `EMOM ${minutes} min` },
-        { reps: Math.floor(minutes / 2) * Number(m[3]), hint: 'pompes', note: `EMOM ${minutes} min` },
+        { reps: Math.ceil(minutes / 2) * Number(m[2]), hint: 'tractions', note: `EMOM ${minutes} min`, workSec: Math.ceil(minutes / 2) * 60 },
+        { reps: Math.floor(minutes / 2) * Number(m[3]), hint: 'pompes', note: `EMOM ${minutes} min`, workSec: Math.floor(minutes / 2) * 60 },
       ],
     })
   }
@@ -340,7 +342,7 @@ export function parseCell(textRaw: string, ctx: CellContext = {}): PlannedCell {
   /* EMOM : « EMOM 10 min  8 / min », « 10 min  18 / min ». */
   m = /^(?:EMOM\s+)?(\d+)\s*min\s+(\d+)\s*\/\s*min$/i.exec(t)
   if (m) {
-    return out({ sets: [{ reps: Number(m[1]) * Number(m[2]), note: `EMOM ${m[1]} min · ${m[2]} / min` }] })
+    return out({ sets: [{ reps: Number(m[1]) * Number(m[2]), note: `EMOM ${m[1]} min · ${m[2]} / min`, workSec: Number(m[1]) * 60 }] })
   }
 
   /* Rameur : « 330 m  1:48 » (par tour), « 330 m moins de 1:45 de moyenne ». */
@@ -348,7 +350,10 @@ export function parseCell(textRaw: string, ctx: CellContext = {}): PlannedCell {
   if (m) {
     const n = Math.max(1, ctx.tours ?? 1)
     const pace = /^\d+:\d{2}$/.test(m[2]) ? `allure ${m[2]} / 500 m` : m[2]
-    return out({ sets: Array.from({ length: n }, () => ({ distanceM: Number(m![1]), note: pace })) })
+    /* Durée du tour : distance × allure au 500 m (« 1:48 » ou « moins de 1:45 »). */
+    const pm = /(\d+):(\d{2})/.exec(m[2])
+    const workSec = pm ? Math.round((Number(m[1]) / 500) * (Number(pm[1]) * 60 + Number(pm[2]))) : undefined
+    return out({ sets: Array.from({ length: n }, () => ({ distanceM: Number(m![1]), note: pace, workSec })) })
   }
 
   /* « 32 reps », « 28 reps  facile ». */
@@ -547,6 +552,7 @@ export function buildFromProgram(
           loadKg: p.loadKg,
           holdSec: p.holdSec,
           distanceM: p.distanceM,
+          workSec: p.workSec,
           restSec: p.restSec ?? block.restSec ?? DEFAULT_REST,
           note: noteBits.length ? noteBits.join(' · ') : undefined,
         })

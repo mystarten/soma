@@ -14,6 +14,7 @@ import ProgramTable from './ProgramTable'
 import ProgramEditor from './ProgramEditor'
 import SessionRunner from './SessionRunner'
 import { saveProgress, undoDone } from './programActions'
+import { fmtDuration, sessionTiming } from '../../engine/runPlan'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Programme, en trois socles (street workout, jambes, abdos). Dans chaque socle, seules les séances
@@ -66,6 +67,7 @@ export default function ProgramBoard({ program }: { program: Program }) {
               <div className="min-w-0">
                 <p className="text-base leading-snug font-medium text-mist-100">{suggestion.title}</p>
                 <p className="mt-0.5 text-xs text-mist-500">Semaine {suggestion.nextWeek}{suggestion.week?.label ? ` · ${suggestion.week.label}` : ''} <WeekNote week={suggestion.week} /></p>
+                <p className="mt-1"><Duration program={program} code={suggestion.code} week={suggestion.nextWeek!} /></p>
               </div>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2.5">
@@ -221,6 +223,18 @@ export default function ProgramBoard({ program }: { program: Program }) {
   )
 }
 
+/** Durée de la séance avec ses repos, avant de la lancer. */
+function Duration({ program, code, week }: { program: Program; code: string; week: number }) {
+  const t = useMemo(() => sessionTiming(program, code, week), [program, code, week])
+  if (!t || !t.sets) return null
+  return (
+    <span className="text-xs text-mist-300">
+      <b className="text-sm font-semibold text-mist-100 tnum">⏱ {fmtDuration(t.totalSec)}</b>
+      <span className="text-mist-500"> · repos {fmtDuration(t.restSec)} · {t.sets} séries</span>
+    </span>
+  )
+}
+
 /* ── Une séance dont c'est le tour ───────────────────────────────────── */
 
 function AvailableRow({ item, program, onTick, onRun }: { item: RotationItem; program: Program; onTick: () => void; onRun: () => void }) {
@@ -236,6 +250,7 @@ function AvailableRow({ item, program, onTick, onRun }: { item: RotationItem; pr
             Semaine {item.nextWeek}
             {item.week?.label ? ` · ${item.week.label}` : ''} <WeekNote week={item.week} /> · {open ? 'masquer' : 'voir le détail'}
           </span>
+          <span className="mt-1 block"><Duration program={program} code={item.code} week={item.nextWeek!} /></span>
         </span>
       </button>
       <div className="mt-2.5 grid grid-cols-2 gap-2.5">

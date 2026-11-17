@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSoma } from '../../hooks/useSoma'
 import type { Program, SetEntry } from '../../types'
-import { buildFromProgram } from '../../engine/program'
-import { applyLight } from '../../engine/coach'
-import { describeTarget, expandSides, fmtClock, remainingSec, restAfter, setPosition } from '../../engine/runner'
+import { fmtDuration, planTiming, runSets } from '../../engine/runPlan'
+import { describeTarget, fmtClock, remainingSec, restAfter, setPosition } from '../../engine/runner'
 import { uid } from '../../db/db'
 import { Button, Stepper } from '../ui/primitives'
 import { saveRunWorkout } from './programActions'
@@ -46,14 +45,12 @@ export default function SessionRunner({
   onClose: () => void
   onSaved: (label: string) => void
 }) {
-  const built = useMemo(() => {
-    const b = buildFromProgram(program, picks, () => uid('set'))
-    if (!b) return null
-    return { ...b, sets: light ? applyLight(b.sets) : b.sets }
-  }, [program, picks, light])
   const nameOf = useNames(program, picks)
-  /* Exercices d'un seul côté : chaque série devient une série par côté (3 × 30 s = 6 × 30 s). */
-  const expanded = useMemo(() => (built ? expandSides(built.sets, nameOf) : []), [built, nameOf])
+  /* Les séries exactement comme elles seront déroulées (unilatéral développé, version légère éventuelle). */
+  const plan = useMemo(() => runSets(program, picks, () => uid('set'), { light, nameOf }), [program, picks, light, nameOf])
+  const built = plan?.built ?? null
+  const expanded = useMemo(() => plan?.sets ?? [], [plan])
+  const timing = useMemo(() => planTiming(expanded), [expanded])
   const [phase, setPhase] = useState<Phase>('intro')
   const [idx, setIdx] = useState(0)
   const [results, setResults] = useState<Record<string, { reps?: number; loadKg?: number }>>({})
@@ -272,7 +269,9 @@ export default function SessionRunner({
           <div>
             <p className="text-xs tracking-wide text-mist-500 uppercase">Séance guidée</p>
             <h2 className="text-2xl font-semibold text-mist-100">{built.title}</h2>
-            <p className="mt-1 text-sm text-mist-300">{total} séries · environ {built.durationMin} min{light ? ' · version légère' : ''}</p>
+            <p className="mt-1 text-sm text-mist-300">{total} séries{light ? ' · version légère' : ''}</p>
+            <p className="mt-2 text-3xl font-semibold tnum text-accent">⏱ {fmtDuration(timing.totalSec)}</p>
+            <p className="text-xs text-mist-500">dont repos {fmtDuration(timing.restSec)}{timing.timedSec ? ` · tenues et durées fixées ${fmtDuration(timing.timedSec)}` : ''}{timing.repsSec ? ` · séries ${fmtDuration(timing.repsSec)} (3 s par répétition)` : ''}</p>
           </div>
           <ul className="max-h-[40vh] space-y-1 overflow-y-auto rounded-xl bg-white/4 p-3 text-sm hairline">
             {Array.from(new Set(sets.map((s) => s.block))).map((b) => {

@@ -111,6 +111,8 @@ export interface SetEntry {
   rpe?: number
   failure?: boolean
   distanceM?: number
+  /** Durée prévue de la série en secondes (EMOM, rameur…), quand le programme la donne. */
+  workSec?: number
   note?: string
 }
 
