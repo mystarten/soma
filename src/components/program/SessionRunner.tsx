@@ -3,7 +3,7 @@ import { useSoma } from '../../hooks/useSoma'
 import type { Program, SetEntry } from '../../types'
 import { buildFromProgram } from '../../engine/program'
 import { applyLight } from '../../engine/coach'
-import { describeTarget, fmtClock, remainingSec, restAfter, setPosition } from '../../engine/runner'
+import { describeTarget, expandSides, fmtClock, remainingSec, restAfter, setPosition } from '../../engine/runner'
 import { uid } from '../../db/db'
 import { Button, Stepper } from '../ui/primitives'
 import { saveRunWorkout } from './programActions'
@@ -51,6 +51,8 @@ export default function SessionRunner({
     return { ...b, sets: light ? applyLight(b.sets) : b.sets }
   }, [program, picks, light])
   const nameOf = useNames(program, picks)
+  /* Exercices d'un seul côté : chaque série devient une série par côté (3 × 30 s = 6 × 30 s). */
+  const expanded = useMemo(() => (built ? expandSides(built.sets, nameOf) : []), [built, nameOf])
   const [phase, setPhase] = useState<Phase>('intro')
   const [idx, setIdx] = useState(0)
   const [results, setResults] = useState<Record<string, { reps?: number; loadKg?: number }>>({})
@@ -136,7 +138,7 @@ export default function SessionRunner({
     return () => window.clearInterval(t)
   }, [phase])
 
-  const sets = built?.sets ?? []
+  const sets = expanded
   const cur = sets[idx]
   const left = remainingSec(endAt, now)
 

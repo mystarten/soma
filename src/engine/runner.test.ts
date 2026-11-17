@@ -26,3 +26,29 @@ describe('séance guidée', () => {
     expect(setPosition(sets, 2)).toEqual({ n: 1, of: 1 })
   })
 })
+
+import { expandSides, isUnilateralName } from './runner'
+
+describe('exercices unilatéraux', () => {
+  it('reconnaît les exercices d’un seul côté', () => {
+    expect(isUnilateralName('Planche latérale')).toBe(true)
+    expect(isUnilateralName('Gainage latéral + lombaires')).toBe(true)
+    expect(isUnilateralName('Pistol squat')).toBe(true)
+    expect(isUnilateralName('Copenhagen')).toBe(true)
+    expect(isUnilateralName('Tractions lestées')).toBe(false)
+    expect(isUnilateralName('Gainage antérieur + abdos droits')).toBe(false)
+  })
+  it('compte 6 passages pour 3 séries de 30 s en unilatéral', () => {
+    const sets = [1, 2, 3].map((i) => ({ id: `s${i}`, holdSec: 30, note: undefined as string | undefined }))
+    const out = expandSides(sets, () => 'Planche latérale')
+    expect(out).toHaveLength(6)
+    expect(out.every((s) => s.holdSec === 30)).toBe(true)
+    expect(out[0].note).toBe('côté gauche')
+    expect(out[1].note).toBe('côté droit')
+    expect(new Set(out.map((s) => s.id)).size).toBe(6)
+  })
+  it('ne touche pas aux exercices bilatéraux', () => {
+    const sets = [{ id: 'a', note: undefined as string | undefined }]
+    expect(expandSides(sets, () => 'Dips')).toEqual(sets)
+  })
+})

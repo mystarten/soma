@@ -32,3 +32,36 @@ export function setPosition(sets: Pick<SetEntry, 'block'>[], i: number): { n: nu
   const same = sets.map((s, j) => ({ s, j })).filter((x) => x.s.block === key)
   return { n: same.findIndex((x) => x.j === i) + 1, of: same.length }
 }
+
+/* Exercices unilatéraux : une série « 30 s » se fait sur chaque côté, donc 2 fois plus de passages. */
+const UNILATERAL = [
+  /planche (laterale|latérale)|gainage (laterale|latéral)/i,
+  /unilat/i,
+  /\bun(e)? (seul(e)? )?(bras|jambe|main|pied|côté|cote)\b/i,
+  /à une (main|jambe)|a une (main|jambe)/i,
+  /\b(pistol|bulgare|bulgarian|sissy|single.leg|single.arm|copenhagen)\b/i,
+  /\bpar côté\b|\bpar cote\b|\bchaque côté\b|\bchaque cote\b/i,
+]
+
+export function isUnilateralName(name: string): boolean {
+  return UNILATERAL.some((re) => re.test(name))
+}
+
+/**
+ * Développe les séries unilatérales en une série par côté : « 3 × 30 s » devient 6 passages
+ * (gauche, droite, gauche, droite…), pour que le chrono et le compte soient justes.
+ */
+export function expandSides<T extends { id: string; note?: string }>(sets: T[], nameOf: (s: T) => string): T[] {
+  const out: T[] = []
+  for (const s of sets) {
+    if (!isUnilateralName(nameOf(s))) {
+      out.push(s)
+      continue
+    }
+    out.push({ ...s, id: `${s.id}-g`, note: joinNote(s.note, 'côté gauche') })
+    out.push({ ...s, id: `${s.id}-d`, note: joinNote(s.note, 'côté droit') })
+  }
+  return out
+}
+
+const joinNote = (a: string | undefined, b: string) => (a ? `${a} · ${b}` : b)
