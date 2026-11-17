@@ -7,8 +7,9 @@ import { describeTarget, expandSides, fmtClock, remainingSec, restAfter, setPosi
 import { uid } from '../../db/db'
 import { Button, Stepper } from '../ui/primitives'
 import { saveRunWorkout } from './programActions'
+import ExerciseFigure from './ExerciseFigure'
 
-type Phase = 'intro' | 'ready' | 'hold' | 'rest' | 'summary'
+type Phase = 'intro' | 'prep' | 'ready' | 'hold' | 'rest' | 'summary'
 
 /** Nom lisible de l'exercice d'une série : le bloc du programme, sinon l'exercice de la bibliothèque. */
 function useNames(program: Program, picks: { code: string; week: number }[]) {
@@ -128,12 +129,12 @@ export default function SessionRunner({
     }
     await acquire()
     startedAt.current = Date.now()
-    setPhase('ready')
+    startPrep()
   }
 
   /* ── Horloge ── */
   useEffect(() => {
-    if (phase !== 'rest' && phase !== 'hold') return
+    if (phase !== 'rest' && phase !== 'hold' && phase !== 'prep') return
     const t = window.setInterval(() => setNow(Date.now()), 250)
     return () => window.clearInterval(t)
   }, [phase])
@@ -141,6 +142,27 @@ export default function SessionRunner({
   const sets = expanded
   const cur = sets[idx]
   const left = remainingSec(endAt, now)
+
+  /** Compte à 5 : « prépare-toi ». Utilisé au départ et pour « Recommencer ». */
+  function startPrep() {
+    notified.current = false
+    beeped.current.clear()
+    setEndAt(Date.now() + 5000)
+    setNow(Date.now())
+    setPhase('prep')
+  }
+
+  /** La série numéro i démarre : une tenue lance son chrono tout de suite, sinon on l'affiche, prête à être faite. */
+  function startSet(i: number) {
+    const target = expanded[i]
+    notified.current = false
+    beeped.current.clear()
+    if (target?.holdSec) {
+      setEndAt(Date.now() + target.holdSec * 1000)
+      setNow(Date.now())
+      setPhase('hold')
+    } else setPhase('ready')
+  }
 
   const complete = (hold?: boolean) => {
     if (!cur) return
@@ -159,17 +181,17 @@ export default function SessionRunner({
       setNow(Date.now())
       setPhase('rest')
     } else {
-      setPhase('ready')
+      startSet(next)
     }
     void hold
   }
 
   /* Décompte sonore : un bip à 10 s, puis un bip par seconde pour les 5 dernières, pour se préparer. */
   useEffect(() => {
-    if (phase !== 'rest' && phase !== 'hold') return
+    if (phase !== 'rest' && phase !== 'hold' && phase !== 'prep') return
     const sec = Math.ceil(left)
     if (sec <= 0 || beeped.current.has(sec)) return
-    if (sec === 10) {
+    if (sec === 10 && phase !== 'prep') {
       beeped.current.add(sec)
       beep(1, 660, 0.15)
     } else if (sec >= 1 && sec <= 5) {
@@ -180,15 +202,16 @@ export default function SessionRunner({
 
   /* Fin du repos ou de la tenue. */
   useEffect(() => {
-    if ((phase !== 'rest' && phase !== 'hold') || left > 0 || notified.current) return
+    if ((phase !== 'rest' && phase !== 'hold' && phase !== 'prep') || left > 0 || notified.current) return
     notified.current = true
-    if (phase === 'rest') {
-      beep(3)
-      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    if (phase === 'rest' || phase === 'prep') {
+      /* Les 5 bips sont passés : la suite démarre toute seule, avec un bip long de départ. */
+      beep(1, 1040, 0.4)
+      if (phase === 'rest' && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
         const n = sets[idx]
         new Notification('Repos terminé', { body: n ? `${nameOf(n)} · ${describeTarget(n)}` : 'Reprends la séance' })
       }
-      setPhase('ready')
+      startSet(idx)
     } else {
       beep(2, 660)
       complete(true)
@@ -264,7 +287,7 @@ export default function SessionRunner({
             })}
           </ul>
           <p className="text-xs text-mist-500">
-            L’écran reste allumé pendant la séance, et le chrono de repos se lance tout seul après chaque série, avec un bip et une vibration à la fin. Garde l’appli ouverte : un téléphone verrouillé peut suspendre les alertes.
+            L’écran reste allumé. Après chaque série, le repos se lance tout seul ; 5 bips avant la fin, puis la série suivante démarre automatiquement. Un bouton « Recommencer » te laisse 5 secondes de plus si tu n’es pas prêt. Garde l’appli ouverte : un téléphone verrouillé peut suspendre les alertes.
           </p>
           {'Notification' in window && Notification.permission === 'default' && (
             <Button onClick={() => void Notification.requestPermission()}>Activer les notifications de fin de repos</Button>
@@ -273,8 +296,20 @@ export default function SessionRunner({
         </div>
       )}
 
+      {phase === 'prep' && (
+        <div className="flex flex-col items-center gap-3 py-2 text-center">
+          <p className="text-xs tracking-wide text-mist-500 uppercase">Prépare-toi · série {pos.n} sur {pos.of}</p>
+          <p className="text-[7rem] leading-none font-semibold tnum text-accent">{Math.max(1, Math.ceil(left))}</p>
+          <h2 className="text-2xl leading-tight font-semibold text-mist-100">{nameOf(cur)}</h2>
+          <p className="text-xl font-semibold tnum text-accent">{describeTarget(cur)}{cur.note ? ` · ${cur.note}` : ''}</p>
+          <ExerciseFigure exerciseId={cur.exerciseId} name={nameOf(cur)} />
+          <Button onClick={() => { notified.current = true; startSet(idx) }}>Je suis prêt, commencer</Button>
+        </div>
+      )}
+
       {phase === 'ready' && (
         <div className="flex flex-col gap-4">
+          <ExerciseFigure exerciseId={cur.exerciseId} name={nameOf(cur)} />
           <div className="text-center">
             <p className="text-xs tracking-wide text-mist-500 uppercase">Série {pos.n} sur {pos.of}</p>
             <h2 className="mt-1 text-3xl leading-tight font-semibold text-mist-100">{nameOf(cur)}</h2>
@@ -313,6 +348,7 @@ export default function SessionRunner({
               <Button variant="primary" full onClick={() => complete()}>
                 Série faite ✓{idx < total - 1 ? ` · repos ${fmtClock(restAfter(sets, idx))}` : ''}
               </Button>
+              <Button full onClick={startPrep}>↻ Pas prêt ? Recommencer (5 s)</Button>
             </>
           )}
 
@@ -335,9 +371,14 @@ export default function SessionRunner({
       {phase === 'hold' && (
         <div className="flex flex-col items-center gap-3 py-6 text-center">
           <p className="text-xs tracking-wide text-mist-500 uppercase">Tenue en cours</p>
-          <h2 className="text-2xl font-semibold text-mist-100">{nameOf(sets[idx])}</h2>
+          <h2 className="text-2xl font-semibold text-mist-100">{nameOf(cur)}</h2>
           <p className="text-8xl font-semibold tnum text-accent">{fmtClock(left)}</p>
-          <Button onClick={() => { notified.current = true; complete(true) }}>Terminé plus tôt</Button>
+          {cur.note && <p className="text-sm text-mist-300">{cur.note}</p>}
+          <ExerciseFigure exerciseId={cur.exerciseId} name={nameOf(cur)} />
+          <div className="flex gap-2">
+            <Button onClick={() => { notified.current = true; complete(true) }}>Terminé plus tôt</Button>
+            <Button onClick={startPrep}>↻ Recommencer</Button>
+          </div>
         </div>
       )}
 
@@ -348,13 +389,17 @@ export default function SessionRunner({
           <div className="flex gap-2">
             <Button onClick={() => setEndAt((e) => e - 15_000)}>− 15 s</Button>
             <Button onClick={() => { beeped.current.clear(); setEndAt((e) => e + 15_000) }}>+ 15 s</Button>
-            <Button variant="primary" onClick={() => { notified.current = true; setPhase('ready') }}>Passer</Button>
+            <Button variant="primary" onClick={() => { notified.current = true; startSet(idx) }}>Passer</Button>
           </div>
           <div className="mt-3 w-full rounded-xl bg-white/4 p-3 text-left hairline">
             <p className="text-xs text-mist-500">Ensuite · série {setPosition(sets, idx).n} sur {setPosition(sets, idx).of}</p>
             <p className="text-lg font-medium text-mist-100">{nameOf(sets[idx])}</p>
-            <p className="text-sm text-accent">{describeTarget(sets[idx])}</p>
+            <p className="text-sm text-accent">{describeTarget(sets[idx])}{sets[idx].note ? ` · ${sets[idx].note}` : ''}</p>
+            <div className="mt-2 flex justify-center">
+              <ExerciseFigure exerciseId={sets[idx].exerciseId} name={nameOf(sets[idx])} compact />
+            </div>
           </div>
+          <p className="text-xs text-mist-500">La série suivante démarre toute seule après les 5 bips.</p>
         </div>
       )}
 
