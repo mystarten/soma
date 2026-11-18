@@ -1,4 +1,4 @@
-import type { Program, Workout } from '../../types'
+import type { Program, SetEntry, Workout } from '../../types'
 import { buildFromProgram } from '../../engine/program'
 import { applyLight } from '../../engine/coach'
 import { backfillMarks, removeRef, socleOf } from '../../engine/rotation'
@@ -89,7 +89,20 @@ export interface RunInput {
   startedAt: string
   durationMin: number
   rpe: number
+  notes?: string
   light?: boolean
+}
+
+/** Une série EMOM devient une série par exercice, avec le total de répétitions réellement prévu. */
+export function expandEmom(sets: SetEntry[]): SetEntry[] {
+  return sets.flatMap((s) => {
+    if (!s.emom) return [s]
+    const { minutes, items } = s.emom
+    return items.map((it, i) => {
+      const count = Array.from({ length: minutes }, (_, m) => m).filter((m) => m % items.length === i).length
+      return { id: `${s.id}-${i}`, exerciseId: it.exerciseId ?? s.exerciseId, label: it.name, block: `${s.block ?? 'emom'}-${i}`, reps: it.reps * count, note: `EMOM ${minutes} min : ${count} × ${it.reps}` } as SetEntry
+    })
+  })
 }
 
 /** Enregistre une séance menée avec le mode guidé : les séries réelles, la vraie durée, l'effort. */
@@ -105,8 +118,8 @@ export async function saveRunWorkout(i: RunInput): Promise<Workout | null> {
     title: i.light ? `${built.title} (légère)` : built.title,
     rpe: i.rpe,
     feeling: 3,
-    notes: built.notes,
-    sets: i.sets,
+    notes: i.notes ?? '',
+    sets: expandEmom(i.sets ?? []),
     program: built.program,
     source: 'manual',
     updatedAt: new Date().toISOString(),

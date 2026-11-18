@@ -5,6 +5,7 @@ import { signOut, syncNow } from '../sync/syncEngine'
 import { SYNC_CONFIGURED } from '../sync/supabase'
 import { displayName } from '../sync/username'
 import StoragePanel from '../components/StoragePanel'
+import JsonTools from '../components/JsonTools'
 import { Button, Card, useToast } from '../components/ui/primitives'
 import { exportBackup, importBackup } from '../db/repo'
 import { todayKey } from '../engine/time'
@@ -76,6 +77,7 @@ export default function SettingsScreen({ param }: { param?: string }) {
           </div>
         </details>
       )}
+      <JsonTools />
       <Card title="Mes données" subtitle="Sauvegarde et restauration">
         <div className="mt-3 flex flex-wrap gap-2">
           <Button

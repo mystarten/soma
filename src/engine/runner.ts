@@ -1,11 +1,12 @@
-import type { SetEntry } from '../types'
+import type { EmomSpec, SetEntry } from '../types'
 
 export const DEFAULT_REST_SEC = 90
 
 /** « 8 reps · +20 kg », « Tenue 40 s », « 400 m ». */
-export function describeTarget(s: Pick<SetEntry, 'reps' | 'loadKg' | 'holdSec' | 'distanceM'>): string {
+export function describeTarget(s: Pick<SetEntry, 'reps' | 'loadKg' | 'holdSec' | 'distanceM'> & { emom?: EmomSpec }): string {
   const bits: string[] = []
-  if (s.holdSec) bits.push(`Tenue ${s.holdSec} s`)
+  if (s.emom) bits.push(`EMOM ${s.emom.minutes} min`)
+  else if (s.holdSec) bits.push(`Tenue ${s.holdSec} s`)
   else if (s.reps) bits.push(`${s.reps} rep${s.reps > 1 ? 's' : ''}`)
   else if (s.distanceM) bits.push(`${s.distanceM} m`)
   if (s.loadKg) bits.push(`${s.loadKg > 0 ? '+' : ''}${s.loadKg} kg`)

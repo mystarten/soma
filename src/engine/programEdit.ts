@@ -53,7 +53,11 @@ export const updateBlock = (p: P, code: string, bi: number, patch: Partial<Pick<
 
 export const setCell = (p: P, code: string, bi: number, wi: number, text: string): P =>
   withSession(p, code, (s) => {
-    if (s.blocks[bi]) s.blocks[bi].cells[wi] = text
+    const b = s.blocks[bi]
+    if (!b) return
+    b.cells[wi] = text
+    /* Le texte modifié à la main remplace la prescription structurée de cette semaine. */
+    if (b.plans) b.plans[wi] = null
   })
 
 /** Copie la case d'une semaine sur toutes les autres semaines du bloc. */
@@ -62,7 +66,9 @@ export const applyCellToAll = (p: P, code: string, bi: number, wi: number): P =>
     const b = s.blocks[bi]
     if (!b) return
     const text = b.cells[wi] ?? ''
+    const plan = b.plans?.[wi] ?? null
     b.cells = s.weeks.map(() => text)
+    if (b.plans || plan) b.plans = s.weeks.map(() => (plan ? structuredClone(plan) : null))
   })
 
 export const toggleWeekFlag = (p: P, code: string, wi: number, flag: 'light' | 'test'): P =>
@@ -79,7 +85,10 @@ export function addWeek(p: P): P {
   for (const s of c.sessions) {
     const n = (s.weeks[s.weeks.length - 1]?.n ?? 0) + 1
     s.weeks.push({ n, label: '' })
-    for (const b of s.blocks) b.cells.push(b.cells[b.cells.length - 1] ?? '')
+    for (const b of s.blocks) {
+      b.cells.push(b.cells[b.cells.length - 1] ?? '')
+      if (b.plans) b.plans.push(b.plans[b.plans.length - 1] ? structuredClone(b.plans[b.plans.length - 1]) : null)
+    }
   }
   return c
 }

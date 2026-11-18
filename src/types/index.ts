@@ -113,7 +113,17 @@ export interface SetEntry {
   distanceM?: number
   /** Durée prévue de la série en secondes (EMOM, rameur…), quand le programme la donne. */
   workSec?: number
+  /** Nom affiché de l'exercice quand un bloc en mélange plusieurs (« Tractions », « Pompes »). */
+  label?: string
+  /** Série de type EMOM : un chrono d'une minute par tour, avec un exercice par minute. */
+  emom?: EmomSpec
   note?: string
+}
+
+/** EMOM : `minutes` minutes ; la minute 1 utilise items[0], la minute 2 items[1], puis on recommence. */
+export interface EmomSpec {
+  minutes: number
+  items: { name?: string; exerciseId?: Id; reps: number }[]
 }
 
 export interface IntervalEntry {
@@ -725,9 +735,22 @@ export interface ProgramBlock {
   /** Consigne du bloc (repos, tempo, rappel). */
   note?: string
   restSec?: number
+  /** Nom de l'exercice pour retrouver sa fiche (sinon le nom du bloc). */
+  exercise?: string
   /** Une cellule par semaine, dans l'ordre de `weeks`. */
   cells: string[]
+  /** Prescription structurée par semaine (programme importé en JSON) : prioritaire sur le texte de la cellule. */
+  plans?: (Prescription | null)[]
 }
+
+/** Ce qu'il faut faire pour un bloc, une semaine : forme structurée, sans ambiguïté. */
+export type Prescription =
+  | { kind: 'series'; series: { reps?: number; holdSec?: number; loadKg?: number; distanceM?: number; restSec?: number; note?: string }[] }
+  | { kind: 'pyramid'; steps: number[]; first: string; second: string; ratio: number; restSec: number }
+  | { kind: 'emom'; minutes: number; items: { name?: string; reps: number }[] }
+  | { kind: 'distance'; rounds: number; distanceM: number; paceSecPer500?: number; note?: string }
+  | { kind: 'test'; note?: string }
+  | { kind: 'rest' }
 
 export interface ProgramSession {
   code: string

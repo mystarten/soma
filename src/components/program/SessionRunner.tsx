@@ -8,7 +8,7 @@ import { Button, Stepper } from '../ui/primitives'
 import { saveRunWorkout } from './programActions'
 import ExerciseFigure from './ExerciseFigure'
 
-type Phase = 'intro' | 'prep' | 'ready' | 'hold' | 'rest' | 'summary'
+type Phase = 'intro' | 'prep' | 'ready' | 'hold' | 'rest' | 'emom' | 'summary'
 
 /** Nom lisible de l'exercice d'une série : le bloc du programme, sinon l'exercice de la bibliothèque. */
 function useNames(program: Program, picks: { code: string; week: number }[]) {
@@ -19,7 +19,7 @@ function useNames(program: Program, picks: { code: string; week: number }[]) {
       const session = m ? program.sessions.find((x) => x.code === m[1]) : undefined
       const block = session?.blocks[Number(m?.[2]) - 1]
       const lib = data.exercises.find((e) => e.id === s.exerciseId)?.name
-      const raw = block?.name ?? lib ?? 'Exercice'
+      const raw = s.label ?? block?.name ?? lib ?? 'Exercice'
       void picks
       return raw.replace(/^[A-Z]\.\s*/, '').trim()
     },
@@ -64,6 +64,8 @@ export default function SessionRunner({
   const notified = useRef(false)
   /** Secondes déjà annoncées par un bip pendant ce compte à rebours. */
   const beeped = useRef<Set<number>>(new Set())
+  const [emomStart, setEmomStart] = useState(0)
+  const [notes, setNotes] = useState('')
 
   /* ── Écran allumé, son, notifications ── */
   const acquire = useCallback(async () => {
@@ -133,7 +135,7 @@ export default function SessionRunner({
 
   /* ── Horloge ── */
   useEffect(() => {
-    if (phase !== 'rest' && phase !== 'hold' && phase !== 'prep') return
+    if (phase !== 'rest' && phase !== 'hold' && phase !== 'prep' && phase !== 'emom') return
     const t = window.setInterval(() => setNow(Date.now()), 250)
     return () => window.clearInterval(t)
   }, [phase])
@@ -141,6 +143,12 @@ export default function SessionRunner({
   const sets = expanded
   const cur = sets[idx]
   const left = remainingSec(endAt, now)
+  /* EMOM : minute en cours, secondes restantes dans la minute, exercice de la minute (impaire : 1er, paire : 2e). */
+  const emomSpec = cur?.emom
+  const emomElapsed = emomSpec ? Math.max(0, (now - emomStart) / 1000) : 0
+  const emomMinute = emomSpec ? Math.min(emomSpec.minutes - 1, Math.floor(emomElapsed / 60)) : 0
+  const emomLeftInMinute = emomSpec ? Math.max(0, 60 - (emomElapsed - emomMinute * 60)) : 0
+  const emomItem = emomSpec ? emomSpec.items[emomMinute % emomSpec.items.length] : undefined
 
   /** Compte à 5 : « prépare-toi ». Utilisé au départ et pour « Recommencer ». */
   function startPrep() {
@@ -156,7 +164,11 @@ export default function SessionRunner({
     const target = expanded[i]
     notified.current = false
     beeped.current.clear()
-    if (target?.holdSec) {
+    if (target?.emom) {
+      setEmomStart(Date.now())
+      setNow(Date.now())
+      setPhase('emom')
+    } else if (target?.holdSec) {
       setEndAt(Date.now() + target.holdSec * 1000)
       setNow(Date.now())
       setPhase('hold')
@@ -198,6 +210,32 @@ export default function SessionRunner({
       beep(1, 880, 0.12)
     }
   }, [left, phase, beep])
+
+  /* EMOM : 5 bips avant chaque nouvelle minute, un bip long au début de chaque minute, deux bips à la fin. */
+  useEffect(() => {
+    if (phase !== 'emom' || !emomSpec) return
+    const sec = Math.ceil(emomLeftInMinute)
+    const key = emomMinute * 100 + sec
+    if (emomElapsed >= emomSpec.minutes * 60) return
+    if (sec >= 1 && sec <= 5 && !beeped.current.has(key)) {
+      beeped.current.add(key)
+      beep(1, 880, 0.12)
+    }
+    const goKey = emomMinute * 100 + 99
+    if (emomMinute > 0 && !beeped.current.has(goKey)) {
+      beeped.current.add(goKey)
+      beep(1, 1040, 0.4)
+    }
+  }, [phase, emomSpec, emomMinute, emomLeftInMinute, emomElapsed, beep])
+
+  useEffect(() => {
+    if (phase !== 'emom' || !emomSpec || notified.current) return
+    if (emomElapsed < emomSpec.minutes * 60) return
+    notified.current = true
+    beep(2, 660)
+    complete(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, emomElapsed])
 
   /* Fin du repos ou de la tenue. */
   useEffect(() => {
@@ -246,6 +284,7 @@ export default function SessionRunner({
       startedAt: new Date(startedAt.current || Date.now()).toISOString(),
       durationMin: Math.round((Date.now() - (startedAt.current || Date.now())) / 60000),
       rpe,
+      notes: notes.trim() || undefined,
       light,
     })
     onSaved(built.title)
@@ -404,6 +443,26 @@ export default function SessionRunner({
         </div>
       )}
 
+      {phase === 'emom' && emomSpec && emomItem && (
+        <div className="flex flex-col items-center gap-3 py-2 text-center">
+          <p className="text-xs tracking-wide text-mist-500 uppercase">EMOM · minute {emomMinute + 1} sur {emomSpec.minutes}</p>
+          <h2 className="text-3xl leading-tight font-semibold text-mist-100">{emomItem.name ?? nameOf(cur)}</h2>
+          <p className="text-4xl font-semibold tnum text-accent">{emomItem.reps} répétitions</p>
+          <p className="text-[6rem] leading-none font-semibold tnum text-accent">{Math.max(0, Math.ceil(emomLeftInMinute))}</p>
+          <p className="text-xs text-mist-500">secondes avant la minute suivante · il reste {fmtClock(emomSpec.minutes * 60 - emomElapsed)} au total</p>
+          <ExerciseFigure exerciseId={emomItem.exerciseId ?? cur.exerciseId} name={emomItem.name ?? nameOf(cur)} compact />
+          {emomMinute + 1 < emomSpec.minutes && (
+            <p className="rounded-xl bg-white/4 px-3 py-2 text-sm text-mist-300 hairline">
+              Minute suivante : {emomSpec.items[(emomMinute + 1) % emomSpec.items.length].name ?? nameOf(cur)} · {emomSpec.items[(emomMinute + 1) % emomSpec.items.length].reps}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button onClick={() => { notified.current = true; complete(true) }}>Terminé plus tôt</Button>
+            <Button onClick={startPrep}>↻ Recommencer</Button>
+          </div>
+        </div>
+      )}
+
       {phase === 'summary' && (
         <div className="flex flex-col gap-4 text-center">
           <div>
@@ -415,6 +474,10 @@ export default function SessionRunner({
             <p className="mb-1 text-xs text-mist-500">Effort ressenti (1 à 10)</p>
             <Stepper value={rpe} onChange={setRpe} min={1} max={10} />
           </div>
+          <label className="text-left text-xs text-mist-500">
+            Notes (difficulté, séries manquées, ce que tu changerais…)
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} placeholder="Ex. EMOM facile : j'aurais pu faire 25 pompes au lieu de 20." className="mt-1 w-full resize-y rounded-xl bg-ink-900/70 px-3.5 py-3 text-base text-mist-100 hairline outline-none sm:text-sm" />
+          </label>
           <Button variant="primary" full disabled={busy} onClick={() => void finish()}>Enregistrer la séance</Button>
         </div>
       )}

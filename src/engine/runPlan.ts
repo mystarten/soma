@@ -4,7 +4,8 @@ import { applyLight } from './coach'
 import { expandSides, restAfter } from './runner'
 
 /** Nom du bloc du programme d'où vient une série (« A. Lestées +25 kg » → « Lestées +25 kg »). */
-export function blockName(program: Pick<Program, 'sessions'>, s: Pick<SetEntry, 'block'>): string | undefined {
+export function blockName(program: Pick<Program, 'sessions'>, s: Pick<SetEntry, 'block' | 'label'>): string | undefined {
+  if (s.label) return s.label
   const m = /^(.+?)-(\d+)(?:-\w+)?$/.exec(s.block ?? '')
   const session = m ? program.sessions.find((x) => x.code === m[1]) : undefined
   const name = session?.blocks[Number(m?.[2]) - 1]?.name

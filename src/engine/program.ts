@@ -1,5 +1,6 @@
 import type {
   DayKey,
+  EmomSpec,
   ExerciseDef,
   MuscleMix,
   Program,
@@ -12,6 +13,7 @@ import type {
   WorkoutKind,
 } from '../types'
 import { dayDiff } from './time'
+import { prescriptionToCell } from './prescription'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Programme d'entraînement : lecture d'un tableau « séance × semaine »,
@@ -227,6 +229,9 @@ export interface PlannedSet {
   workSec?: number
   /** Précise l'exercice quand une case en mélange plusieurs (« tractions », « pompes »). */
   hint?: 'tractions' | 'pompes'
+  /** Nom affiché (et utilisé pour retrouver l'exercice) quand un bloc en mélange plusieurs. */
+  label?: string
+  emom?: EmomSpec
   restSec?: number
   note?: string
 }
@@ -328,22 +333,19 @@ export function parseCell(textRaw: string, ctx: CellContext = {}): PlannedCell {
     })
   }
 
-  /* Alternance de minutes : « 16 min  11 tractions / 20 pompes ». */
+  /* Alternance de minutes : « 16 min  11 tractions / 20 pompes ». Minute impaire : tractions, minute paire : pompes. */
   m = /^(\d+)\s*min\s+(\d+)\s*tractions?\s*\/\s*(\d+)\s*pompes?$/i.exec(t)
   if (m) {
     const minutes = Number(m[1])
     return out({
-      sets: [
-        { reps: Math.ceil(minutes / 2) * Number(m[2]), hint: 'tractions', note: `EMOM ${minutes} min`, workSec: Math.ceil(minutes / 2) * 60 },
-        { reps: Math.floor(minutes / 2) * Number(m[3]), hint: 'pompes', note: `EMOM ${minutes} min`, workSec: Math.floor(minutes / 2) * 60 },
-      ],
+      sets: [{ emom: { minutes, items: [{ name: 'Tractions', reps: Number(m[2]) }, { name: 'Pompes', reps: Number(m[3]) }] }, workSec: minutes * 60, note: `EMOM ${minutes} min` }],
     })
   }
 
-  /* EMOM : « EMOM 10 min  8 / min », « 10 min  18 / min ». */
+  /* EMOM : « EMOM 10 min  8 / min », « 10 min  18 / min ». Un seul exercice, toutes les minutes. */
   m = /^(?:EMOM\s+)?(\d+)\s*min\s+(\d+)\s*\/\s*min$/i.exec(t)
   if (m) {
-    return out({ sets: [{ reps: Number(m[1]) * Number(m[2]), note: `EMOM ${m[1]} min · ${m[2]} / min`, workSec: Number(m[1]) * 60 }] })
+    return out({ sets: [{ emom: { minutes: Number(m[1]), items: [{ reps: Number(m[2]) }] }, workSec: Number(m[1]) * 60, note: `EMOM ${m[1]} min · ${m[2]} / min` }] })
   }
 
   /* Rameur : « 330 m  1:48 » (par tour), « 330 m moins de 1:45 de moyenne ». */
@@ -476,11 +478,25 @@ export function missingExercises(
   for (const s of sessions) {
     for (const b of s.blocks) {
       if (/^tours?$/i.test(norm(b.name))) continue
-      const m = matchExercise(b.name, s.title)
-      if (m.custom && !existingIds.has(m.id) && !out.has(m.id)) out.set(m.id, m.custom)
+      const names = [b.exercise ?? b.name]
+      for (const pl of b.plans ?? []) {
+        if (pl?.kind === 'pyramid') names.push(pl.first, pl.second)
+        if (pl?.kind === 'emom') names.push(...pl.items.map((i) => i.name ?? ''))
+      }
+      for (const nm of names.filter(Boolean)) {
+        const m = matchExercise(nm, s.title)
+        if (m.custom && !existingIds.has(m.id) && !out.has(m.id)) out.set(m.id, m.custom)
+      }
     }
   }
   return [...out.values()]
+}
+
+/** La case d'un bloc pour une semaine : la prescription structurée si elle existe, sinon le texte analysé. */
+export function planCell(block: ProgramSession['blocks'][number], wi: number, tours?: number): PlannedCell {
+  const plan = block.plans?.[wi]
+  if (plan) return prescriptionToCell(plan) as PlannedCell
+  return parseCell(block.cells[wi] ?? '', { tours })
 }
 
 /* ── Préparer une séance ───────────────────────────────────────────────── */
@@ -534,20 +550,25 @@ export function buildFromProgram(
 
     session.blocks.forEach((block, bi) => {
       if (block === toursBlock) return
-      const cell = parseCell(block.cells[wi] ?? '', { tours })
+      const cell = planCell(block, wi, tours)
       if (cell.rest) return
-      const match = matchExercise(block.name, session.title)
+      const match = matchExercise(block.exercise ?? block.name, session.title)
       const key = `${session.code}-${bi + 1}`
       lines.push(`  ${clean(block.name)} : ${cell.text}`)
       for (const p of cell.sets) {
         const hint = p.hint
         const exerciseId =
-          hint === 'pompes' ? 'ex_pompes' : hint === 'tractions' ? 'ex_tractions_pronation' : match.id
-        const blockKey = hint ? `${key}-${hint}` : key
+          hint === 'pompes' ? 'ex_pompes' : hint === 'tractions' ? 'ex_tractions_pronation' : p.label ? matchExercise(p.label, session.title).id : match.id
+        const label = p.label ?? (hint === 'pompes' ? 'Pompes' : hint === 'tractions' ? 'Tractions' : undefined)
+        const blockKey = hint ? `${key}-${hint}` : p.label ? `${key}-${slug(p.label)}` : key
         const noteBits = [p.note, cell.test ? 'test' : undefined].filter(Boolean)
         sets.push({
           id: makeId(),
           exerciseId,
+          label,
+          emom: p.emom
+            ? { minutes: p.emom.minutes, items: p.emom.items.map((it) => ({ name: it.name, exerciseId: it.name ? matchExercise(it.name, session.title).id : match.id, reps: it.reps })) }
+            : undefined,
           block: blockKey,
           reps: p.reps,
           loadKg: p.loadKg,

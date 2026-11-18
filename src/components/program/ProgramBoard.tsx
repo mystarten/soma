@@ -3,7 +3,7 @@ import { useSoma } from '../../hooks/useSoma'
 import type { Program } from '../../types'
 import { programSpan, programStats } from '../../engine/program'
 import { pickSuggestion, simpleAdvice, trainingStreak } from '../../engine/simpleAdvice'
-import { SOCLE_LABEL, SOCLE_ORDER, socleOf, type RotationItem } from '../../engine/rotation'
+import { SOCLE_LABEL, SOCLE_ORDER, socleOf, type RotationItem, type SocleRotation } from '../../engine/rotation'
 import { deleteProgram, saveSettings } from '../../db/repo'
 import { Button, Card, ProgressBar, Segmented, Sheet, Stepper, useToast } from '../ui/primitives'
 import SessionPreview from './SessionPreview'
@@ -13,6 +13,7 @@ import { useRotation } from './useRotation'
 import ProgramTable from './ProgramTable'
 import ProgramEditor from './ProgramEditor'
 import SessionRunner from './SessionRunner'
+import WorkoutCalendar from './WorkoutCalendar'
 import { saveProgress, undoDone } from './programActions'
 import { fmtDuration, sessionTiming } from '../../engine/runPlan'
 
@@ -51,7 +52,7 @@ export default function ProgramBoard({ program }: { program: Program }) {
   const restEvery = data.settings.restEvery === 2 ? 2 : 3
   const advice = simpleAdvice({ streak: streak.days, todayDone: streak.todayDone, restEvery })
   const suggestion = useMemo(() => pickSuggestion(rotation), [rotation])
-  const others = rotation.flatMap((r) => r.available).filter((i) => i.code !== suggestion?.code)
+  const [launch, setLaunch] = useState(false)
 
   return (
     <div className="flex flex-col gap-3">
@@ -61,34 +62,10 @@ export default function ProgramBoard({ program }: { program: Program }) {
         <h2 className="mt-0.5 text-xl font-semibold text-mist-100">{advice.title}</h2>
         <p className="mt-0.5 text-sm text-mist-300">{advice.detail}</p>
         {!advice.rest && suggestion && (
-          <div className="mt-3 rounded-2xl bg-black/25 p-3.5 hairline">
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 shrink-0 rounded-lg bg-accent/15 px-2.5 py-1 text-base font-semibold text-accent tnum">{suggestion.code}</span>
-              <div className="min-w-0">
-                <p className="text-base leading-snug font-medium text-mist-100">{suggestion.title}</p>
-                <p className="mt-0.5 text-xs text-mist-500">Semaine {suggestion.nextWeek}{suggestion.week?.label ? ` · ${suggestion.week.label}` : ''} <WeekNote week={suggestion.week} /></p>
-                <p className="mt-1"><Duration program={program} code={suggestion.code} week={suggestion.nextWeek!} /></p>
-              </div>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2.5">
-              <Button variant="primary" className="!py-3.5 text-base" onClick={() => setRun({ code: suggestion.code, week: suggestion.nextWeek! })}>▶ Lancer</Button>
-              <Button className="!py-3.5 text-base" onClick={() => setTick({ code: suggestion.code, week: suggestion.nextWeek! })}>✓ Déjà faite</Button>
-            </div>
-          </div>
+          <p className="mt-2 text-xs text-mist-500">Conseillée : <b className="text-mist-100">{suggestion.code} · {suggestion.title}</b></p>
         )}
-        {!advice.rest && !suggestion && <p className="mt-2 text-sm text-mist-300">Tout le programme est fait. Bravo !</p>}
-        {!advice.rest && others.length > 0 && (
-          <div className="mt-3">
-            <p className="mb-1.5 text-xs text-mist-500">Ou lance une autre séance :</p>
-            <div className="flex flex-wrap gap-2">
-              {others.map((i) => (
-                <button key={i.code} onClick={() => setRun({ code: i.code, week: i.nextWeek! })} className="min-h-10 rounded-xl bg-white/7 px-3 text-sm text-mist-100 hairline transition active:scale-95">
-                  ▶ {i.code} <span className="text-mist-500">S{i.nextWeek}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {!suggestion && <p className="mt-2 text-sm text-mist-300">Tout le programme est fait. Bravo !</p>}
+        <Button variant="primary" full className="mt-3 !py-4 text-lg" disabled={!suggestion} onClick={() => setLaunch(true)}>▶ Lancer une séance</Button>
         <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/8 pt-2.5">
           <span className="text-[0.7rem] text-mist-500">Repos conseillé après</span>
           <Segmented value={String(restEvery)} onChange={(v) => void saveSettings({ restEvery: Number(v) })} options={[{ value: '2', label: '2 jours' }, { value: '3', label: '3 jours' }]} size="sm" />
@@ -110,31 +87,7 @@ export default function ProgramBoard({ program }: { program: Program }) {
         setDismissed(true)
       }} />}
 
-      {rotation.map((r) => (
-        <Card
-          key={r.socle}
-          title={`À faire · ${r.label}`}
-          subtitle={`${r.doneTotal} / ${r.weeksTotal} semaines faites`}
-          padded={false}
-        >
-          <div className="px-3 pb-3 sm:px-4">
-            {r.available.length > 0 ? (
-              <ul className="divide-y divide-white/6">
-                {r.available.map((it) => (
-                  <AvailableRow key={it.code} item={it} program={program} onTick={() => setTick({ code: it.code, week: it.nextWeek! })} onRun={() => setRun({ code: it.code, week: it.nextWeek! })} />
-                ))}
-              </ul>
-            ) : (
-              <p className="py-3 text-sm text-mist-500">Tout est fait dans ce socle.</p>
-            )}
-            {r.waiting.length > 0 && (
-              <p className="mt-1 text-[0.7rem] text-mist-700">
-                Plus tard, quand les autres sont faites : {r.waiting.map((i) => `${i.code} (S${i.nextWeek})`).join(' · ')}
-              </p>
-            )}
-          </div>
-        </Card>
-      ))}
+      <WorkoutCalendar />
 
       <ProgramTable program={program} rotation={rotation} done={done} onTick={(code, week) => setTick({ code, week })} onUndo={(code, week) => setUndo({ code, week })} />
 
@@ -180,6 +133,17 @@ export default function ProgramBoard({ program }: { program: Program }) {
         )}
       </div>
 
+      {launch && (
+        <Sheet open onClose={() => setLaunch(false)} title="Quelle séance ?" wide>
+          <LaunchList
+            program={program}
+            rotation={rotation}
+            suggestion={suggestion?.code}
+            onRun={(code, week) => { setLaunch(false); setRun({ code, week }) }}
+            onTick={(code, week) => { setLaunch(false); setTick({ code, week }) }}
+          />
+        </Sheet>
+      )}
       {run && <SessionRunner program={program} picks={[run]} light={light} onClose={() => setRun(null)} onSaved={(label) => toast.show(`${label} enregistrée ✓`)} />}
       {editing && <ProgramEditor program={program} onClose={() => setEditing(false)} onSaved={() => toast.show('Programme enregistré')} />}
       {tick && (
@@ -223,6 +187,30 @@ export default function ProgramBoard({ program }: { program: Program }) {
   )
 }
 
+/** Les séances restantes, par famille : on choisit celle qu'on veut faire. */
+function LaunchList({ program, rotation, suggestion, onRun, onTick }: { program: Program; rotation: SocleRotation[]; suggestion?: string; onRun: (code: string, week: number) => void; onTick: (code: string, week: number) => void }) {
+  const groups = rotation.filter((r) => r.available.length)
+  const firstWith = groups.find((g) => g.available.some((i) => i.code === suggestion))?.socle ?? groups[0]?.socle
+  const [fam, setFam] = useState(firstWith)
+  const cur = groups.find((g) => g.socle === fam) ?? groups[0]
+  if (!cur) return <p className="py-6 text-center text-sm text-mist-300">Tout est fait : bravo !</p>
+  return (
+    <div className="pb-2">
+      <div className="scroll-x">
+        <Segmented value={cur.socle} onChange={setFam} options={groups.map((g) => ({ value: g.socle, label: g.label }))} />
+      </div>
+      <ul className="mt-2 divide-y divide-white/6">
+        {cur.available.map((it) => (
+          <AvailableRow key={it.code} item={it} program={program} recommended={it.code === suggestion} onTick={() => onTick(it.code, it.nextWeek!)} onRun={() => onRun(it.code, it.nextWeek!)} />
+        ))}
+      </ul>
+      {cur.waiting.length > 0 && (
+        <p className="mt-2 text-xs text-mist-500">Plus tard, quand les autres sont faites : {cur.waiting.map((i) => `${i.code} (S${i.nextWeek})`).join(' · ')}</p>
+      )}
+    </div>
+  )
+}
+
 /** Durée de la séance avec ses repos, avant de la lancer. */
 function Duration({ program, code, week }: { program: Program; code: string; week: number }) {
   const t = useMemo(() => sessionTiming(program, code, week), [program, code, week])
@@ -237,7 +225,7 @@ function Duration({ program, code, week }: { program: Program; code: string; wee
 
 /* ── Une séance dont c'est le tour ───────────────────────────────────── */
 
-function AvailableRow({ item, program, onTick, onRun }: { item: RotationItem; program: Program; onTick: () => void; onRun: () => void }) {
+function AvailableRow({ item, program, onTick, onRun, recommended }: { item: RotationItem; program: Program; onTick: () => void; onRun: () => void; recommended?: boolean }) {
   const session = program.sessions.find((s) => s.code === item.code)!
   const [open, setOpen] = useState(false)
   return (
@@ -245,7 +233,7 @@ function AvailableRow({ item, program, onTick, onRun }: { item: RotationItem; pr
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-start gap-3 text-left" aria-expanded={open}>
         <span className="mt-0.5 w-10 shrink-0 rounded-md bg-accent/15 py-1 text-center text-sm font-semibold text-accent tnum">{item.code}</span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[0.95rem] leading-snug text-mist-100">{item.title}</span>
+          <span className="block text-[0.95rem] leading-snug text-mist-100">{item.title}{recommended && <span className="ml-2 rounded-md bg-accent/15 px-1.5 py-0.5 text-[0.62rem] font-medium text-accent">conseillée</span>}</span>
           <span className="mt-0.5 block text-xs text-mist-500">
             Semaine {item.nextWeek}
             {item.week?.label ? ` · ${item.week.label}` : ''} <WeekNote week={item.week} /> · {open ? 'masquer' : 'voir le détail'}

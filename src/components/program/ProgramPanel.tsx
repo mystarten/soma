@@ -4,7 +4,8 @@ import type { ProgramSession } from '../../types'
 import { missingExercises, parseProgramDocument } from '../../engine/program'
 import { readDocx } from '../../lib/docx'
 import { saveExercise, saveProgram } from '../../db/repo'
-import { Button, Card } from '../ui/primitives'
+import { Button, Card, useToast } from '../ui/primitives'
+import ProgramJsonSheet from './ProgramJsonSheet'
 import { addSession } from '../../engine/programEdit'
 import ProgramBoard from './ProgramBoard'
 
@@ -29,6 +30,8 @@ function ImportCard() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState<{ name: string; sessions: ProgramSession[] } | null>(null)
+  const [json, setJson] = useState(false)
+  const toast = useToast()
 
   const onFile = async (file: File | undefined) => {
     if (!file) return
@@ -93,6 +96,9 @@ function ImportCard() {
             <Button variant="primary" full disabled={busy} className="!py-3.5 text-base" onClick={() => input.current?.click()}>
               {busy ? 'Lecture…' : 'Importer un fichier Word'}
             </Button>
+            <Button full disabled={busy} className="!py-3.5 text-base" onClick={() => setJson(true)}>
+              Importer un JSON (fait avec une IA)
+            </Button>
             <Button full disabled={busy} className="!py-3.5 text-base" onClick={() => void createBlank()}>
               Créer mon programme
             </Button>
@@ -102,6 +108,8 @@ function ImportCard() {
         {error && <p className="mt-2 text-center text-xs text-[#ffb02e]">{error}</p>}
       </Card>
 
+      {toast.node}
+      {json && <ProgramJsonSheet onClose={() => setJson(false)} onDone={(m) => toast.show(m)} />}
       {draft && (
         <Card title="J’ai trouvé ça" subtitle={draft.name}>
           <ul className="flex flex-col gap-1.5">
