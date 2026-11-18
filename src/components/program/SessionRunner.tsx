@@ -92,6 +92,8 @@ export default function SessionRunner({
   const beep = useCallback((times = 1, freq = 880, dur = 0.18) => {
     const c = ctx.current
     if (!c) return
+    /* Sur iPhone le son se suspend après une interruption (appel, écran verrouillé) : on le réveille avant de biper. */
+    if (c.state === 'suspended') void c.resume().catch(() => {})
     for (let i = 0; i < times; i++) {
       const o = c.createOscillator()
       const g = c.createGain()
