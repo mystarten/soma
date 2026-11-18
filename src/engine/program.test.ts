@@ -83,11 +83,12 @@ describe('lecture d’une case', () => {
     expect(c.sets.find((s) => s.hint === 'tractions')?.reps).toBe(88)
     expect(c.sets.find((s) => s.hint === 'pompes')?.reps).toBe(160)
   })
-  it('pyramide : tractions puis pompes en double', () => {
+  it('pyramide : une série de tractions, puis des pompes en double, en alternance, 1 min 30 de repos', () => {
     const c = parseCell('sommet 20 + 40  5-10-15-20-15-10-5')
-    const t = c.sets.filter((s) => s.hint === 'tractions').map((s) => s.reps)
-    expect(t).toEqual([5, 10, 15, 20, 15, 10, 5])
-    expect(c.sets.filter((s) => s.hint === 'pompes').map((s) => s.reps)[3]).toBe(40)
+    expect(c.sets.map((s) => `${s.hint}:${s.reps}`).slice(0, 8)).toEqual(['tractions:5', 'pompes:10', 'tractions:10', 'pompes:20', 'tractions:15', 'pompes:30', 'tractions:20', 'pompes:40'])
+    expect(c.sets).toHaveLength(14)
+    expect(c.sets.every((s) => s.restSec === 90)).toBe(true)
+    expect(parseCell('sommet 22 + 45  5-10-15-22-15-10-5').sets[6]).toMatchObject({ hint: 'tractions', reps: 22 })
   })
   it('repos, test, par tour', () => {
     expect(parseCell('repos').rest).toBe(true)

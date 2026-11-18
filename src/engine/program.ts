@@ -294,11 +294,12 @@ export function parseCell(textRaw: string, ctx: CellContext = {}): PlannedCell {
       const up = Array.from({ length: Math.max(1, Math.floor(top / 5)) }, (_, i) => (i + 1) * 5)
       steps = [...up, ...up.slice(0, -1).reverse()]
     }
+    /* En alternance : 5 tractions, 10 pompes, 10 tractions, 20 pompes… (pompes = 2 × tractions), 1 min 30 de repos entre chaque série. */
     return out({
-      sets: [
-        ...steps.map((reps): PlannedSet => ({ reps, hint: 'tractions' })),
-        ...steps.map((reps): PlannedSet => ({ reps: reps * 2, hint: 'pompes' })),
-      ],
+      sets: steps.flatMap((reps): PlannedSet[] => [
+        { reps, hint: 'tractions', restSec: 90 },
+        { reps: reps * 2, hint: 'pompes', restSec: 90 },
+      ]),
     })
   }
 
