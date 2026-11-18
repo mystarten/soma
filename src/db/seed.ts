@@ -111,6 +111,14 @@ async function migrations(): Promise<void> {
     await db.meta.put({ key: 'whoop_other_removed_v1', value: nowIso() })
   }
   await mergeProgramWithWhoop()
+  if (!(await db.meta.get('whoop_removed_v2'))) {
+    /* WHOOP n'est plus utilisé : ses séances disparaissent du calendrier, sauf celles qui portent une case du programme (on les garde, devenues manuelles). */
+    for (const w of (await db.workouts.toArray()).filter((x) => !x.deleted && x.source === 'whoop')) {
+      if (w.program?.length) await saveWorkout({ ...w, source: 'manual' })
+      else await deleteWorkout(w.id)
+    }
+    await db.meta.put({ key: 'whoop_removed_v2', value: nowIso() })
+  }
   if (!(await db.meta.get('gymnastics_street_v1'))) {
     const rows = (await db.workouts.toArray()).filter(
       (w) => !w.deleted && w.source === 'whoop' && /gymnas/i.test(w.title ?? '') && w.kind !== 'street',
