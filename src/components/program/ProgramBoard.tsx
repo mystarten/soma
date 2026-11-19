@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react'
 import { useSoma } from '../../hooks/useSoma'
 import type { Program } from '../../types'
 import { programSpan, programStats } from '../../engine/program'
-import { pickSuggestion, simpleAdvice, trainingStreak } from '../../engine/simpleAdvice'
+import { pickSuggestion } from '../../engine/simpleAdvice'
 import { SOCLE_LABEL, SOCLE_ORDER, socleOf, type RotationItem, type SocleRotation } from '../../engine/rotation'
-import { deleteProgram, saveSettings } from '../../db/repo'
+import { deleteProgram } from '../../db/repo'
 import { Button, Card, ProgressBar, Segmented, Sheet, Stepper, useToast } from '../ui/primitives'
 import SessionPreview from './SessionPreview'
 import TickSheet from './TickSheet'
@@ -14,6 +14,8 @@ import ProgramTable from './ProgramTable'
 import ProgramEditor from './ProgramEditor'
 import SessionRunner from './SessionRunner'
 import WorkoutCalendar from './WorkoutCalendar'
+import TodayCard, { DetailList } from './TodayCard'
+import { currentWeek, recommend, weekPlan, type PlanItem } from '../../engine/todayPlan'
 import { saveProgress, undoDone } from './programActions'
 import { fmtDuration, sessionTiming } from '../../engine/runPlan'
 
@@ -48,29 +50,19 @@ export default function ProgramBoard({ program }: { program: Program }) {
   const [run, setRun] = useState<{ code: string; week: number } | null>(null)
   const nothingDone = stats.done === 0 && !dismissed
   const light = false
-  const streak = useMemo(() => trainingStreak(data.workouts, data.today), [data.workouts, data.today])
-  const restEvery = data.settings.restEvery === 2 ? 2 : 3
-  const advice = simpleAdvice({ streak: streak.days, todayDone: streak.todayDone, restEvery })
   const suggestion = useMemo(() => pickSuggestion(rotation), [rotation])
   const [launch, setLaunch] = useState(false)
+  const week = useMemo(() => currentWeek(program, data.today, data.settings.programStart), [program, data.today, data.settings.programStart])
+  const rec = useMemo(
+    () => (week && week.state === 'during' ? recommend({ program, workouts: data.workouts, done, week, nowMs: data.nowMs, override: data.settings.programStart }) : null),
+    [program, week, data.workouts, done, data.nowMs, data.settings.programStart],
+  )
+  const weekItems = useMemo(() => (week && week.state === 'during' ? weekPlan(program, week, done, data.settings.programStart) : null), [program, week, done, data.settings.programStart])
 
   return (
     <div className="flex flex-col gap-3">
       {toast.node}
-      <section className="rounded-[var(--radius-card)] p-4 hairline" style={{ background: advice.rest ? 'linear-gradient(135deg,#2a1d0e,#0a101c)' : 'linear-gradient(135deg,color-mix(in srgb,var(--accent) 14%,#0a101c),#0a101c)' }}>
-        <p className="text-[0.68rem] tracking-wide text-mist-500 uppercase">Aujourd’hui</p>
-        <h2 className="mt-0.5 text-xl font-semibold text-mist-100">{advice.title}</h2>
-        <p className="mt-0.5 text-sm text-mist-300">{advice.detail}</p>
-        {!advice.rest && suggestion && (
-          <p className="mt-2 text-xs text-mist-500">Conseillée : <b className="text-mist-100">{suggestion.code} · {suggestion.title}</b></p>
-        )}
-        {!suggestion && <p className="mt-2 text-sm text-mist-300">Tout le programme est fait. Bravo !</p>}
-        <Button variant="primary" full className="mt-3 !py-4 text-lg" disabled={!suggestion} onClick={() => setLaunch(true)}>▶ Lancer une séance</Button>
-        <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/8 pt-2.5">
-          <span className="text-[0.7rem] text-mist-500">Repos conseillé après</span>
-          <Segmented value={String(restEvery)} onChange={(v) => void saveSettings({ restEvery: Number(v) })} options={[{ value: '2', label: '2 jours' }, { value: '3', label: '3 jours' }]} size="sm" />
-        </div>
-      </section>
+      <TodayCard program={program} week={week} rec={rec} onRun={(code, week) => setRun({ code, week })} onTick={(code, week) => setTick({ code, week })} onChoose={() => setLaunch(true)} />
 
       <div className="grid grid-cols-2 gap-2.5">
         <Button onClick={() => setEditing(true)}>✎ Modifier mon programme</Button>
@@ -138,7 +130,8 @@ export default function ProgramBoard({ program }: { program: Program }) {
           <LaunchList
             program={program}
             rotation={rotation}
-            suggestion={suggestion?.code}
+            weekItems={weekItems}
+            suggestion={rec?.pick?.code ?? suggestion?.code}
             onRun={(code, week) => { setLaunch(false); setRun({ code, week }) }}
             onTick={(code, week) => { setLaunch(false); setTick({ code, week }) }}
           />
@@ -188,26 +181,75 @@ export default function ProgramBoard({ program }: { program: Program }) {
 }
 
 /** Les séances restantes, par famille : on choisit celle qu'on veut faire. */
-function LaunchList({ program, rotation, suggestion, onRun, onTick }: { program: Program; rotation: SocleRotation[]; suggestion?: string; onRun: (code: string, week: number) => void; onTick: (code: string, week: number) => void }) {
-  const groups = rotation.filter((r) => r.available.length)
-  const firstWith = groups.find((g) => g.available.some((i) => i.code === suggestion))?.socle ?? groups[0]?.socle
-  const [fam, setFam] = useState(firstWith)
-  const cur = groups.find((g) => g.socle === fam) ?? groups[0]
+function LaunchList({ program, rotation, weekItems, suggestion, onRun, onTick }: { program: Program; rotation: SocleRotation[]; weekItems: PlanItem[] | null; suggestion?: string; onRun: (code: string, week: number) => void; onTick: (code: string, week: number) => void }) {
+  /* Pendant le programme : seulement ce qui est prévu cette semaine (jamais un bloc sans rien de prévu). Hors période : le roulement habituel. */
+  const groups = weekItems
+    ? SOCLE_ORDER.map((so) => ({ socle: so, label: SOCLE_LABEL[so] ?? so, items: weekItems.filter((p) => socleOf(p.code) === so) })).filter((g) => g.items.length)
+    : []
+  const rot = rotation.filter((r) => r.available.length)
+  const first = groups.find((g) => g.items.some((i) => i.code === suggestion))?.socle ?? groups[0]?.socle ?? rot[0]?.socle
+  const [fam, setFam] = useState(first)
+  if (weekItems) {
+    const cur = groups.find((g) => g.socle === fam) ?? groups[0]
+    if (!cur) return <p className="py-6 text-center text-sm text-mist-300">Rien n’est prévu cette semaine.</p>
+    return (
+      <div className="pb-2">
+        <div className="scroll-x">
+          <Segmented value={cur.socle} onChange={setFam} options={groups.map((g) => ({ value: g.socle, label: `${g.label} (${g.items.filter((i) => !i.done).length})` }))} />
+        </div>
+        <ul className="mt-2 divide-y divide-white/6">
+          {cur.items.map((it) => (
+            <WeekRow key={it.code} item={it} program={program} recommended={it.code === suggestion} onRun={() => onRun(it.code, it.weekN)} onTick={() => onTick(it.code, it.weekN)} />
+          ))}
+        </ul>
+      </div>
+    )
+  }
+  const cur = rot.find((g) => g.socle === fam) ?? rot[0]
   if (!cur) return <p className="py-6 text-center text-sm text-mist-300">Tout est fait : bravo !</p>
   return (
     <div className="pb-2">
       <div className="scroll-x">
-        <Segmented value={cur.socle} onChange={setFam} options={groups.map((g) => ({ value: g.socle, label: g.label }))} />
+        <Segmented value={cur.socle} onChange={setFam} options={rot.map((g) => ({ value: g.socle, label: g.label }))} />
       </div>
       <ul className="mt-2 divide-y divide-white/6">
         {cur.available.map((it) => (
           <AvailableRow key={it.code} item={it} program={program} recommended={it.code === suggestion} onTick={() => onTick(it.code, it.nextWeek!)} onRun={() => onRun(it.code, it.nextWeek!)} />
         ))}
       </ul>
-      {cur.waiting.length > 0 && (
-        <p className="mt-2 text-xs text-mist-500">Plus tard, quand les autres sont faites : {cur.waiting.map((i) => `${i.code} (S${i.nextWeek})`).join(' · ')}</p>
-      )}
     </div>
+  )
+}
+
+/** Une séance prévue cette semaine : détail repliable, durée, ▶ Lancer. */
+function WeekRow({ item, program, recommended, onRun, onTick }: { item: PlanItem; program: Program; recommended?: boolean; onRun: () => void; onTick: () => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <li className={`py-3.5 ${item.done ? 'opacity-60' : ''}`}>
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-start gap-3 text-left" aria-expanded={open}>
+        <span className="mt-0.5 w-10 shrink-0 rounded-md bg-accent/15 py-1 text-center text-sm font-semibold text-accent tnum">{item.code}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[0.95rem] leading-snug text-mist-100">
+            {item.title}
+            {recommended && !item.done && <span className="ml-2 rounded-md bg-accent/15 px-1.5 py-0.5 text-[0.62rem] font-medium text-accent">conseillée</span>}
+            {item.done && <span className="ml-2 rounded-md bg-[#41e08a]/15 px-1.5 py-0.5 text-[0.62rem] font-medium text-[#41e08a]">faite cette semaine</span>}
+          </span>
+          <span className="mt-0.5 block text-xs text-mist-500">
+            Semaine {item.weekN} · {item.label}
+            {item.light ? ' · décharge' : ''}
+            {item.test ? ' · test' : ''} · {open ? 'masquer' : 'voir le détail'}
+          </span>
+          <span className="mt-1 block"><Duration program={program} code={item.code} week={item.weekN} /></span>
+        </span>
+      </button>
+      {open && <div className="mt-1 rounded-xl bg-white/4 px-3 hairline"><DetailList detail={item.detail} /></div>}
+      {!item.done && (
+        <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+          <Button variant="primary" onClick={onRun} aria-label={`Lancer la séance guidée ${item.code} semaine ${item.weekN}`}>▶ Lancer</Button>
+          <Button onClick={onTick} aria-label={`Marquer ${item.code} semaine ${item.weekN} comme faite`}>✓ Déjà faite</Button>
+        </div>
+      )}
+    </li>
   )
 }
 

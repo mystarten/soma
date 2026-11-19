@@ -7,7 +7,9 @@ import { displayName } from '../sync/username'
 import StoragePanel from '../components/StoragePanel'
 import JsonTools from '../components/JsonTools'
 import { Button, Card, useToast } from '../components/ui/primitives'
-import { exportBackup, importBackup } from '../db/repo'
+import { exportBackup, importBackup, saveSettings } from '../db/repo'
+import { Segmented } from '../components/ui/primitives'
+import { programStartDay } from '../engine/todayPlan'
 import { todayKey } from '../engine/time'
 
 function download(name: string, content: string) {
@@ -17,6 +19,40 @@ function download(name: string, content: string) {
   a.download = name
   a.click()
   URL.revokeObjectURL(url)
+}
+
+/** Début du programme et rythme de repos. */
+function ProgramCard() {
+  const data = useSoma()
+  const s = data.settings
+  const fromFile = data.program ? programStartDay(data.program) : null
+  return (
+    <Card title="Mon programme" subtitle="Sert à calculer la semaine en cours">
+      <div className="mt-3 flex flex-col gap-3">
+        <label className="text-xs text-mist-300">
+          Début du programme (lundi de la semaine 1)
+          <input
+            type="date"
+            value={s.programStart ?? fromFile ?? ''}
+            onChange={(e) => void saveSettings({ programStart: e.target.value || undefined })}
+            className="mt-1 block min-h-12 w-full rounded-xl bg-ink-900/70 px-3.5 text-base text-mist-100 hairline outline-none"
+          />
+        </label>
+        <p className="text-xs text-mist-500">
+          {s.programStart ? 'Date choisie par toi.' : fromFile ? 'Date lue dans ton programme.' : 'Aucune date : choisis-en une.'}{' '}
+          {s.programStart && fromFile && s.programStart !== fromFile && (
+            <button className="text-accent underline" onClick={() => void saveSettings({ programStart: undefined })}>
+              Revenir à la date du programme ({fromFile.slice(8, 10)}/{fromFile.slice(5, 7)})
+            </button>
+          )}
+        </p>
+        <div className="flex items-center justify-between gap-3 border-t border-white/6 pt-3">
+          <span className="text-xs text-mist-300">Repos conseillé après</span>
+          <Segmented value={String(s.restEvery === 2 ? 2 : 3)} onChange={(v) => void saveSettings({ restEvery: Number(v) })} options={[{ value: '2', label: '2 jours' }, { value: '3', label: '3 jours' }]} size="sm" />
+        </div>
+      </div>
+    </Card>
+  )
 }
 
 function AccountCard() {
@@ -68,6 +104,7 @@ export default function SettingsScreen({ param }: { param?: string }) {
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
       {toast.node}
+      <ProgramCard />
       <AccountCard />
       {SYNC_CONFIGURED && (
         <details className="rounded-[var(--radius-card)] p-4 hairline" open={!!param}>

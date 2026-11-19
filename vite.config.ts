@@ -9,7 +9,7 @@ const base = process.env.VITE_BASE ?? '/soma/'
 
 export default defineConfig({
   base,
-  define: { __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ')) },
+  define: { __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.0.0'), __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ')) },
   plugins: [
     react(),
     tailwindcss(),

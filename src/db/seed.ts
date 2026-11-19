@@ -3,6 +3,7 @@ import { EXERCISE_LIBRARY, TEMPLATE_SEEDS } from '../engine/muscleMap'
 import { db, nowIso } from './db'
 import { backfillTemplates, deleteGoal, deleteWorkout, getSettings, saveWorkout, saveWorkouts } from './repo'
 import { planFragments, planMerges } from '../engine/merge'
+import { autoBackupOnUpgrade } from './backup'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Amorçage du premier lancement : bibliothèque d'exercices, modèles,
@@ -67,6 +68,8 @@ export const STARTING_REFERENCES: Settings['references'] = [
 export async function ensureSeeded(): Promise<void> {
   await seedFirstRun()
   await backfillTemplates()
+  /* Copie de sécurité avant toute migration liée à une nouvelle version. */
+  await autoBackupOnUpgrade()
   await migrations()
 }
 

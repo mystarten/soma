@@ -554,6 +554,8 @@ export interface Settings {
   restEvery?: number
   /** Seuil (en %) de la charge de fond à partir duquel une décharge est conseillée. */
   deloadAt?: number
+  /** Lundi de la semaine 1 du programme (sinon : la date lue dans le programme). */
+  programStart?: DayKey
   /** Marque la dernière remise à zéro : les autres appareils effacent leurs anciennes données quand ils la voient. */
   resetEpoch?: string
   /** Semaine de décharge en cours, jusqu'à cette date incluse. */
