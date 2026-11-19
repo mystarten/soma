@@ -1,4 +1,5 @@
 import type { Program, ProgramSession, ProgramWeek, Workout } from '../types'
+import { plannedWeeks } from './program'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Roulement du programme. Les séances sont indépendantes, mais rangées en « socles » :
@@ -57,7 +58,7 @@ export interface SocleRotation {
 export const MARK_START = '2000-01-01T00:00:00.000Z'
 
 export function nextWeekOf(session: ProgramSession, done: Set<number> | undefined): ProgramWeek | undefined {
-  return [...session.weeks].sort((a, b) => a.n - b.n).find((w) => !done?.has(w.n))
+  return [...plannedWeeks(session)].sort((a, b) => a.n - b.n).find((w) => !done?.has(w.n))
 }
 
 /** code → date de la dernière vraie séance faite. */
@@ -119,7 +120,7 @@ export function computeRotation(
       waiting: items.filter((i) => i.state === 'waiting'),
       finished: items.filter((i) => i.state === 'finished'),
       doneTotal: items.reduce((a, i) => a + i.doneWeeks.length, 0),
-      weeksTotal: program.sessions.filter((s) => socleOf(s.code) === socle).reduce((a, s) => a + s.weeks.length, 0),
+      weeksTotal: program.sessions.filter((s) => socleOf(s.code) === socle).reduce((a, s) => a + plannedWeeks(s).length, 0),
     })
   }
   return out
@@ -135,7 +136,7 @@ export function backfillMarks(
   const out: Workout[] = []
   for (const s of program.sessions) {
     const count = weeksBySocle[socleOf(s.code)] ?? 0
-    for (const w of [...s.weeks].sort((a, b) => a.n - b.n)) {
+    for (const w of [...plannedWeeks(s)].sort((a, b) => a.n - b.n)) {
       if (w.n > count) break
       out.push({
         id: makeId(),

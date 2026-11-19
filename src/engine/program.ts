@@ -499,6 +499,22 @@ export function planCell(block: ProgramSession['blocks'][number], wi: number, to
   return parseCell(block.cells[wi] ?? '', { tours })
 }
 
+/** Cette semaine de la séance a-t-elle quelque chose de prévu ? Une semaine « null » (rien à faire) n'existe pas. */
+export function isPlannedWeek(session: ProgramSession, week: ProgramWeek): boolean {
+  const wi = session.weeks.indexOf(week)
+  if (wi < 0) return false
+  return session.blocks.some((b) => {
+    if (/^tours?$/i.test(b.name.trim())) return false
+    const c = planCell(b, wi)
+    return !c.rest && (c.sets.length > 0 || c.test)
+  })
+}
+
+/** Les semaines où la séance a quelque chose de prévu. */
+export function plannedWeeks(session: ProgramSession): ProgramWeek[] {
+  return session.weeks.filter((w) => isPlannedWeek(session, w))
+}
+
 /* ── Préparer une séance ───────────────────────────────────────────────── */
 
 export interface ProgramPick {
@@ -636,7 +652,7 @@ export function programStats(program: Pick<Program, 'sessions'>, workouts: Pick<
   let thisWeekDone = 0
   let thisWeekTotal = 0
   for (const s of program.sessions) {
-    for (const w of s.weeks) {
+    for (const w of plannedWeeks(s)) {
       total += 1
       const isDone = done.get(s.code)?.has(w.n) ?? false
       if (isDone) d += 1

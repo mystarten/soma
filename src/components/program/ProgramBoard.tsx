@@ -4,7 +4,6 @@ import type { Program } from '../../types'
 import { programSpan, programStats } from '../../engine/program'
 import { pickSuggestion } from '../../engine/simpleAdvice'
 import { SOCLE_LABEL, SOCLE_ORDER, socleOf, type RotationItem, type SocleRotation } from '../../engine/rotation'
-import { deleteProgram } from '../../db/repo'
 import { Button, Card, ProgressBar, Segmented, Sheet, Stepper, useToast } from '../ui/primitives'
 import SessionPreview from './SessionPreview'
 import TickSheet from './TickSheet'
@@ -12,6 +11,7 @@ import { WeekNote } from './weekNote'
 import { useRotation } from './useRotation'
 import ProgramTable from './ProgramTable'
 import ProgramEditor from './ProgramEditor'
+import ProgramImportSheet from './ProgramImportSheet'
 import SessionRunner from './SessionRunner'
 import WorkoutCalendar from './WorkoutCalendar'
 import TodayCard, { DetailList } from './TodayCard'
@@ -42,7 +42,7 @@ export default function ProgramBoard({ program }: { program: Program }) {
   const span = programSpan(program)
   const [tick, setTick] = useState<{ code: string; week: number } | null>(null)
   const [undo, setUndo] = useState<{ code: string; week: number } | null>(null)
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [replacing, setReplacing] = useState(false)
   const [dismissed, setDismissed] = useState(readDismissed)
   const dateLabel = (d?: string) => (d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '')
   const [adjust, setAdjust] = useState(false)
@@ -110,19 +110,9 @@ export default function ProgramBoard({ program }: { program: Program }) {
 
 
       <div className="flex justify-center pt-1">
-        {confirmDelete ? (
-          <div className="flex items-center gap-2 text-xs text-mist-300">
-            Remplacer le programme ?
-            <Button variant="danger" onClick={() => void deleteProgram().then(() => setConfirmDelete(false))}>
-              Oui, l’effacer
-            </Button>
-            <Button onClick={() => setConfirmDelete(false)}>Non</Button>
-          </div>
-        ) : (
-          <button className="text-xs text-mist-500 underline" onClick={() => setConfirmDelete(true)}>
-            Remplacer mon programme
-          </button>
-        )}
+        <button className="min-h-11 px-3 text-xs text-mist-500 underline" onClick={() => setReplacing(true)}>
+          Remplacer mon programme
+        </button>
       </div>
 
       {launch && (
@@ -138,6 +128,7 @@ export default function ProgramBoard({ program }: { program: Program }) {
         </Sheet>
       )}
       {run && <SessionRunner program={program} picks={[run]} light={light} onClose={() => setRun(null)} onSaved={(label) => toast.show(`${label} enregistrée ✓`)} />}
+      {replacing && <ProgramImportSheet onClose={() => setReplacing(false)} onDone={(m) => toast.show(m)} />}
       {editing && <ProgramEditor program={program} onClose={() => setEditing(false)} onSaved={() => toast.show('Programme enregistré')} />}
       {tick && (
         <TickSheet

@@ -1,5 +1,6 @@
 import type { Program, ProgramBlock, ProgramSession, ProgramWeek, Prescription } from '../types'
 import { describePrescription, normalizePrescription, prescriptionToJson } from './prescription'
+import { plannedWeeks } from './program'
 
 /* Format JSON d'un programme : fait pour qu'une IA (Claude…) puisse l'écrire sans ambiguïté, et pour être relu par l'appli. */
 
@@ -52,17 +53,18 @@ export function programFromJson(input: unknown): JsonResult {
     const where = `Séance n°${si + 1}`
     if (!isObj(rs)) return void errors.push(`${where} : doit être un objet.`)
     const code = typeof rs.code === 'string' ? rs.code.trim().toUpperCase() : ''
-    if (!/^[A-Z][A-Z0-9]{0,5}$/.test(code)) return void errors.push(`${where} : « code » invalide (ex. "T1", "J2", "A1" : T/M/P = street workout, J = jambes, A = abdos).`)
+    if (!/^[A-Z][A-Z0-9]{0,5}$/.test(code)) return void errors.push(`${where} : le champ « code » est invalide (ex. "T1", "J2", "A1" : T/M/P = street workout, J = jambes, A = abdos).`)
     if (codes.has(code)) return void errors.push(`${where} : le code ${code} est utilisé deux fois.`)
     codes.add(code)
     const title = typeof rs.title === 'string' && rs.title.trim() ? rs.title.trim() : code
-    if (!Array.isArray(rs.blocks) || !rs.blocks.length) return void errors.push(`Séance ${code} : « blocks » doit lister au moins un exercice.`)
+    if (!Array.isArray(rs.blocks) || !rs.blocks.length) return void errors.push(`Séance ${code} : le champ « blocks » doit lister au moins un exercice.`)
     const blocks: ProgramBlock[] = []
     ;(rs.blocks as unknown[]).forEach((rb, bi) => {
       const bw = `Séance ${code} › bloc ${bi + 1}`
       if (!isObj(rb)) return void errors.push(`${bw} : doit être un objet.`)
       const name = typeof rb.name === 'string' && rb.name.trim() ? rb.name.trim() : ''
-      if (!name) return void errors.push(`${bw} : « name » manquant.`)
+      if (!name) return void errors.push(`${bw} : le champ « name » est manquant.`)
+      if (rb.weeks !== undefined && !Array.isArray(rb.weeks)) return void errors.push(`${bw} (« ${name} ») : le champ « weeks » doit être une liste (une entrée par semaine).`)
       const rawWeeks = Array.isArray(rb.weeks) ? rb.weeks : []
       if (rawWeeks.length > weeks.length) warnings.push(`${code} › ${name} : ${rawWeeks.length} semaines données pour ${weeks.length} semaines déclarées (les extras sont ignorées).`)
       if (rawWeeks.length < weeks.length) warnings.push(`${code} › ${name} : ${rawWeeks.length} semaines données pour ${weeks.length} : les suivantes sont en repos.`)
@@ -104,6 +106,7 @@ export function programFromJson(input: unknown): JsonResult {
       blocks,
     })
   })
+  for (const s of sessions) if (!plannedWeeks(s).length) warnings.push(`Séance ${s.code} : aucune semaine n’a de contenu, elle n’apparaîtra jamais.`)
   if (errors.length) return { errors, warnings }
   return { program: { name: typeof input.name === 'string' && input.name.trim() ? input.name.trim() : 'Mon programme', sessions }, errors, warnings }
 }
@@ -200,3 +203,33 @@ EXEMPLE
     }
   ]
 }`
+
+/** Explique une erreur de syntaxe JSON : ligne, colonne et extrait. */
+export function explainJsonSyntaxError(text: string, err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err)
+  const lc = /line (\d+) column (\d+)/.exec(msg)
+  let line: number | undefined
+  let col: number | undefined
+  if (lc) {
+    line = Number(lc[1])
+    col = Number(lc[2])
+  } else {
+    let at: number | undefined
+    const pos = /position (\d+)/.exec(msg)
+    if (pos) at = Number(pos[1])
+    else {
+      /* Chrome et Safari ne donnent pas la position, seulement un extrait autour de la faute : on le retrouve dans le texte. */
+      const snip = /"(?:\.\.\.)?([\s\S]*?)(?:\.\.\.)?" is not valid JSON/.exec(msg)?.[1]
+      const idx = snip ? text.indexOf(snip) : -1
+      if (snip && idx >= 0) at = idx + Math.floor(snip.length / 2)
+    }
+    if (at !== undefined) {
+      const before = text.slice(0, at)
+      line = before.split('\n').length
+      col = before.length - before.lastIndexOf('\n')
+    }
+  }
+  const lines = text.split('\n')
+  const excerpt = line ? (lines[line - 1] ?? '').trim().slice(0, 80) : ''
+  return line ? `JSON invalide ligne ${line}, colonne ${col}${excerpt ? ` : « ${excerpt} »` : ''}. Vérifie les virgules, les guillemets et les accolades.` : `JSON invalide (${msg}). Colle uniquement le bloc JSON complet.`
+}

@@ -135,7 +135,9 @@ export function normalizePrescription(raw: unknown): Prescription | string | nul
       restSec: num(pick(x ?? {}, 'rest_sec', 'restSec')),
       note: text(x?.note),
     }))
-    if (!series.length || series.some((x) => !x.reps && !x.holdSec && !x.distanceM)) return { error: 'chaque élément de series a besoin de reps, hold_sec ou distance_m' }
+    if (!series.length) return { error: 'le champ « series » est vide' }
+    const bad = series.findIndex((x) => !x.reps && !x.holdSec && !x.distanceM)
+    if (bad >= 0) return { error: `champ « series[${bad + 1}] » : il faut « reps », « hold_sec » ou « distance_m »` }
     return { kind: 'series', series }
   }
 

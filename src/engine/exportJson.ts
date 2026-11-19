@@ -1,6 +1,6 @@
 import type { ExerciseDef, Program, SetEntry, Workout } from '../types'
 import { programToJson, PROGRAM_FORMAT_DOC } from './programJson'
-import { programDone } from './program'
+import { plannedWeeks, programDone } from './program'
 
 /* Export du suivi : programme, avancement, séances et notes, au format JSON lisible par une IA. */
 
@@ -14,7 +14,7 @@ export function buildTrackingExport(input: { program: Program | null; workouts: 
     ? Object.fromEntries(
         program.sessions.map((s) => {
           const d = [...(done.get(s.code) ?? [])].sort((a, b) => a - b)
-          const next = s.weeks.map((w) => w.n).find((n) => !d.includes(n)) ?? null
+          const next = plannedWeeks(s).map((w) => w.n).find((n) => !d.includes(n)) ?? null
           return [s.code, { title: s.title, done_weeks: d, next_week: next }]
         }),
       )

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useSoma } from '../hooks/useSoma'
 import { Button, Card, useToast } from './ui/primitives'
-import ProgramJsonSheet from './program/ProgramJsonSheet'
+import ProgramImportSheet from './program/ProgramImportSheet'
 import { programToJson, PROGRAM_FORMAT_DOC } from '../engine/programJson'
 import { buildAiContext, buildTrackingExport } from '../engine/exportJson'
 import { copyText } from '../lib/clipboard'
@@ -30,7 +30,7 @@ export default function JsonTools() {
           1. Copier les consignes pour l’IA
         </Button>
         <Button variant="primary" onClick={() => setImporting(true)}>
-          2. Importer un programme (JSON)
+          2. Importer ou remplacer le programme
         </Button>
         <Button
           disabled={!data.program}
@@ -46,7 +46,7 @@ export default function JsonTools() {
         </div>
         <p className="text-xs text-mist-500">Le suivi contient ton programme, les semaines faites, tes séances et tes notes. Colle-le dans une conversation avec Claude pour qu’elle t’aide à ajuster ton programme.</p>
       </div>
-      {importing && <ProgramJsonSheet onClose={() => setImporting(false)} onDone={(m) => toast.show(m)} />}
+      {importing && <ProgramImportSheet onClose={() => setImporting(false)} onDone={(m) => toast.show(m)} />}
     </Card>
   )
 }

@@ -46,3 +46,15 @@ export async function getBackupJson(key: string): Promise<string | null> {
   const r = await db.meta.get(key)
   return r ? String(r.value) : null
 }
+
+/** Sauvegarde immédiate (avant une opération risquée, comme le remplacement du programme). */
+export async function backupNow(label: string): Promise<void> {
+  try {
+    const b = await exportBackup()
+    await db.meta.put({ key: `${PREFIX}${nowIso()}|${label}`, value: JSON.stringify(b) })
+    const keys = (await db.meta.toArray()).map((m) => m.key).filter((k) => k.startsWith(PREFIX)).sort()
+    for (const k of keys.slice(0, Math.max(0, keys.length - KEEP))) await db.meta.delete(k)
+  } catch {
+    /* stockage plein : le remplacement reste possible, l'ancien programme figure aussi dans la synchro */
+  }
+}

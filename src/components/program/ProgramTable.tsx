@@ -3,6 +3,7 @@ import { useSoma } from '../../hooks/useSoma'
 import type { Program } from '../../types'
 import { SOCLE_LABEL, SOCLE_ORDER, socleOf, type SocleRotation } from '../../engine/rotation'
 import { Card } from '../ui/primitives'
+import { isPlannedWeek, plannedWeeks } from '../../engine/program'
 
 const AMBER = '#d6b25b'
 const BLUE = '#6fa8ff'
@@ -63,10 +64,11 @@ export default function ProgramTable({
                     <div className="mb-2 flex items-start gap-2.5">
                       <span className="shrink-0 rounded-md bg-accent/15 px-2 py-0.5 text-sm font-semibold text-accent tnum">{s.code}</span>
                       <span className="min-w-0 flex-1 text-sm leading-snug text-mist-100">{s.title}</span>
-                      <span className="shrink-0 text-xs text-mist-500 tnum">{d.size}/{s.weeks.length}</span>
+                      <span className="shrink-0 text-xs text-mist-500 tnum">{d.size}/{plannedWeeks(s).length}</span>
                     </div>
                     <div className="grid grid-cols-6 gap-1.5">
                       {s.weeks.map((w) => {
+                        if (!isPlannedWeek(s, w)) return <span key={w.n} className="flex h-12 flex-col items-center justify-center rounded-lg bg-white/3 text-[0.7rem] text-mist-700" aria-label={`${s.code} semaine ${w.n} : rien de prévu`}>–</span>
                         const isDone = d.has(w.n)
                         const isNext = next === w.n
                         const tone = w.test ? BLUE : w.light ? AMBER : afterTest(w.n) ? GREEN : undefined
@@ -149,7 +151,7 @@ export default function ProgramTable({
                           const isNext = next === n
                           const tone = w?.test ? BLUE : w?.light ? AMBER : afterTest(n) ? GREEN : undefined
                           const colTint = c.test ? BLUE : c.light ? AMBER : afterTest(n) ? GREEN : undefined
-                          if (!w) return <td key={n} className="px-0.5"><div className="h-8 rounded-md bg-white/3" /></td>
+                          if (!w || !isPlannedWeek(s, w)) return <td key={n} className="px-0.5"><div className="grid h-8 place-items-center rounded-md bg-white/3 text-[0.7rem] text-mist-700">–</div></td>
                           return (
                             <td key={n} className="px-0.5" style={{ background: colTint ? `${colTint}12` : undefined }}>
                               <button
@@ -169,7 +171,7 @@ export default function ProgramTable({
                             </td>
                           )
                         })}
-                        <td className="pl-2 text-right text-[0.7rem] text-mist-500 tnum">{d.size}/{s.weeks.length}</td>
+                        <td className="pl-2 text-right text-[0.7rem] text-mist-500 tnum">{d.size}/{plannedWeeks(s).length}</td>
                       </tr>
                     )
                   })}

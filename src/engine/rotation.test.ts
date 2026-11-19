@@ -4,7 +4,7 @@ import { MARK_START, backfillMarks, computeRotation, lastDoneBySession, removeRe
 import { programDone } from './program'
 
 const weeks = (n: number) => Array.from({ length: n }, (_, i) => ({ n: i + 1, label: `S${i + 1}` }))
-const sess = (code: string, n = 12): ProgramSession => ({ code, title: `Séance ${code}`, weeks: weeks(n), blocks: [] })
+const sess = (code: string, n = 12): ProgramSession => ({ code, title: `Séance ${code}`, weeks: weeks(n), blocks: [{ name: 'A. Exo', cells: Array.from({ length: n }, () => '3 x 8') }] })
 const program = { sessions: ['T1', 'T2', 'M1', 'J1', 'J2', 'A1', 'A2', 'A3'].map((c) => sess(c)) }
 const done = (o: Record<string, number>) => new Map(Object.entries(o).map(([c, n]) => [c, new Set(Array.from({ length: n }, (_, i) => i + 1))]))
 const avail = (r: ReturnType<typeof computeRotation>, socle: string) => r.find((x) => x.socle === socle)!.available.map((i) => i.code)
