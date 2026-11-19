@@ -1,17 +1,13 @@
-import type { Program, SetEntry, Workout } from '../../types'
-import { buildFromProgram } from '../../engine/program'
+import type { Program, Workout } from '../../types'
+import { buildFromProgram, expandEmom } from '../../engine/program'
+import { startedAtOf } from '../../engine/programSession'
 import { applyLight } from '../../engine/coach'
 import { backfillMarks, removeRef, socleOf } from '../../engine/rotation'
 import { deleteWorkout, saveWorkout, saveWorkouts } from '../../db/repo'
 import { db, uid } from '../../db/db'
 import { mergeProgramWithWhoop } from '../../db/seed'
 
-/** Début réel d'une séance : jour choisi + heure `HH:MM`. */
-export const startedAtOf = (day: string, time: string): string => {
-  const [y, m, d] = day.split('-').map(Number)
-  const [h, min] = time.split(':').map(Number)
-  return new Date(y, (m || 1) - 1, d || 1, h || 0, min || 0, 0, 0).toISOString()
-}
+export { startedAtOf }
 
 export interface TickInput {
   program: Pick<Program, 'sessions'>
@@ -93,17 +89,7 @@ export interface RunInput {
   light?: boolean
 }
 
-/** Une série EMOM devient une série par exercice, avec le total de répétitions réellement prévu. */
-export function expandEmom(sets: SetEntry[]): SetEntry[] {
-  return sets.flatMap((s) => {
-    if (!s.emom) return [s]
-    const { minutes, items } = s.emom
-    return items.map((it, i) => {
-      const count = Array.from({ length: minutes }, (_, m) => m).filter((m) => m % items.length === i).length
-      return { id: `${s.id}-${i}`, exerciseId: it.exerciseId ?? s.exerciseId, label: it.name, block: `${s.block ?? 'emom'}-${i}`, reps: it.reps * count, note: `EMOM ${minutes} min : ${count} × ${it.reps}` } as SetEntry
-    })
-  })
-}
+export { expandEmom }
 
 /** Enregistre une séance menée avec le mode guidé : les séries réelles, la vraie durée, l'effort. */
 export async function saveRunWorkout(i: RunInput): Promise<Workout | null> {

@@ -611,10 +611,11 @@ export function buildFromProgram(
 
 /* ── Suivi ─────────────────────────────────────────────────────────────── */
 
-/** code → semaines faites, d'après les séances enregistrées. */
-export function programDone(workouts: Pick<Workout, 'program'>[]): Map<string, Set<number>> {
+/** code → semaines faites, d'après les séances enregistrées (les séances « prévues » ne comptent pas encore). */
+export function programDone(workouts: Pick<Workout, 'program' | 'planned' | 'deleted'>[]): Map<string, Set<number>> {
   const map = new Map<string, Set<number>>()
   for (const w of workouts) {
+    if (w.planned || w.deleted) continue
     for (const r of w.program ?? []) {
       const set = map.get(r.code) ?? new Set<number>()
       set.add(r.week)
@@ -622,6 +623,32 @@ export function programDone(workouts: Pick<Workout, 'program'>[]): Map<string, S
     }
   }
   return map
+}
+
+/** code → semaine → séance « prévue » (placée dans le calendrier mais pas encore faite). */
+export function programPlanned<T extends Pick<Workout, 'program' | 'planned' | 'deleted'>>(workouts: T[]): Map<string, Map<number, T>> {
+  const map = new Map<string, Map<number, T>>()
+  for (const w of workouts) {
+    if (!w.planned || w.deleted) continue
+    for (const r of w.program ?? []) {
+      const weeks = map.get(r.code) ?? new Map<number, T>()
+      weeks.set(r.week, w)
+      map.set(r.code, weeks)
+    }
+  }
+  return map
+}
+
+/** Une série EMOM devient une série par exercice, avec le total de répétitions réellement prévu. */
+export function expandEmom(sets: SetEntry[]): SetEntry[] {
+  return sets.flatMap((s) => {
+    if (!s.emom) return [s]
+    const { minutes, items } = s.emom
+    return items.map((it, i) => {
+      const count = Array.from({ length: minutes }, (_, m) => m).filter((m) => m % items.length === i).length
+      return { id: `${s.id}-${i}`, exerciseId: it.exerciseId ?? s.exerciseId, label: it.name, block: `${s.block ?? 'emom'}-${i}`, reps: it.reps * count, note: `EMOM ${minutes} min : ${count} × ${it.reps}` } as SetEntry
+    })
+  })
 }
 
 /** La semaine à proposer pour une séance : celle de la date du jour, sinon la première non faite. */

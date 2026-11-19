@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useSoma } from '../../hooks/useSoma'
 import type { Program } from '../../types'
-import { programSpan, programStats } from '../../engine/program'
+import { programPlanned, programSpan, programStats } from '../../engine/program'
 import { pickSuggestion } from '../../engine/simpleAdvice'
 import { SOCLE_LABEL, SOCLE_ORDER, socleOf, type RotationItem, type SocleRotation } from '../../engine/rotation'
-import { Button, Card, ProgressBar, Segmented, Sheet, Stepper, useToast } from '../ui/primitives'
+import { Button, Card, ProgressBar, Segmented, Sheet, useToast } from '../ui/primitives'
 import SessionPreview from './SessionPreview'
-import TickSheet from './TickSheet'
+import ProgramSessionSheet from './ProgramSessionSheet'
+import LinkCleanupCard from './LinkCleanupCard'
 import { WeekNote } from './weekNote'
 import { useRotation } from './useRotation'
 import ProgramTable from './ProgramTable'
@@ -16,7 +17,7 @@ import SessionRunner from './SessionRunner'
 import WorkoutCalendar from './WorkoutCalendar'
 import TodayCard, { DetailList } from './TodayCard'
 import { currentWeek, recommend, weekPlan, type PlanItem } from '../../engine/todayPlan'
-import { saveProgress, undoDone } from './programActions'
+import { undoDone } from './programActions'
 import { fmtDuration, sessionTiming } from '../../engine/runPlan'
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -25,30 +26,19 @@ import { fmtDuration, sessionTiming } from '../../engine/runPlan'
    haut de la liste et se range dans l'historique, où l'on peut retirer la coche en cas d'erreur.
    ────────────────────────────────────────────────────────────────────────── */
 
-const SETUP_KEY = 'soma-program-setup-dismissed'
-const readDismissed = () => {
-  try {
-    return window.localStorage.getItem(SETUP_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
 export default function ProgramBoard({ program }: { program: Program }) {
   const data = useSoma()
   const toast = useToast()
   const { rotation, all, done } = useRotation()
   const stats = useMemo(() => programStats(program, all, data.today), [program, all, data.today])
+  const planned = useMemo(() => programPlanned(data.workouts), [data.workouts])
   const span = programSpan(program)
   const [tick, setTick] = useState<{ code: string; week: number } | null>(null)
   const [undo, setUndo] = useState<{ code: string; week: number } | null>(null)
   const [replacing, setReplacing] = useState(false)
-  const [dismissed, setDismissed] = useState(readDismissed)
   const dateLabel = (d?: string) => (d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '')
-  const [adjust, setAdjust] = useState(false)
   const [editing, setEditing] = useState(false)
   const [run, setRun] = useState<{ code: string; week: number } | null>(null)
-  const nothingDone = stats.done === 0 && !dismissed
   const light = false
   const suggestion = useMemo(() => pickSuggestion(rotation), [rotation])
   const [launch, setLaunch] = useState(false)
@@ -64,24 +54,13 @@ export default function ProgramBoard({ program }: { program: Program }) {
       {toast.node}
       <TodayCard program={program} week={week} rec={rec} onRun={(code, week) => setRun({ code, week })} onTick={(code, week) => setTick({ code, week })} onChoose={() => setLaunch(true)} />
 
-      <div className="grid grid-cols-2 gap-2.5">
-        <Button onClick={() => setEditing(true)}>✎ Modifier mon programme</Button>
-        <Button onClick={() => setAdjust((v) => !v)}>{adjust ? 'Fermer' : 'Où j’en suis ?'}</Button>
-      </div>
+      <Button full onClick={() => setEditing(true)}>✎ Modifier mon programme</Button>
 
-      {(nothingDone || adjust) && <SetupCard program={program} onDone={(n) => { setAdjust(false); toast.show(`${n} semaines marquées comme faites`) }} onDismiss={() => {
-        setAdjust(false)
-        try {
-          window.localStorage.setItem(SETUP_KEY, '1')
-        } catch {
-          /* facultatif */
-        }
-        setDismissed(true)
-      }} />}
+      <LinkCleanupCard program={program} onDone={(m) => toast.show(m)} />
 
       <WorkoutCalendar />
 
-      <ProgramTable program={program} rotation={rotation} done={done} onTick={(code, week) => setTick({ code, week })} onUndo={(code, week) => setUndo({ code, week })} />
+      <ProgramTable program={program} rotation={rotation} done={done} planned={planned} onTick={(code, week) => setTick({ code, week })} onUndo={(code, week) => setUndo({ code, week })} />
 
       <Card
         title={program.name}
@@ -131,13 +110,14 @@ export default function ProgramBoard({ program }: { program: Program }) {
       {replacing && <ProgramImportSheet onClose={() => setReplacing(false)} onDone={(m) => toast.show(m)} />}
       {editing && <ProgramEditor program={program} onClose={() => setEditing(false)} onSaved={() => toast.show('Programme enregistré')} />}
       {tick && (
-        <TickSheet
+        <ProgramSessionSheet
           program={program}
+          day={data.today}
           code={tick.code}
           week={tick.week}
-          light={light}
+          existing={planned.get(tick.code)?.get(tick.week)}
           onClose={() => setTick(null)}
-          onDone={(label) => toast.show(`${label} faite ✓`)}
+          onSaved={(m) => toast.show(m)}
         />
       )}
       {undo && (
@@ -280,45 +260,5 @@ function AvailableRow({ item, program, onTick, onRun, recommended }: { item: Rot
       </div>
       {open && <SessionPreview session={session} week={item.nextWeek!} />}
     </li>
-  )
-}
-
-/* ── Où en es-tu ? (une seule fois) ──────────────────────────────────── */
-
-function SetupCard({ program, onDone, onDismiss }: { program: Program; onDone: (n: number) => void; onDismiss: () => void }) {
-  const socles = SOCLE_ORDER.filter((s) => program.sessions.some((x) => socleOf(x.code) === s))
-  const [weeks, setWeeks] = useState<Record<string, number>>({})
-  const [busy, setBusy] = useState(false)
-  return (
-    <Card title="Où en es-tu ?" subtitle="Indique les semaines déjà faites : elles seront grisées et le roulement reprendra à la suite.">
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
-        {socles.map((s) => (
-          <div key={s}>
-            <div className="mb-1 text-xs text-mist-300">{SOCLE_LABEL[s] ?? s}</div>
-            <Stepper value={weeks[s] ?? 0} onChange={(v) => setWeeks((w) => ({ ...w, [s]: v }))} min={0} max={12} suffix="sem." />
-          </div>
-        ))}
-      </div>
-      <p className="mt-2 text-[0.68rem] text-mist-700">
-        0 = pas encore commencé. Ces semaines sont de simples coches : elles ne créent aucune séance dans ton journal et ne touchent pas à ta fatigue.
-      </p>
-      <div className="mt-3 flex gap-2">
-        <Button
-          variant="primary"
-          disabled={busy || !Object.values(weeks).some((v) => v > 0)}
-          onClick={async () => {
-            setBusy(true)
-            const n = await saveProgress(program, weeks)
-            setBusy(false)
-            onDone(n)
-          }}
-        >
-          Enregistrer mon avancement
-        </Button>
-        <Button variant="ghost" onClick={onDismiss}>
-          Je commence à zéro
-        </Button>
-      </div>
-    </Card>
   )
 }

@@ -11,7 +11,7 @@ import ExerciseFigure from './ExerciseFigure'
 type Phase = 'intro' | 'prep' | 'ready' | 'hold' | 'rest' | 'emom' | 'summary'
 
 /** Nom lisible de l'exercice d'une série : le bloc du programme, sinon l'exercice de la bibliothèque. */
-function useNames(program: Program, picks: { code: string; week: number }[]) {
+export function useNames(program: Program, picks: { code: string; week: number }[]) {
   const data = useSoma()
   return useCallback(
     (s: SetEntry) => {

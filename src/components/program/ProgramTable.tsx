@@ -18,12 +18,15 @@ export default function ProgramTable({
   program,
   rotation,
   done,
+  planned,
   onTick,
   onUndo,
 }: {
   program: Program
   rotation: SocleRotation[]
   done: Map<string, Set<number>>
+  /** Séances prévues (placées dans le calendrier, pas encore faites). */
+  planned?: Map<string, Map<number, unknown>>
   onTick: (code: string, week: number) => void
   onUndo: (code: string, week: number) => void
 }) {
@@ -50,7 +53,7 @@ export default function ProgramTable({
   const afterTest = (n: number) => !!colInfo.get(n - 1)?.test
 
   return (
-    <Card title="Mon avancement" subtitle="Semaine par semaine. Touche une case pour cocher ou retirer." padded={false}>
+    <Card title="Mon avancement" subtitle="Calculé d’après ton journal. Touche une case libre pour ajouter la séance (le jour est demandé), une case faite pour la retirer." padded={false}>
       <div className="px-3 pb-3 pt-1 sm:hidden">
         {socles.map((so) => (
           <div key={so} className="mt-3">
@@ -71,23 +74,26 @@ export default function ProgramTable({
                         if (!isPlannedWeek(s, w)) return <span key={w.n} className="flex h-12 flex-col items-center justify-center rounded-lg bg-white/3 text-[0.7rem] text-mist-700" aria-label={`${s.code} semaine ${w.n} : rien de prévu`}>–</span>
                         const isDone = d.has(w.n)
                         const isNext = next === w.n
+                        const isPlan = !isDone && !!planned?.get(s.code)?.has(w.n)
                         const tone = w.test ? BLUE : w.light ? AMBER : afterTest(w.n) ? GREEN : undefined
                         return (
                           <button
                             key={w.n}
                             onClick={() => (isDone ? onUndo(s.code, w.n) : onTick(s.code, w.n))}
-                            aria-label={`${s.code} semaine ${w.n}${w.test ? ' (test)' : ''}${w.light ? ' (décharge)' : ''} : ${isDone ? 'faite, toucher pour retirer' : 'toucher pour cocher'}`}
+                            aria-label={`${s.code} semaine ${w.n}${w.test ? ' (test)' : ''}${w.light ? ' (décharge)' : ''} : ${isDone ? 'faite, toucher pour retirer' : isPlan ? 'prévue, toucher pour valider' : 'toucher pour ajouter la séance'}`}
                             className="flex h-12 flex-col items-center justify-center rounded-lg text-[0.8rem] leading-none tnum transition active:scale-95"
                             style={
                               isDone
                                 ? { background: `${GREEN}26`, color: GREEN, boxShadow: `inset 0 0 0 1px ${GREEN}55` }
-                                : isNext
+                                : isPlan
+                                  ? { background: '#ffffff0a', color: 'var(--accent)', boxShadow: 'inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 60%, transparent)' }
+                                  : isNext
                                   ? { background: 'color-mix(in srgb, var(--accent) 16%, transparent)', color: 'var(--accent)', boxShadow: 'inset 0 0 0 1.5px var(--accent)' }
                                   : { background: '#ffffff0a', color: tone ?? '#8a9bb8', boxShadow: tone ? `inset 0 0 0 1px ${tone}66` : undefined }
                             }
                           >
-                            <span className="font-semibold">{isDone ? '✓' : isNext ? '▶' : w.n}</span>
-                            <span className="mt-1 text-[0.55rem]">{isDone ? `S${w.n}` : w.test ? 'test' : w.light ? 'décharge' : `S${w.n}`}</span>
+                            <span className="font-semibold">{isDone ? '✓' : isPlan ? '◷' : isNext ? '▶' : w.n}</span>
+                            <span className="mt-1 text-[0.55rem]">{isDone ? `S${w.n}` : isPlan ? 'prévue' : w.test ? 'test' : w.light ? 'décharge' : `S${w.n}`}</span>
                           </button>
                         )
                       })}
@@ -101,6 +107,7 @@ export default function ProgramTable({
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[0.68rem] text-mist-500">
           <span><b style={{ color: GREEN }}>✓</b> faite</span>
           <span><b className="text-accent">▶</b> prochaine</span>
+          <span><b className="text-accent">◷</b> prévue</span>
           <span><b style={{ color: AMBER }}>jaune</b> décharge</span>
           <span><b style={{ color: BLUE }}>bleu</b> test</span>
         </div>
@@ -149,6 +156,7 @@ export default function ProgramTable({
                           const c = colInfo.get(n)!
                           const isDone = d.has(n)
                           const isNext = next === n
+                          const isPlan = !isDone && !!planned?.get(s.code)?.has(n)
                           const tone = w?.test ? BLUE : w?.light ? AMBER : afterTest(n) ? GREEN : undefined
                           const colTint = c.test ? BLUE : c.light ? AMBER : afterTest(n) ? GREEN : undefined
                           if (!w || !isPlannedWeek(s, w)) return <td key={n} className="px-0.5"><div className="grid h-8 place-items-center rounded-md bg-white/3 text-[0.7rem] text-mist-700">–</div></td>
@@ -156,17 +164,19 @@ export default function ProgramTable({
                             <td key={n} className="px-0.5" style={{ background: colTint ? `${colTint}12` : undefined }}>
                               <button
                                 onClick={() => (isDone ? onUndo(s.code, n) : onTick(s.code, n))}
-                                aria-label={`${s.code} semaine ${n}${w.test ? ' (test)' : ''}${w.light ? ' (décharge)' : ''} : ${isDone ? 'faite, toucher pour retirer' : 'toucher pour cocher'}`}
+                                aria-label={`${s.code} semaine ${n}${w.test ? ' (test)' : ''}${w.light ? ' (décharge)' : ''} : ${isDone ? 'faite, toucher pour retirer' : isPlan ? 'prévue, toucher pour valider' : 'toucher pour ajouter la séance'}`}
                                 className="grid h-8 w-full place-items-center rounded-md text-[0.8rem] transition active:scale-95"
                                 style={
                                   isDone
                                     ? { background: `${GREEN}26`, color: GREEN, boxShadow: `inset 0 0 0 1px ${GREEN}55` }
-                                    : isNext
+                                    : isPlan
+                                      ? { background: '#ffffff0a', color: 'var(--accent)', boxShadow: 'inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 60%, transparent)' }
+                                      : isNext
                                       ? { background: 'color-mix(in srgb, var(--accent) 16%, transparent)', color: 'var(--accent)', boxShadow: 'inset 0 0 0 1.5px var(--accent)' }
                                       : { background: '#ffffff0a', color: tone ?? '#56657d', boxShadow: tone ? `inset 0 0 0 1px ${tone}55` : undefined }
                                 }
                               >
-                                {isDone ? '✓' : isNext ? '▶' : w.test ? 'T' : w.light ? 'D' : ''}
+                                {isDone ? '✓' : isPlan ? '◷' : isNext ? '▶' : w.test ? 'T' : w.light ? 'D' : ''}
                               </button>
                             </td>
                           )
@@ -183,6 +193,7 @@ export default function ProgramTable({
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[0.66rem] text-mist-500">
           <span><b style={{ color: GREEN }}>✓</b> faite</span>
           <span><b className="text-accent">▶</b> prochaine à faire</span>
+          <span><b className="text-accent">◷</b> prévue (à valider)</span>
           <span><b style={{ color: AMBER }}>D</b> semaine de décharge</span>
           <span><b style={{ color: BLUE }}>T</b> semaine de test</span>
           <span><b style={{ color: GREEN }}>Bilan</b> semaine qui suit un test : compare avec le test précédent</span>

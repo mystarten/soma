@@ -3,11 +3,13 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { useSoma } from '../../hooks/useSoma'
 import type { DayKey, Workout } from '../../types'
-import { CATEGORY_COLOR, CATEGORY_LABEL, buildExtraWorkout, categoryOf, monthGrid, workoutsByDay, type ExtraWorkoutInput } from '../../engine/calendar'
+import { CATEGORY_COLOR, CATEGORY_LABEL, buildExtraWorkout, categoryOf, monthGrid, plannedByDay, workoutsByDay, type ExtraWorkoutInput } from '../../engine/calendar'
 import { deleteWorkout, saveWorkout } from '../../db/repo'
 import { uid } from '../../db/db'
 import { parseDay, todayKey } from '../../engine/time'
-import { Button, Card, Field, Segmented, Sheet, TextInput } from '../ui/primitives'
+import { Button, Card, Field, Segmented, Sheet, TextInput, useToast } from '../ui/primitives'
+import ProgramSessionSheet from './ProgramSessionSheet'
+import { sessionChoices } from '../../engine/programSession'
 
 const DOW = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
 
@@ -21,7 +23,11 @@ export default function WorkoutCalendar() {
   })
   const [openDay, setOpenDay] = useState<DayKey | null>(null)
   const [adding, setAdding] = useState<DayKey | null>(null)
+  const [progAdd, setProgAdd] = useState<{ day: DayKey; existing?: Workout } | null>(null)
+  const toast = useToast()
   const byDay = useMemo(() => workoutsByDay(data.workouts), [data.workouts])
+  const plannedDay = useMemo(() => plannedByDay(data.workouts), [data.workouts])
+  const hasProgram = !!data.program && sessionChoices(data.program).length > 0
   const grid = useMemo(() => monthGrid(cursor.y, cursor.m, data.settings.weekStartsOn), [cursor, data.settings.weekStartsOn])
   const dow = data.settings.weekStartsOn === 1 ? DOW : ['D', ...DOW.slice(0, 6)]
   const monthWorkouts = grid.filter((c) => c.inMonth).flatMap((c) => byDay.get(c.day) ?? [])
@@ -47,18 +53,22 @@ export default function WorkoutCalendar() {
       <div className="mt-1 grid grid-cols-7 gap-1">
         {grid.map((c) => {
           const ws = byDay.get(c.day) ?? []
+          const ps = plannedDay.get(c.day) ?? []
           const isToday = c.day === today
           return (
             <button
               key={c.day}
               onClick={() => setOpenDay(c.day)}
-              aria-label={`${format(parseDay(c.day), 'd MMMM', { locale: fr })}${ws.length ? ` : ${ws.length} séance${ws.length > 1 ? 's' : ''}` : ''}`}
+              aria-label={`${format(parseDay(c.day), 'd MMMM', { locale: fr })}${ws.length ? ` : ${ws.length} séance${ws.length > 1 ? 's' : ''}` : ''}${ps.length ? ` : ${ps.length} prévue${ps.length > 1 ? 's' : ''}` : ''}`}
               className={`flex h-12 flex-col items-center justify-between rounded-lg py-1 text-[0.8rem] transition active:scale-95 ${c.inMonth ? 'bg-white/5 text-mist-100' : 'text-mist-700'} ${isToday ? 'ring-2 ring-accent' : ''}`}
             >
               <span className={`tnum ${isToday ? 'font-semibold text-accent' : ''}`}>{Number(c.day.slice(8))}</span>
               <span className="flex h-2 items-center gap-0.5">
                 {ws.slice(0, 4).map((w) => (
                   <i key={w.id} className="block h-1.5 w-1.5 rounded-full" style={{ background: CATEGORY_COLOR[categoryOf(w)] }} />
+                ))}
+                {ps.slice(0, Math.max(0, 4 - ws.length)).map((w) => (
+                  <i key={w.id} className="block h-1.5 w-1.5 rounded-full" style={{ boxShadow: `inset 0 0 0 1.5px ${CATEGORY_COLOR[categoryOf(w)]}` }} />
                 ))}
               </span>
             </button>
@@ -73,31 +83,90 @@ export default function WorkoutCalendar() {
             {CATEGORY_LABEL[k]}
           </span>
         ))}
+        <span className="flex items-center gap-1">
+          <i className="block h-2 w-2 rounded-full" style={{ boxShadow: 'inset 0 0 0 1.5px #9fb6d6' }} />
+          Prévue
+        </span>
       </div>
       <div className="mt-3 flex items-center justify-between gap-3">
         <p className="text-xs text-mist-300">
           Ce mois-ci : <b className="text-mist-100">{monthWorkouts.length} séance{monthWorkouts.length > 1 ? 's' : ''}</b>
           {monthMinutes ? ` · ${Math.floor(monthMinutes / 60)} h ${String(monthMinutes % 60).padStart(2, '0')}` : ''}
         </p>
-        <Button onClick={() => setAdding(today)}>+ Ajouter une séance</Button>
+        <Button onClick={() => setOpenDay(today)}>+ Ajouter une séance</Button>
       </div>
 
-      {openDay && <DaySheet day={openDay} workouts={byDay.get(openDay) ?? []} onClose={() => setOpenDay(null)} onAdd={() => { setAdding(openDay); setOpenDay(null) }} />}
+      {openDay && (
+        <DaySheet
+          day={openDay}
+          workouts={byDay.get(openDay) ?? []}
+          planned={plannedDay.get(openDay) ?? []}
+          canProgram={hasProgram}
+          onClose={() => setOpenDay(null)}
+          onFree={() => { setAdding(openDay); setOpenDay(null) }}
+          onProgram={() => { setProgAdd({ day: openDay }); setOpenDay(null) }}
+          onValidate={(w) => { setProgAdd({ day: w.day, existing: w }); setOpenDay(null) }}
+        />
+      )}
       {adding && <AddSheet day={adding} onClose={() => setAdding(null)} />}
+      {progAdd && data.program && <ProgramSessionSheet program={data.program} day={progAdd.day} existing={progAdd.existing} onClose={() => setProgAdd(null)} onSaved={(m) => toast.show(m)} />}
+      {toast.node}
     </Card>
   )
 }
 
-function DaySheet({ day, workouts, onClose, onAdd }: { day: DayKey; workouts: Workout[]; onClose: () => void; onAdd: () => void }) {
+function DaySheet({ day, workouts, planned, canProgram, onClose, onFree, onProgram, onValidate }: { day: DayKey; workouts: Workout[]; planned: Workout[]; canProgram: boolean; onClose: () => void; onFree: () => void; onProgram: () => void; onValidate: (w: Workout) => void }) {
   return (
-    <Sheet open onClose={onClose} title={format(parseDay(day), 'EEEE d MMMM', { locale: fr })} footer={<Button variant="primary" full onClick={onAdd}>+ Ajouter une séance ce jour-là</Button>}>
+    <Sheet
+      open
+      onClose={onClose}
+      title={format(parseDay(day), 'EEEE d MMMM', { locale: fr })}
+      footer={
+        <div>
+          <p className="mb-2 text-xs text-mist-500">Ajouter une séance ce jour-là :</p>
+          <div className="grid grid-cols-2 gap-2.5">
+            <Button full onClick={onFree}>Séance libre</Button>
+            <Button full variant="primary" disabled={!canProgram} onClick={onProgram}>Séance du programme</Button>
+          </div>
+        </div>
+      }
+    >
       <div className="space-y-3 pb-2">
-        {workouts.length === 0 && <p className="py-4 text-center text-sm text-mist-500">Aucune séance ce jour-là.</p>}
+        {workouts.length === 0 && planned.length === 0 && <p className="py-4 text-center text-sm text-mist-500">Aucune séance ce jour-là.</p>}
+        {planned.map((w) => (
+          <PlannedCard key={w.id} w={w} onValidate={() => onValidate(w)} />
+        ))}
         {workouts.map((w) => (
           <WorkoutCard key={w.id} w={w} />
         ))}
       </div>
     </Sheet>
+  )
+}
+
+/** Une séance du programme placée à l'avance : on la valide quand elle est faite, ou on la retire. */
+function PlannedCard({ w, onValidate }: { w: Workout; onValidate: () => void }) {
+  const cat = categoryOf(w)
+  return (
+    <div className="rounded-2xl bg-white/3 p-3.5" style={{ border: `1.5px dashed ${CATEGORY_COLOR[cat]}88` }}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[0.95rem] leading-snug font-medium text-mist-100">{w.title || CATEGORY_LABEL[cat]}</p>
+          <p className="text-xs text-mist-500">Prévue · {CATEGORY_LABEL[cat]} · {w.durationMin} min</p>
+        </div>
+      </div>
+      <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+        <Button variant="primary" onClick={onValidate}>Valider ✓</Button>
+        <Button
+          variant="danger"
+          onClick={async () => {
+            if (window.confirm('Retirer cette séance prévue ?')) await deleteWorkout(w.id)
+          }}
+        >
+          Retirer
+        </Button>
+      </div>
+    </div>
   )
 }
 

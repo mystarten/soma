@@ -62,10 +62,10 @@ export function nextWeekOf(session: ProgramSession, done: Set<number> | undefine
 }
 
 /** code → date de la dernière vraie séance faite. */
-export function lastDoneBySession(workouts: Pick<Workout, 'program' | 'startedAt' | 'backfill' | 'deleted'>[]): Map<string, string> {
+export function lastDoneBySession(workouts: Pick<Workout, 'program' | 'startedAt' | 'backfill' | 'deleted' | 'planned'>[]): Map<string, string> {
   const out = new Map<string, string>()
   for (const w of workouts) {
-    if (w.deleted || w.backfill) continue
+    if (w.deleted || w.backfill || w.planned) continue
     for (const r of w.program ?? []) {
       if (!out.get(r.code) || w.startedAt > out.get(r.code)!) out.set(r.code, w.startedAt)
     }

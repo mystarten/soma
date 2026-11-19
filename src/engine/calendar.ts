@@ -55,6 +55,16 @@ export function workoutsByDay(workouts: Workout[]): Map<DayKey, Workout[]> {
   return m
 }
 
+/** Les séances « prévues » (placées dans le calendrier, pas encore faites), par jour. */
+export function plannedByDay(workouts: Workout[]): Map<DayKey, Workout[]> {
+  const m = new Map<DayKey, Workout[]>()
+  for (const w of workouts) {
+    if (w.deleted || w.backfill || !w.planned) continue
+    m.set(w.day, [...(m.get(w.day) ?? []), w].sort((a, b) => a.startedAt.localeCompare(b.startedAt)))
+  }
+  return m
+}
+
 /** Les 42 cases d'un mois (6 semaines), semaine commençant le lundi ou le dimanche. */
 export function monthGrid(year: number, month: number, weekStartsOn: 0 | 1): { day: DayKey; inMonth: boolean }[] {
   const first = new Date(year, month, 1)

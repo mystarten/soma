@@ -73,6 +73,11 @@ describe('rattrapage et annulation', () => {
     expect(avail(r, 'street')).toEqual(['T1', 'T2', 'M1'])
     expect(r[0].available[0].nextWeek).toBe(8)
   })
+  it('une séance seulement prévue n’est ni faite ni « dernière séance »', () => {
+    const planned = [{ program: [{ code: 'T1', week: 6 }], startedAt: '2026-11-25T18:00:00Z', planned: true }]
+    expect(lastDoneBySession(planned).size).toBe(0)
+    expect(programDone(planned).size).toBe(0)
+  })
   it('retirer une coche : supprime l’enregistrement ou n’enlève que cette référence', () => {
     expect(removeRef({ program: [{ code: 'T1', week: 8 }] }, 'T1', 8)).toEqual({ action: 'delete' })
     expect(removeRef({ program: [{ code: 'T1', week: 8 }, { code: 'A1', week: 1 }] }, 'T1', 8)).toEqual({ action: 'update', program: [{ code: 'A1', week: 1 }] })
