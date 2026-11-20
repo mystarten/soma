@@ -8,6 +8,7 @@ import { Button, Card, ProgressBar, Segmented, Sheet, useToast } from '../ui/pri
 import SessionPreview from './SessionPreview'
 import ProgramSessionSheet from './ProgramSessionSheet'
 import LinkCleanupCard from './LinkCleanupCard'
+import PlanCard from './PlanCard'
 import { WeekNote } from './weekNote'
 import { useRotation } from './useRotation'
 import ProgramTable from './ProgramTable'
@@ -53,6 +54,8 @@ export default function ProgramBoard({ program }: { program: Program }) {
     <div className="flex flex-col gap-3">
       {toast.node}
       <TodayCard program={program} week={week} rec={rec} onRun={(code, week) => setRun({ code, week })} onTick={(code, week) => setTick({ code, week })} onChoose={() => setLaunch(true)} />
+
+      <PlanCard program={program} />
 
       <Button full onClick={() => setEditing(true)}>✎ Modifier mon programme</Button>
 

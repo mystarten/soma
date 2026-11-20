@@ -11,6 +11,7 @@ import { exportBackup, importBackup, saveSettings } from '../db/repo'
 import { Segmented } from '../components/ui/primitives'
 import { programStartDay } from '../engine/todayPlan'
 import { todayKey } from '../engine/time'
+import { planSettings } from '../engine/plan'
 
 function download(name: string, content: string) {
   const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }))
@@ -50,6 +51,66 @@ function ProgramCard() {
           <span className="text-xs text-mist-300">Repos conseillé après</span>
           <Segmented value={String(s.restEvery === 2 ? 2 : 3)} onChange={(v) => void saveSettings({ restEvery: Number(v) })} options={[{ value: '2', label: '2 jours' }, { value: '3', label: '3 jours' }]} size="sm" />
         </div>
+      </div>
+    </Card>
+  )
+}
+
+const DOW_OPTIONS = [
+  { value: '-1', label: 'Aucun' },
+  { value: '1', label: 'Lundi' },
+  { value: '2', label: 'Mardi' },
+  { value: '3', label: 'Mercredi' },
+  { value: '4', label: 'Jeudi' },
+  { value: '5', label: 'Vendredi' },
+  { value: '6', label: 'Samedi' },
+  { value: '0', label: 'Dimanche' },
+]
+
+/** Réglages du plan : ordre de rotation du street, sorties de course, jours de la natation et du VTT. */
+function PlanSettingsCard() {
+  const data = useSoma()
+  const s = data.settings
+  const ps = planSettings(s, data.program)
+  const move = (i: number, d: -1 | 1) => {
+    const next = [...ps.order]
+    const j = i + d
+    if (j < 0 || j >= next.length) return
+    ;[next[i], next[j]] = [next[j], next[i]]
+    void saveSettings({ planStreetOrder: next })
+  }
+  return (
+    <Card title="Mon plan" subtitle="Ordre des séances de street, course, natation et VTT">
+      <div className="mt-3 flex flex-col gap-4">
+        <div>
+          <p className="mb-1.5 text-xs text-mist-300">Ordre du street workout (la suivante est toujours celle qui vient après la dernière faite)</p>
+          <ol className="flex flex-col gap-1.5">
+            {ps.order.map((c, i) => (
+              <li key={c} className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-1.5 hairline">
+                <span className="w-6 text-xs text-mist-500 tnum">{i + 1}</span>
+                <span className="min-w-0 flex-1 text-sm text-mist-100"><b className="text-accent">{c}</b> {data.program?.sessions.find((x) => x.code === c)?.title}</span>
+                <button aria-label={`Monter ${c}`} disabled={i === 0} onClick={() => move(i, -1)} className="grid h-11 w-11 place-items-center rounded-lg bg-white/6 text-mist-100 disabled:opacity-30">▲</button>
+                <button aria-label={`Descendre ${c}`} disabled={i === ps.order.length - 1} onClick={() => move(i, 1)} className="grid h-11 w-11 place-items-center rounded-lg bg-white/6 text-mist-100 disabled:opacity-30">▼</button>
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-mist-300">Sorties de course par semaine (semaines 7 à 10)</span>
+          <Segmented value={String(ps.runsPerWeek)} onChange={(v) => void saveSettings({ planRunsPerWeek: v === '2' ? 2 : 3 })} options={[{ value: '2', label: '2' }, { value: '3', label: '3' }]} size="sm" />
+        </div>
+        <label className="text-xs text-mist-300">
+          Natation (jour habituel)
+          <select value={String(ps.natationDow)} onChange={(e) => void saveSettings({ planNatationDow: Number(e.target.value) })} className="mt-1 block min-h-12 w-full rounded-xl bg-ink-900/70 px-3.5 text-base text-mist-100 hairline outline-none">
+            {DOW_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
+        <label className="text-xs text-mist-300">
+          VTT (jour habituel)
+          <select value={String(ps.veloDow)} onChange={(e) => void saveSettings({ planVeloDow: Number(e.target.value) })} className="mt-1 block min-h-12 w-full rounded-xl bg-ink-900/70 px-3.5 text-base text-mist-100 hairline outline-none">
+            {DOW_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
       </div>
     </Card>
   )
@@ -105,6 +166,7 @@ export default function SettingsScreen({ param }: { param?: string }) {
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
       {toast.node}
       <ProgramCard />
+      <PlanSettingsCard />
       <AccountCard />
       {SYNC_CONFIGURED && (
         <details className="rounded-[var(--radius-card)] p-4 hairline" open={!!param}>

@@ -59,7 +59,7 @@ export function workoutsByDay(workouts: Workout[]): Map<DayKey, Workout[]> {
 export function plannedByDay(workouts: Workout[]): Map<DayKey, Workout[]> {
   const m = new Map<DayKey, Workout[]>()
   for (const w of workouts) {
-    if (w.deleted || w.backfill || !w.planned) continue
+    if (w.deleted || w.backfill || !w.planned || w.plan?.status === 'sautee') continue
     m.set(w.day, [...(m.get(w.day) ?? []), w].sort((a, b) => a.startedAt.localeCompare(b.startedAt)))
   }
   return m

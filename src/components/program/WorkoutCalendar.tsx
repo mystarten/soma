@@ -153,7 +153,8 @@ function PlannedCard({ w, onValidate }: { w: Workout; onValidate: () => void }) 
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[0.95rem] leading-snug font-medium text-mist-100">{w.title || CATEGORY_LABEL[cat]}</p>
-          <p className="text-xs text-mist-500">Prévue · {CATEGORY_LABEL[cat]} · {w.durationMin} min</p>
+          <p className="text-xs text-mist-500">Prévue · {CATEGORY_LABEL[cat]} · {w.durationMin} min{!w.plan?.auto || w.plan.locked ? ' · 📌 épinglée' : ''}</p>
+          {w.plan?.reason && <p className="mt-0.5 text-xs text-mist-300">{w.plan.reason}</p>}
         </div>
       </div>
       <div className="mt-2.5 grid grid-cols-2 gap-2.5">

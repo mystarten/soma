@@ -175,6 +175,17 @@ export interface ProgramRef {
   week: number
 }
 
+export interface PlanInfo {
+  /** Proposée par l'algorithme : il peut la déplacer quand il recalcule, sauf si elle est épinglée. */
+  auto?: boolean
+  /** Épinglée : ne bouge plus. Tout ce que tu poses à la main l'est d'office. */
+  locked?: boolean
+  status?: 'prevue' | 'decalee' | 'sautee' | 'faite'
+  /** Une ligne : pourquoi cette séance est placée ce jour-là. */
+  reason?: string
+  originalDay?: DayKey
+}
+
 export interface Workout {
   id: Id
   day: DayKey
@@ -205,6 +216,8 @@ export interface Workout {
   /** Simple coche de rattrapage (« déjà faite ») : jamais comptée dans les séances, la charge ni la fatigue. */
   backfill?: boolean
   planned?: boolean
+  /** Séance placée dans le plan : posée à la main (verrouillée) ou proposée par l'algorithme (auto). */
+  plan?: PlanInfo
   source: DataSource
   /** Clé de dédoublonnage d'import (ex. `whoop:2025-04-02T06:12:00Z`). */
   externalKey?: string
@@ -563,6 +576,11 @@ export interface Settings {
   resetEpoch?: string
   /** Semaine de décharge en cours, jusqu'à cette date incluse. */
   deloadUntil?: DayKey
+  /** Plan : ordre de rotation du street workout (codes), sorties de course par semaine (semaines 7 à 10), jours des activités fixes (0 = dimanche, -1 = aucune). */
+  planStreetOrder?: string[]
+  planRunsPerWeek?: 2 | 3
+  planNatationDow?: number
+  planVeloDow?: number
   units: 'metric' | 'imperial'
   accent: string
   bodyRender: '3d' | '2d'

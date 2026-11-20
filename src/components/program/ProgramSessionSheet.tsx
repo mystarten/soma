@@ -59,7 +59,7 @@ export default function ProgramSessionSheet({
   day: initialDay,
   code: initialCode,
   week: initialWeek,
-  existing,
+  existing: existingProp,
   onClose,
   onSaved,
 }: {
@@ -72,6 +72,7 @@ export default function ProgramSessionSheet({
   onSaved: (message: string) => void
 }) {
   const data = useSoma()
+  const existing = existingProp
   const today = data.today
   const override = data.settings.programStart
   const choices = useMemo(() => sessionChoices(program), [program])
@@ -98,7 +99,7 @@ export default function ProgramSessionSheet({
   /* Les séries éditables repartent de la prescription dès que la séance ou la semaine change. */
   const key = `${code}|${week}`
   const live = edits?.key === key ? edits : null
-  const sets = live?.sets ?? (existing && existing.program?.[0]?.code === code && existing.program?.[0]?.week === week ? existing.sets ?? [] : draft?.sets ?? [])
+  const sets = live?.sets ?? (existing && existing.program?.[0]?.code === code && existing.program?.[0]?.week === week && existing.sets?.length ? existing.sets : draft?.sets ?? [])
   const duration = live?.duration ?? (existing && existing.program?.[0]?.code === code ? existing.durationMin : isRunCode(code) && phasesMinutes(runPhases(draft?.sets ?? [])) ? phasesMinutes(runPhases(draft?.sets ?? [])) : draft?.durationMin ?? 45)
   const setSets = (next: SetEntry[]) => setEdits({ key, sets: next, duration })
   const setDuration = (d: number) => setEdits({ key, sets, duration: d })
@@ -108,7 +109,9 @@ export default function ProgramSessionSheet({
   const isRun = !!code && socleOf(code) === 'course'
   const phases = useMemo(() => runPhases(draft?.sets ?? []), [draft])
   const prescription = session && week ? session.blocks.map((b) => ({ name: b.name, text: b.cells[session.weeks.findIndex((w) => w.n === week)] ?? '' })).filter((b) => b.text) : []
-  const dup = code && week ? findDuplicate(data.workouts, code, week, day, existing?.id) : undefined
+  /* Une séance prévue ce jour-là pour la même séance : on la valide au lieu d'en créer une deuxième. */
+  const match = !existing && code ? data.workouts.find((w) => w.planned && !w.deleted && w.plan?.status !== 'sautee' && w.day === day && w.program?.some((r) => r.code === code)) : undefined
+  const dup = code && week ? findDuplicate(data.workouts, code, week, day, (existing ?? match)?.id) : undefined
   const start = session && week ? sessionWeekStart(program, session, session.weeks.findIndex((w) => w.n === week), override) : null
 
   const save = async () => {
@@ -138,7 +141,7 @@ export default function ProgramSessionSheet({
         : undefined,
       today,
       now: new Date().toISOString(),
-      existing,
+      existing: existing ?? match,
     })
     await saveWorkout(w)
     await mergeProgramWithWhoop()

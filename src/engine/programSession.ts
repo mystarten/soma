@@ -98,6 +98,7 @@ export function workoutFromSession(i: SessionSaveInput): Workout {
     run: i.run,
     program: i.draft.program,
     planned: planned || undefined,
+    plan: i.existing?.plan ? { ...i.existing.plan, status: planned ? i.existing.plan.status : 'faite' } : undefined,
     source: i.existing?.source ?? 'manual',
     updatedAt: i.now,
   }

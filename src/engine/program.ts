@@ -631,10 +631,10 @@ export function programDone(workouts: Pick<Workout, 'program' | 'planned' | 'del
 }
 
 /** code → semaine → séance « prévue » (placée dans le calendrier mais pas encore faite). */
-export function programPlanned<T extends Pick<Workout, 'program' | 'planned' | 'deleted'>>(workouts: T[]): Map<string, Map<number, T>> {
+export function programPlanned<T extends Pick<Workout, 'program' | 'planned' | 'deleted' | 'plan'>>(workouts: T[]): Map<string, Map<number, T>> {
   const map = new Map<string, Map<number, T>>()
   for (const w of workouts) {
-    if (!w.planned || w.deleted) continue
+    if (!w.planned || w.deleted || w.plan?.status === 'sautee') continue
     for (const r of w.program ?? []) {
       const weeks = map.get(r.code) ?? new Map<number, T>()
       weeks.set(r.week, w)
