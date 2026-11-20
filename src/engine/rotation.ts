@@ -14,14 +14,16 @@ export const SOCLE_LABEL: Record<string, string> = {
   street: 'Street workout',
   jambes: 'Jambes',
   abdos: 'Abdos',
+  course: 'Course à pied',
 }
-export const SOCLE_ORDER = ['street', 'jambes', 'abdos']
+export const SOCLE_ORDER = ['street', 'jambes', 'abdos', 'course']
 
 /** Le socle d'une séance, d'après la lettre de son code (T1, M1, P2 → street ; J1 → jambes ; A1 → abdos). */
 export function socleOf(code: string): string {
   const l = (code[0] ?? '').toUpperCase()
   if (l === 'A') return 'abdos'
   if (l === 'J') return 'jambes'
+  if (l === 'C') return 'course'
   if ('TMP'.includes(l) && l) return 'street'
   return l.toLowerCase() || 'autre'
 }

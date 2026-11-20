@@ -53,7 +53,7 @@ export function programFromJson(input: unknown): JsonResult {
     const where = `Séance n°${si + 1}`
     if (!isObj(rs)) return void errors.push(`${where} : doit être un objet.`)
     const code = typeof rs.code === 'string' ? rs.code.trim().toUpperCase() : ''
-    if (!/^[A-Z][A-Z0-9]{0,5}$/.test(code)) return void errors.push(`${where} : le champ « code » est invalide (ex. "T1", "J2", "A1" : T/M/P = street workout, J = jambes, A = abdos).`)
+    if (!/^[A-Z][A-Z0-9]{0,5}$/.test(code)) return void errors.push(`${where} : le champ « code » est invalide (ex. "T1", "J2", "A1", "C1" : T/M/P = street workout, J = jambes, A = abdos, C = course).`)
     if (codes.has(code)) return void errors.push(`${where} : le code ${code} est utilisé deux fois.`)
     codes.add(code)
     const title = typeof rs.title === 'string' && rs.title.trim() ? rs.title.trim() : code
@@ -145,7 +145,7 @@ STRUCTURE
   "weeks": [ { "n": 1, "label": "12-18 oct", "light": false, "test": false }, ... ],   // une entrée par semaine ; "light": true = semaine de décharge ; "test": true = semaine de test
   "sessions": [
     {
-      "code": "T1",                      // T, M ou P = street workout · J = jambes · A = abdos
+      "code": "T1",                      // T, M ou P = street workout · J = jambes · A = abdos · C = course à pied
       "title": "Tirage lesté force-endurance",
       "duration_min": 70,
       "blocks": [                        // les exercices de la séance, dans l'ordre
@@ -172,6 +172,7 @@ PRESCRIPTIONS (une par semaine ; null = rien à faire cette semaine)
   → minutes impaires : tractions, minutes paires : pompes. Avec un seul élément dans "minute_items", c'est le même exercice à chaque minute.
 - Distance en tours (rameur, course) : { "rounds": 10, "distance_m": 330, "pace_sec_per_500m": 108 }
 - Test : { "test": "max de tractions" }
+- Course à pied (code C1…) : du texte, affiché tel quel, avec un chrono trot/marche : "5 x (3' trot + 1' marche)", "30' continu"
 - Du texte libre reste accepté pour des cas simples : "4 x 8 +20 kg"
 
 RÈGLES

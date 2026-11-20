@@ -7,8 +7,9 @@ import { CATEGORY_COLOR, CATEGORY_LABEL, buildExtraWorkout, categoryOf, monthGri
 import { deleteWorkout, saveWorkout } from '../../db/repo'
 import { uid } from '../../db/db'
 import { parseDay, todayKey } from '../../engine/time'
-import { Button, Card, Field, Segmented, Sheet, TextInput, useToast } from '../ui/primitives'
+import { Button, Card, Field, Segmented, Sheet, Stepper, TextInput, useToast } from '../ui/primitives'
 import ProgramSessionSheet from './ProgramSessionSheet'
+import { ShinCheck } from './RunParts'
 import { sessionChoices } from '../../engine/programSession'
 
 const DOW = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
@@ -181,7 +182,7 @@ function WorkoutCard({ w }: { w: Workout }) {
         <div className="min-w-0">
           <p className="text-[0.95rem] leading-snug font-medium text-mist-100">{w.title || CATEGORY_LABEL[cat]}</p>
           <p className="text-xs text-mist-500">
-            {CATEGORY_LABEL[cat]} · {w.durationMin} min{km ? ` · ${km}` : ''}{w.rpe ? ` · effort ${w.rpe}/10` : ''}
+            {CATEGORY_LABEL[cat]} · {w.durationMin} min{km ? ` · ${km}` : ''}{w.rpe ? ` · effort ${w.rpe}/10` : ''}{w.run?.shinPain !== undefined ? ` · tibia ${w.run.shinPain}/10` : ''}
           </p>
         </div>
         {!w.program?.length && (
@@ -221,6 +222,9 @@ function AddSheet({ day, onClose }: { day: DayKey; onClose: () => void }) {
   const [distance, setDistance] = useState('')
   const [duration, setDuration] = useState('')
   const [notes, setNotes] = useState('')
+  const [rpe, setRpe] = useState(6)
+  const [shinBefore, setShinBefore] = useState(0)
+  const [shinAfter, setShinAfter] = useState(0)
   const [busy, setBusy] = useState(false)
   const unit = type === 'natation' ? 'mètres' : 'km'
   const hasDistance = type !== 'autre'
@@ -236,7 +240,7 @@ function AddSheet({ day, onClose }: { day: DayKey; onClose: () => void }) {
           disabled={busy}
           onClick={async () => {
             setBusy(true)
-            const w = buildExtraWorkout({ day: date, type, name, distance: Number(distance.replace(',', '.')) || undefined, durationMin: Number(duration) || undefined, notes }, uid('w'), new Date().toISOString())
+            const w = buildExtraWorkout({ day: date, type, name, distance: Number(distance.replace(',', '.')) || undefined, durationMin: Number(duration) || undefined, notes, rpe: date > todayKey() ? undefined : rpe, ...(type === 'course' && date <= todayKey() ? { shinPainBefore: shinBefore, shinPain: shinAfter } : {}) }, uid('w'), new Date().toISOString())
             await saveWorkout(w)
             onClose()
           }}
@@ -265,6 +269,13 @@ function AddSheet({ day, onClose }: { day: DayKey; onClose: () => void }) {
             <TextInput inputMode="numeric" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="45" />
           </Field>
         </div>
+        {type === 'course' && date <= todayKey() && <ShinCheck label="Avant de partir : douleur au tibia" value={shinBefore} onChange={setShinBefore} advice />}
+        {type === 'course' && date <= todayKey() && <ShinCheck label="Après la sortie : douleur au tibia" value={shinAfter} onChange={setShinAfter} />}
+        {date <= todayKey() && (
+          <Field label="Effort (1 à 10)" group>
+            <Stepper value={rpe} onChange={setRpe} min={1} max={10} />
+          </Field>
+        )}
         <Field label="Notes" optional>
           <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ressenti, météo, allure…" />
         </Field>

@@ -13,7 +13,10 @@ import { mergeProgramWithWhoop } from '../../db/seed'
 import { parseDay } from '../../engine/time'
 import { Button, Field, Sheet, Stepper, TextArea, TextInput } from '../ui/primitives'
 import { useNames } from './SessionRunner'
+import { hasIntervals, phasesMinutes, runPhases } from '../../engine/run'
+import { IntervalTimer, ShinCheck } from './RunParts'
 
+const isRunCode = (c: string | null) => !!c && socleOf(c) === 'course'
 const pad = (n: number) => String(n).padStart(2, '0')
 const hhmm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
 
@@ -86,18 +89,25 @@ export default function ProgramSessionSheet({
   const [rpe, setRpe] = useState(existing?.rpe ?? 7)
   const [note, setNote] = useState('')
   const [dupAsk, setDupAsk] = useState(false)
+  const [distance, setDistance] = useState('')
+  const [shinBefore, setShinBefore] = useState(0)
+  const [shinAfter, setShinAfter] = useState(0)
+  const [timer, setTimer] = useState(false)
   const [busy, setBusy] = useState(false)
 
   /* Les séries éditables repartent de la prescription dès que la séance ou la semaine change. */
   const key = `${code}|${week}`
   const live = edits?.key === key ? edits : null
   const sets = live?.sets ?? (existing && existing.program?.[0]?.code === code && existing.program?.[0]?.week === week ? existing.sets ?? [] : draft?.sets ?? [])
-  const duration = live?.duration ?? (existing && existing.program?.[0]?.code === code ? existing.durationMin : draft?.durationMin ?? 45)
+  const duration = live?.duration ?? (existing && existing.program?.[0]?.code === code ? existing.durationMin : isRunCode(code) && phasesMinutes(runPhases(draft?.sets ?? [])) ? phasesMinutes(runPhases(draft?.sets ?? [])) : draft?.durationMin ?? 45)
   const setSets = (next: SetEntry[]) => setEdits({ key, sets: next, duration })
   const setDuration = (d: number) => setEdits({ key, sets, duration: d })
 
   const names = useNames(program, code && week ? [{ code, week }] : [])
   const future = day > today
+  const isRun = !!code && socleOf(code) === 'course'
+  const phases = useMemo(() => runPhases(draft?.sets ?? []), [draft])
+  const prescription = session && week ? session.blocks.map((b) => ({ name: b.name, text: b.cells[session.weeks.findIndex((w) => w.n === week)] ?? '' })).filter((b) => b.text) : []
   const dup = code && week ? findDuplicate(data.workouts, code, week, day, existing?.id) : undefined
   const start = session && week ? sessionWeekStart(program, session, session.weeks.findIndex((w) => w.n === week), override) : null
 
@@ -117,7 +127,15 @@ export default function ProgramSessionSheet({
       durationMin: duration,
       rpe,
       note: existing && !note.trim() ? existing.notes ?? '' : note,
-      sets: kept,
+      sets: isRun ? [] : kept,
+      run: isRun
+        ? {
+            runType: 'footing',
+            durationSec: Math.max(1, duration || phasesMinutes(phases)) * 60,
+            distanceM: Number(distance.replace(',', '.')) > 0 ? Math.round(Number(distance.replace(',', '.')) * 1000) : undefined,
+            ...(future ? {} : { shinPainBefore: shinBefore, shinPain: shinAfter }),
+          }
+        : undefined,
       today,
       now: new Date().toISOString(),
       existing,
@@ -232,9 +250,26 @@ export default function ProgramSessionSheet({
                     : 'Rattrapage : les séries prévues sont préremplies, corrige ce que tu as vraiment fait.'}
             </p>
 
+            {isRun && (
+              <div className="space-y-3">
+                <div className="rounded-xl bg-white/5 px-3 py-3 hairline">
+                  <p className="mb-1 text-xs text-mist-500">Prévu</p>
+                  {prescription.map((b) => (
+                    <p key={b.name} className="text-base text-mist-100">{b.name !== session.title && b.name ? `${b.name} : ` : ''}{b.text}</p>
+                  ))}
+                  {hasIntervals(phases) && <Button className="mt-3" full onClick={() => setTimer(true)}>⏱ Chrono d’intervalles (trot / marche)</Button>}
+                </div>
+                {!future && <ShinCheck label="Avant de partir : douleur au tibia" value={shinBefore} onChange={setShinBefore} advice />}
+                <Field label="Distance (km)" optional>
+                  <TextInput inputMode="decimal" value={distance} onChange={(e) => setDistance(e.target.value)} placeholder="4,5" />
+                </Field>
+                {!future && <ShinCheck label="Après la sortie : douleur au tibia" value={shinAfter} onChange={setShinAfter} />}
+              </div>
+            )}
+
             <div className="space-y-3">
-              {sets.length === 0 && <p className="text-sm text-mist-500">Rien de détaillé n’est prévu : tu peux quand même enregistrer la séance.</p>}
-              {sets.map((s, i) => {
+              {!isRun && sets.length === 0 && <p className="text-sm text-mist-500">Rien de détaillé n’est prévu : tu peux quand même enregistrer la séance.</p>}
+              {!isRun && sets.map((s, i) => {
                 const name = names(s)
                 const first = i === 0 || names(sets[i - 1]) !== name
                 const k = mainKey(s)
@@ -269,6 +304,7 @@ export default function ProgramSessionSheet({
           </>
         )}
       </div>
+      {timer && <IntervalTimer phases={phases} onClose={() => setTimer(false)} />}
     </Sheet>
   )
 }

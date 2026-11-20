@@ -14,6 +14,7 @@ import type {
 } from '../types'
 import { dayDiff } from './time'
 import { prescriptionToCell } from './prescription'
+import { parseRunText } from './run'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Programme d'entraînement : lecture d'un tableau « séance × semaine »,
@@ -308,6 +309,10 @@ export function parseCell(textRaw: string, ctx: CellContext = {}): PlannedCell {
     })
   }
 
+  /* Course à pied : « 5 x (3' trot + 1' marche) », « 30' continu ». */
+  const run = parseRunText(t)
+  if (run) return out({ sets: run })
+
   /* Séries × reps, tenue en secondes ou charge : « 4 x 10  +20 kg », « 3 x 40 s », « 3 x 12 · 10 kg ». */
   m = /^(\d+)\s*[x×]\s*(\d+)(\s*s\b)?(.*)$/i.exec(t)
   if (m) {
@@ -598,7 +603,7 @@ export function buildFromProgram(
     })
   }
   if (!refs.length) return null
-  const kind: WorkoutKind = codes.every((c) => c.startsWith('A')) ? 'abdos' : 'street'
+  const kind: WorkoutKind = codes.every((c) => c.startsWith('A')) ? 'abdos' : codes.every((c) => c.startsWith('C')) ? 'course' : 'street'
   return {
     title: titles.join(' + '),
     durationMin: duration,

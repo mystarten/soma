@@ -30,6 +30,7 @@ export function buildTrackingExport(input: { program: Program | null; workouts: 
       ...(w.rpe ? { rpe: w.rpe } : {}),
       ...(w.run?.distanceM ? { distance_m: w.run.distanceM } : w.cardio?.distanceM ? { distance_m: w.cardio.distanceM } : {}),
       ...(w.cardio?.modality ? { modality: w.cardio.modality } : {}),
+      ...(w.run?.shinPain !== undefined || w.run?.shinPainBefore !== undefined ? { shin_pain_before: w.run.shinPainBefore, shin_pain_after: w.run.shinPain } : {}),
       ...(w.program?.length ? { programme: w.program.map((r) => `${r.code} S${r.week}`) } : {}),
       ...(w.notes?.trim() ? { notes: w.notes.trim() } : {}),
       ...(w.sets?.length

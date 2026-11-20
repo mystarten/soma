@@ -1,4 +1,4 @@
-import type { DayKey, Iso, Program, ProgramRef, ProgramSession, SetEntry, Workout } from '../types'
+import type { DayKey, Iso, Program, ProgramRef, ProgramSession, RunDetail, SetEntry, Workout } from '../types'
 import { buildFromProgram, expandEmom, isPlannedWeek, plannedWeeks } from './program'
 import { sessionWeekOn, sessionWeekStart } from './todayPlan'
 import { dayDiff } from './time'
@@ -73,6 +73,8 @@ export interface SessionSaveInput {
   sets: SetEntry[]
   today: DayKey
   now: Iso
+  /** Sortie de course : durée, distance, douleur au tibia. */
+  run?: RunDetail
   /** Séance « prévue » qu'on valide : on la met à jour au lieu d'en créer une autre. */
   existing?: Workout
 }
@@ -92,7 +94,8 @@ export function workoutFromSession(i: SessionSaveInput): Workout {
     rpe: planned ? undefined : i.rpe,
     feeling: planned ? undefined : 3,
     notes: [note, i.draft.notes].filter(Boolean).join('\n\n'),
-    sets: i.sets,
+    sets: i.run ? undefined : i.sets,
+    run: i.run,
     program: i.draft.program,
     planned: planned || undefined,
     source: i.existing?.source ?? 'manual',

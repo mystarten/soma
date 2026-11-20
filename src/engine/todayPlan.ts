@@ -90,7 +90,7 @@ export function currentWeek(program: Pick<Program, 'sessions'>, today: DayKey, o
 
 /* ── Familles de séances ───────────────────────────────────────────────── */
 
-export type Family = 'tirage' | 'poussee' | 'jambes' | 'abdos' | 'street'
+export type Family = 'tirage' | 'poussee' | 'jambes' | 'abdos' | 'street' | 'course'
 
 export const FAMILY_LABEL: Record<Family, string> = {
   tirage: 'tirage',
@@ -98,6 +98,7 @@ export const FAMILY_LABEL: Record<Family, string> = {
   jambes: 'jambes',
   abdos: 'abdos',
   street: 'street workout',
+  course: 'course',
 }
 
 /** Tirage : tractions, rameur, corde, muscle-up (une séance mixte tractions + pompes compte comme du tirage). */
@@ -105,6 +106,7 @@ export function familyOf(session: Pick<ProgramSession, 'code' | 'title' | 'block
   const so = socleOf(session.code)
   if (so === 'jambes') return 'jambes'
   if (so === 'abdos') return 'abdos'
+  if (so === 'course') return 'course'
   const text = `${session.title} ${session.blocks.map((b) => b.name).join(' ')}`.toLowerCase()
   if (/traction|tirage|rameur|corde|muscle|pull/.test(text)) return 'tirage'
   if (/pompe|dips|push|pouss/.test(text)) return 'poussee'

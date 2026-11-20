@@ -151,6 +151,9 @@ export interface RunDetail {
   maxHr?: number
   shoes?: string
   weather?: string
+  /** Douleur au tibia (0 → 10) avant et après la sortie. */
+  shinPainBefore?: number
+  shinPain?: number
   intervals?: IntervalEntry[]
   splits?: SplitEntry[]
 }

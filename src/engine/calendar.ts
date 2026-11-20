@@ -30,7 +30,7 @@ export function categoryOf(w: Pick<Workout, 'program' | 'kind' | 'cardio'>): Cat
   const code = w.program?.[0]?.code
   if (code) {
     const so = socleOf(code)
-    if (so === 'jambes' || so === 'abdos') return so
+    if (so === 'jambes' || so === 'abdos' || so === 'course') return so
     return 'street'
   }
   if (w.kind === 'course') return 'course'
@@ -84,16 +84,20 @@ export interface ExtraWorkoutInput {
   distance?: number
   durationMin?: number
   notes?: string
+  /** Effort ressenti sur 10 et douleur au tibia (course). */
+  rpe?: number
+  shinPainBefore?: number
+  shinPain?: number
 }
 
 /** Une séance hors programme (course, natation, vélo, autre) : distance en km pour la course et le vélo, en mètres pour la natation. */
 export function buildExtraWorkout(i: ExtraWorkoutInput, id: string, nowIso: string): Workout {
   const startedAt = new Date(`${i.day}T12:00:00`).toISOString()
-  const base = { id, day: i.day, startedAt, durationMin: Math.max(1, Math.round(i.durationMin ?? 30)), notes: i.notes?.trim() || undefined, source: 'manual' as const, updatedAt: nowIso }
+  const base = { id, day: i.day, startedAt, durationMin: Math.max(1, Math.round(i.durationMin ?? 30)), notes: i.notes?.trim() || undefined, rpe: i.rpe, source: 'manual' as const, updatedAt: nowIso }
   const title = i.name.trim() || CATEGORY_LABEL[i.type]
   if (i.type === 'course') {
     const distanceM = i.distance ? Math.round(i.distance * 1000) : undefined
-    return { ...base, kind: 'course', title, run: { runType: 'footing', distanceM, durationSec: base.durationMin * 60 } }
+    return { ...base, kind: 'course', title, run: { runType: 'footing', distanceM, durationSec: base.durationMin * 60, shinPainBefore: i.shinPainBefore, shinPain: i.shinPain } }
   }
   if (i.type === 'natation') return { ...base, kind: 'cardio', title, cardio: { modality: 'natation', distanceM: i.distance ? Math.round(i.distance) : undefined } }
   if (i.type === 'velo') return { ...base, kind: 'cardio', title, cardio: { modality: 'velo', distanceM: i.distance ? Math.round(i.distance * 1000) : undefined } }
