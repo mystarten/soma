@@ -9,6 +9,9 @@ import SessionPreview from './SessionPreview'
 import ProgramSessionSheet from './ProgramSessionSheet'
 import LinkCleanupCard from './LinkCleanupCard'
 import PlanCard from './PlanCard'
+import TodaySessions from './TodaySessions'
+import { deleteWorkout } from '../../db/repo'
+import type { Workout } from '../../types'
 import { WeekNote } from './weekNote'
 import { useRotation } from './useRotation'
 import ProgramTable from './ProgramTable'
@@ -40,6 +43,7 @@ export default function ProgramBoard({ program }: { program: Program }) {
   const dateLabel = (d?: string) => (d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '')
   const [editing, setEditing] = useState(false)
   const [run, setRun] = useState<{ code: string; week: number } | null>(null)
+  const [runFor, setRunFor] = useState<Workout | null>(null)
   const light = false
   const suggestion = useMemo(() => pickSuggestion(rotation), [rotation])
   const [launch, setLaunch] = useState(false)
@@ -53,6 +57,8 @@ export default function ProgramBoard({ program }: { program: Program }) {
   return (
     <div className="flex flex-col gap-3">
       {toast.node}
+      <TodaySessions program={program} onRun={(w) => { setRunFor(w); setRun({ code: w.program![0].code, week: w.program![0].week }) }} onDone={(m) => toast.show(m)} />
+
       <TodayCard program={program} week={week} rec={rec} onRun={(code, week) => setRun({ code, week })} onTick={(code, week) => setTick({ code, week })} onChoose={() => setLaunch(true)} />
 
       <PlanCard program={program} />
@@ -109,7 +115,7 @@ export default function ProgramBoard({ program }: { program: Program }) {
           />
         </Sheet>
       )}
-      {run && <SessionRunner program={program} picks={[run]} light={light} onClose={() => setRun(null)} onSaved={(label) => toast.show(`${label} enregistrée ✓`)} />}
+      {run && <SessionRunner program={program} picks={[run]} light={light} onClose={() => { setRun(null); setRunFor(null) }} onSaved={(label) => { toast.show(`${label} enregistrée ✓`); if (runFor) void deleteWorkout(runFor.id) }} />}
       {replacing && <ProgramImportSheet onClose={() => setReplacing(false)} onDone={(m) => toast.show(m)} />}
       {editing && <ProgramEditor program={program} onClose={() => setEditing(false)} onSaved={() => toast.show('Programme enregistré')} />}
       {tick && (

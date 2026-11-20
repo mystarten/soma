@@ -5,6 +5,7 @@ import { Button, Card, useToast } from '../ui/primitives'
 import ProgramImportSheet from './ProgramImportSheet'
 import { addSession } from '../../engine/programEdit'
 import ProgramBoard from './ProgramBoard'
+import { useAutoComplete } from './useAutoComplete'
 
 /* ──────────────────────────────────────────────────────────────────────────
    Mon programme : on l'importe une fois (fichier Word), puis on choisit
@@ -15,6 +16,7 @@ import ProgramBoard from './ProgramBoard'
 export default function ProgramPanel() {
   const data = useSoma()
   const { program } = data
+  useAutoComplete()
   if (!program) return <ImportCard />
   return <ProgramBoard program={program} />
 }

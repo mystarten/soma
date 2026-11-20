@@ -119,3 +119,26 @@ describe('nettoyage des anciens liens', () => {
     expect(linkCleanup(program, [{ ...fixed, id: 'x', day: '2026-11-17', deleted: false }]).changes).toHaveLength(0)
   })
 })
+
+import { completePlanned, pastPlanned } from './autoDone'
+describe('journée passée : séance placée comptée comme faite', () => {
+  const planned = (id: string, day: string, code: string, week: number, extra: Partial<Workout> = {}): Workout => ({ ...w(id, day, code, week), planned: true, ...extra })
+  it('repère les séances prévues dont le jour est passé, pas celles d’aujourd’hui ni les sautées', () => {
+    const list = [planned('a', '2026-11-19', 'T1', 6), planned('b', '2026-11-20', 'T1', 6), planned('c', '2026-11-18', 'T1', 6, { plan: { status: 'sautee' } }), w('d', '2026-11-19', 'T1', 6)]
+    expect(pastPlanned(list, '2026-11-20').map((x) => x.id)).toEqual(['a'])
+  })
+  it('une séance du programme devient faite avec les séries prévues, et fait avancer la grille', () => {
+    const r = completePlanned(planned('a', '2026-11-19', 'T1', 6), program, mk, true)
+    expect(r.planned).toBeUndefined()
+    expect(r.sets).toHaveLength(3)
+    expect(r.notes).toContain('automatiquement')
+    expect(programDone([r]).get('T1')?.has(6)).toBe(true)
+  })
+  it('une course garde sa durée ; une natation reste une natation', () => {
+    const run = completePlanned({ ...planned('r', '2026-11-19', 'C1', 7), kind: 'course', durationMin: 30 }, program, mk, true)
+    expect(run.run?.durationSec).toBe(1800)
+    const swim = completePlanned({ id: 's', day: '2026-11-19', startedAt: '2026-11-19T12:00:00Z', durationMin: 45, kind: 'cardio', title: 'Natation', cardio: { modality: 'natation' }, planned: true, source: 'manual', updatedAt: 'x' }, program, mk, true)
+    expect(swim.planned).toBeUndefined()
+    expect(swim.cardio?.modality).toBe('natation')
+  })
+})

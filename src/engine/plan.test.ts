@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Program, ProgramSession } from '../types'
-import { buildPlan, isPull, planSettings, planWarnings, type PlanEntry, type PlanEvent, type PlanInput } from './plan'
+import { buildPlan, planSettings, planWarnings, type PlanEntry, type PlanEvent, type PlanInput } from './plan'
 import { addDayKey } from './time'
 
 const START = '2026-10-12'
@@ -24,13 +24,11 @@ describe('plan : règles dures', () => {
       expect(planWarnings(all(r, i), a, b).filter((w) => w.hard)).toEqual([])
     })
   }
-  it('jamais plus de 2 jours de street de suite, jamais deux tirages à moins de 48 h', () => {
+  it('jamais plus de 2 jours de street de suite', () => {
     const r = buildPlan(base())
     const days = (f: (e: PlanEntry) => boolean) => new Set(r.entries.filter(f).map((e) => e.day))
     const street = days((e) => e.kind === 'street')
-    const pull = days(isPull)
     for (const d of street) expect(street.has(addDayKey(d, -1)) && street.has(addDayKey(d, -2))).toBe(false)
-    for (const d of pull) expect(pull.has(addDayKey(d, -1))).toBe(false)
   })
   it('aucune séance après le 3 janvier 2027', () => {
     const r = buildPlan(base({ today: '2026-12-20', days: 28 }))
@@ -61,9 +59,9 @@ describe('plan : ordre de rotation du street', () => {
     const codes = r.entries.filter((e) => e.kind === 'street').map((e) => e.code)
     expect(codes.slice(0, 7)).toEqual(['T3', 'T4', 'T1', 'P2', 'T2', 'M1', 'T3'].slice(0, 7))
   })
-  it('on ne saute pas : si la suivante est un tirage trop proche, on attend', () => {
+  it('on ne saute pas : après T2, la suite est M1, même juste après un tirage (pas de règle des 48 h)', () => {
     const r = buildPlan(base({ today: '2026-11-20', days: 1, history: [ev('2026-11-19', 'street', 'T2')] }))
-    expect(r.entries.find((e) => e.kind === 'street')).toBeUndefined()
+    expect(r.entries.find((e) => e.kind === 'street')?.code).toBe('M1')
   })
   it('un ordre modifié dans les réglages est respecté', () => {
     const s = planSettings({ planStreetOrder: ['T4', 'T3', 'T2', 'T1', 'M1', 'P2'] }, program)
@@ -84,11 +82,11 @@ describe('plan : flexibilité', () => {
     const i = base({ program: prog, settings: s, today: '2026-10-12', days: 28 })
     expect(planWarnings(all(r, i), '2026-10-04', '2026-11-08').filter((w) => w.hard)).toEqual([])
   })
-  it('avec l’ordre par défaut (une seule séance de poussée), le rythme tombe vers 4 jours sur 7 : trois tirages maximum', () => {
+  it('le rythme est d’environ 5 jours de street sur 7', () => {
     const r = buildPlan(base({ today: '2026-10-12', days: 28 }))
     const n = r.entries.filter((e) => e.kind === 'street').length
-    expect(n).toBeGreaterThanOrEqual(14)
-    expect(n).toBeLessThanOrEqual(18)
+    expect(n).toBeGreaterThanOrEqual(16)
+    expect(n).toBeLessThanOrEqual(21)
   })
   it('un jour indisponible au milieu de la semaine : rien dessus, règles dures intactes', () => {
     const i = base({ today: '2026-11-23', blocked: ['2026-11-25'] })
@@ -118,8 +116,8 @@ describe('avertissements sur tes propres placements', () => {
   it('signale sans bloquer', () => {
     const w = planWarnings([ev('2026-11-21', 'street', 'T3'), ev('2026-11-22', 'street', 'T4'), ev('2026-11-23', 'street', 'P2'), ev('2026-11-23', 'street', 'T1'), ev('2026-11-23', 'course', 'C1'), ev('2026-11-24', 'course', 'C1')], '2026-11-20', '2026-11-30')
     const texts = w.map((x) => x.text)
-    expect(texts).toContain('Deux tirages à moins de 48 h')
-    expect(texts).toContain('3 jours de street de suite')
+    expect(texts).not.toContain('Deux tirages à moins de 48 h')
+    expect(texts.some((t) => t.startsWith('3 jours de street de suite'))).toBe(true)
     expect(texts).toContain('Course 2 jours de suite')
     expect(texts).toContain('Plusieurs séances dures le même jour')
   })
@@ -131,7 +129,7 @@ describe('plan : règles souples', () => {
       const i = base({ today, days: 28 })
       const r = buildPlan(i)
       const w = planWarnings(all(r, i), addDayKey(today, -6), addDayKey(today, 27))
-      expect(w.filter((x) => x.text.includes('repos') || x.text.includes('Plus de 2') || x.text.includes('dures') || x.text.includes('veille'))).toEqual([])
+      expect(w.filter((x) => x.text.includes('repos') || x.text.includes('Plus de 2') || x.text.includes('veille'))).toEqual([])
     }
   })
 })

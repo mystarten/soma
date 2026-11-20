@@ -7,7 +7,7 @@ import { socleOf } from './rotation'
 /* ──────────────────────────────────────────────────────────────────────────
    Plan glissant : place les séances sur les prochains jours.
    Règles dures (l'algorithme ne les enfreint jamais) :
-     – 2 jours de street de suite au maximum ; – 2 tirages séparés d'au moins 48 h ; – 3 tirages au plus sur 7 jours glissants ;
+     – 2 jours de street de suite au maximum (on n'enchaîne pas les grosses séances) ;
      – pas de course 2 jours de suite ; – rien après la fin du programme.
    Règles souples (avertissements, jamais bloquants) : un jour de repos sur 7, pas de jambes la veille d'une course,
    2 séances par jour au plus, une seule séance dure par jour.
@@ -186,19 +186,7 @@ export function buildPlan(input: PlanInput): PlanResult {
     const s = (x: number) => cal.has(addDayKey(d, x), isStreet)
     if ((s(-1) && s(-2)) || (s(-1) && s(1)) || (s(1) && s(2))) continue
     if (cal.count(isStreet, addDayKey(d, -6), addDayKey(d, -1)) >= 5) continue
-    let gap = ''
-    if (/^[TM]/i.test(next)) {
-      const p = (x: number) => cal.has(addDayKey(d, x), (e) => isPull(e))
-      if (p(-1) || p(1)) continue
-      let ok = true
-      for (let a = addDayKey(d, -6); a <= d; a = addDayKey(a, 1)) if (cal.count((e) => isPull(e), a, addDayKey(a, 6)) + 1 > 3) ok = false
-      if (!ok) continue
-      for (let x = 2; x <= 7; x++) if (cal.has(addDayKey(d, -x), (e) => isPull(e))) {
-        gap = ` · dernier tirage il y a ${x} jours`
-        break
-      }
-    }
-    place(mk('street', d, next, `Suite de ton ordre${prev ? ` (après ${prev})` : ''}${gap}`))
+    place(mk('street', d, next, `Suite de ton ordre${prev ? ` (après ${prev})` : ''}`))
   }
 
   /* Les semaines du programme (lundi → dimanche d'après le début du programme) couvertes par le plan. */
@@ -257,8 +245,8 @@ export function buildPlan(input: PlanInput): PlanResult {
   for (const [w, wd] of [...chunks.entries()].sort((a, b) => a[0] - b[0])) {
     const need = weekTarget('course', w) - countInWeek('course', w)
     const cands = wd
-      .filter((d) => !blocked.has(d) && nextCode('course', d) && !cal.has(d, (e) => isRun(e) || e.kind === 'jambes' || isPull(e)) && !cal.has(addDayKey(d, -1), isRun) && !cal.has(addDayKey(d, 1), isRun) && !cal.has(addDayKey(d, -1), (e) => e.kind === 'jambes'))
-      .map((d) => ({ day: d, cost: (cal.on(d).length ? 0 : 1) + (cal.on(d).length === 0 && !keepsRest(d) ? 4 : 0) + liked(d, 'course') }))
+      .filter((d) => !blocked.has(d) && nextCode('course', d) && !cal.has(d, (e) => isRun(e) || e.kind === 'jambes') && !cal.has(addDayKey(d, -1), isRun) && !cal.has(addDayKey(d, 1), isRun) && !cal.has(addDayKey(d, -1), (e) => e.kind === 'jambes'))
+      .map((d) => ({ day: d, cost: (cal.has(d, isPull) ? 2 : cal.on(d).length ? 0 : 1) + (cal.on(d).length === 0 && !keepsRest(d) ? 4 : 0) + liked(d, 'course') }))
     const picked = pickDays(cands, need, notAdjacent)
     let n = countInWeek('course', w)
     for (const d of picked) {
@@ -319,16 +307,7 @@ export function planWarnings(events: PlanEvent[], from: DayKey, to: DayKey): Pla
   const add = (day: DayKey, hard: boolean, text: string) => out.push({ day, hard, text })
   for (let d = from; d <= to; d = addDayKey(d, 1)) {
     const p = (x: number, f: (e: PlanEvent) => boolean) => cal.has(addDayKey(d, x), f)
-    if (p(0, isStreet) && p(-1, isStreet) && p(-2, isStreet)) add(d, true, '3 jours de street de suite')
-    if (p(0, isPull) && p(-1, isPull)) add(d, true, 'Deux tirages à moins de 48 h')
-    if (p(0, isPull)) {
-      for (let a = addDayKey(d, -6); a <= d; a = addDayKey(a, 1)) {
-        if (cal.count(isPull, a, addDayKey(a, 6)) > 3 && addDayKey(a, 6) >= d) {
-          add(d, true, 'Plus de 3 tirages sur 7 jours')
-          break
-        }
-      }
-    }
+    if (p(0, isStreet) && p(-1, isStreet) && p(-2, isStreet)) add(d, true, '3 jours de street de suite : évite d’enchaîner')
     if (p(0, isRun) && p(-1, isRun)) add(d, true, 'Course 2 jours de suite')
     if (cal.on(d).length > 2) add(d, false, 'Plus de 2 séances ce jour-là')
     if (cal.on(d).filter(isHardWarn).length > 1) add(d, false, 'Plusieurs séances dures le même jour')
