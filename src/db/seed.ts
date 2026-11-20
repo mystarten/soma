@@ -85,7 +85,15 @@ const SEEDED_GOAL_NAMES = [
   /^5 km sous 20 min$/,
 ]
 
+/** Le plan ne place plus rien tout seul : les séances « prévues » ajoutées automatiquement par une ancienne version sont retirées.
+    Seules sont concernées les propositions de l'algorithme pas encore faites ; tout ce que tu as posé toi-même reste. */
+async function purgeAutoPlan(): Promise<void> {
+  const auto = await db.workouts.filter((w) => !!w.planned && !w.deleted && !!w.plan?.auto).toArray()
+  for (const w of auto) await deleteWorkout(w.id)
+}
+
 async function migrations(): Promise<void> {
+  await purgeAutoPlan()
   if (!(await db.meta.get('goals_cleanup_v2'))) {
     const goals = await db.goals.toArray()
     const seen = new Set<string>()

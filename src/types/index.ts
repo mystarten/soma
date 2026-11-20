@@ -581,6 +581,8 @@ export interface Settings {
   planRunsPerWeek?: 2 | 3
   planNatationDow?: number
   planVeloDow?: number
+  /** Jours indisponibles (imprévus) : le plan n'y place rien. */
+  planBlocked?: DayKey[]
   units: 'metric' | 'imperial'
   accent: string
   bodyRender: '3d' | '2d'

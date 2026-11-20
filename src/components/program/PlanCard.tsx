@@ -4,34 +4,46 @@ import { fr } from 'date-fns/locale'
 import { useSoma } from '../../hooks/useSoma'
 import type { DayKey, Program, Workout } from '../../types'
 import { CATEGORY_COLOR, categoryOf } from '../../engine/calendar'
-import { buildPlan, planSettings, planWarnings, type PlanEvent } from '../../engine/plan'
-import { diffPlan, historyEvents, lockedEntries, planKindOf, storedAuto } from '../../engine/planStore'
+import { planWarnings, type PlanEntry, type PlanEvent } from '../../engine/plan'
+import { entryToPlaced, historyEvents, planKindOf, suggestions } from '../../engine/planStore'
 import { addDayKey, parseDay } from '../../engine/time'
-import { applyPlan } from '../../db/planActions'
-import { Button, Card, Segmented, Sheet } from '../ui/primitives'
+import { uid } from '../../db/db'
+import { Button, Card, Segmented, useToast } from '../ui/primitives'
+import { saveSettings, saveWorkout } from '../../db/repo'
+import { usePlanCtx } from './usePlanCtx'
+import { PlanBlockSheet, PlanMoveSheet } from './PlanMoveSheet'
 
 const fmtDay = (d: DayKey) => format(parseDay(d), 'EEE d MMM', { locale: fr })
 
-/** Le plan des prochains jours : proposé par l'algorithme, enregistré dans le journal comme séances « prévues ». */
-export default function PlanCard({ program }: { program: Program }) {
+/**
+ * Mon plan : les séances que TU as placées dans les prochains jours, avec les avertissements de repos.
+ * L'algorithme ne place jamais rien tout seul : il propose des suggestions (masquées par défaut) que tu ajoutes si tu veux.
+ */
+export default function PlanCard(_props: { program: Program }) {
   const data = useSoma()
   const today = data.today
   const [days, setDays] = useState<14 | 28>(14)
-  const [preview, setPreview] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const settings = useMemo(() => planSettings(data.settings, program), [data.settings, program])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const toast = useToast()
+  const [moving, setMoving] = useState<Workout | null>(null)
+  const [blocking, setBlocking] = useState<DayKey | null>(null)
+  const ctx = usePlanCtx(days)
   const history = useMemo(() => historyEvents(data.workouts), [data.workouts])
-  const locked = useMemo(() => lockedEntries(data.workouts, today), [data.workouts, today])
-  const plan = useMemo(() => buildPlan({ program, today, days, override: data.settings.programStart, settings, history, locked }), [program, today, days, data.settings.programStart, settings, history, locked])
-  const last = addDayKey(today, days - 1) < plan.end ? addDayKey(today, days - 1) : plan.end
-  const diff = useMemo(() => diffPlan(storedAuto(data.workouts), plan.entries, today, last), [data.workouts, plan.entries, today, last])
+  const sugg = useMemo(() => (ctx && showSuggestions ? suggestions(ctx) : null), [ctx, showSuggestions])
+  const end = sugg?.end
+  const last = addDayKey(today, days - 1)
+  const blocked = (data.settings.planBlocked ?? []).filter((d) => d >= today)
 
-  /* Tout ce qui est enregistré dans le plan (proposé ou posé à la main), jour par jour. */
   const planned = useMemo(() => {
     const m = new Map<DayKey, Workout[]>()
     for (const w of data.workouts) if (w.planned && !w.deleted && w.plan?.status !== 'sautee' && w.day >= today && w.day <= last) m.set(w.day, [...(m.get(w.day) ?? []), w])
     return m
   }, [data.workouts, today, last])
+  const byDaySugg = useMemo(() => {
+    const m = new Map<DayKey, PlanEntry[]>()
+    for (const e of sugg?.entries ?? []) m.set(e.day, [...(m.get(e.day) ?? []), e])
+    return m
+  }, [sugg])
   const doneToday = data.workouts.filter((w) => !w.planned && !w.deleted && !w.backfill && w.day === today)
   const warnings = useMemo(() => {
     const ev: PlanEvent[] = [...history]
@@ -41,17 +53,18 @@ export default function PlanCard({ program }: { program: Program }) {
     return out
   }, [history, planned, today, last])
 
-  const hasPlan = storedAuto(data.workouts).some((w) => w.day >= today && w.day <= last)
   const recovery = data.checkinByDay.get(today)?.recovery
-  const dayList = Array.from({ length: Math.max(0, Math.round((parseDay(last).getTime() - parseDay(today).getTime()) / 86_400_000) + 1) }, (_, i) => addDayKey(today, i))
+  const dayList = Array.from({ length: days }, (_, i) => addDayKey(today, i))
+  const add = async (e: PlanEntry) => {
+    await saveWorkout(entryToPlaced(e, uid('w'), new Date().toISOString()))
+    toast.show(`${e.code ?? e.title} ajoutée au ${fmtDay(e.day)}`)
+  }
 
   return (
-    <Card title="Mon plan" subtitle="Les prochaines séances, proposées d’après ton ordre et tes règles de repos. Tu peux tout déplacer.">
+    <Card title="Mon plan" subtitle="Ce que tu as placé dans les prochains jours. Rien n’est ajouté sans toi.">
       <div className="mt-3 flex items-center justify-between gap-3">
         <Segmented value={String(days)} onChange={(v) => setDays(v === '28' ? 28 : 14)} options={[{ value: '14', label: '14 jours' }, { value: '28', label: '4 semaines' }]} size="sm" />
-        <Button variant={hasPlan && diff.changes.length === 0 ? 'soft' : 'primary'} onClick={() => setPreview(true)} disabled={!diff.changes.length}>
-          {hasPlan ? (diff.changes.length ? `Mettre à jour (${diff.changes.length})` : 'À jour ✓') : 'Créer mon plan'}
-        </Button>
+        <Button variant={showSuggestions ? 'soft' : 'primary'} onClick={() => setShowSuggestions((v) => !v)}>{showSuggestions ? 'Masquer les suggestions' : 'Voir des suggestions'}</Button>
       </div>
 
       {recovery !== undefined && recovery < 50 && (planned.get(today)?.length ?? 0) > 0 && (
@@ -63,6 +76,7 @@ export default function PlanCard({ program }: { program: Program }) {
       <ul className="mt-3 divide-y divide-white/6">
         {dayList.map((d) => {
           const ws = (planned.get(d) ?? []).sort((a, b) => a.startedAt.localeCompare(b.startedAt))
+          const ss = byDaySugg.get(d) ?? []
           const ww = warnings.get(d) ?? []
           const done = d === today ? doneToday : []
           return (
@@ -76,18 +90,38 @@ export default function PlanCard({ program }: { program: Program }) {
                       <span className="truncate">{w.title} · faite ✓</span>
                     </p>
                   ))}
-                  {ws.length === 0 && done.length === 0 && <p className="text-sm text-mist-700">Repos</p>}
+                  {blocked.includes(d) && (
+                    <p className="flex items-center justify-between gap-2 text-sm text-[#ffd98a]">
+                      <span>🚫 Indisponible</span>
+                      <button className="min-h-11 rounded-lg bg-white/6 px-3 text-xs text-mist-100" onClick={() => void saveSettings({ planBlocked: blocked.filter((x) => x !== d) })}>Rétablir</button>
+                    </p>
+                  )}
+                  {ws.length === 0 && ss.length === 0 && done.length === 0 && !blocked.includes(d) && <p className="text-sm text-mist-700">Rien de prévu</p>}
                   {ws.map((w) => (
                     <div key={w.id}>
                       <p className="flex items-center gap-2 text-[0.95rem] text-mist-100">
                         <i className="block h-2 w-2 shrink-0 rounded-full" style={{ boxShadow: `inset 0 0 0 1.5px ${CATEGORY_COLOR[categoryOf(w)]}` }} />
                         <span className="truncate">{w.title}</span>
                         <span className="shrink-0 text-xs text-mist-500">{w.durationMin} min</span>
-                        {(!w.plan?.auto || w.plan.locked) && <span className="shrink-0 text-xs" title="Épinglée : l’algorithme n’y touche pas" aria-label="épinglée">📌</span>}
                       </p>
-                      <p className="pl-4 text-xs text-mist-500">{w.plan?.reason ?? 'Posée par toi'}</p>
+                      {w.plan?.status === 'decalee' && w.plan.originalDay && <p className="pl-4 text-xs text-mist-500">Décalée (était le {fmtDay(w.plan.originalDay)})</p>}
+                      <button className="ml-4 mt-1 min-h-11 rounded-lg bg-white/6 px-3.5 text-xs font-medium text-mist-100 active:scale-95" aria-label={`Déplacer ${w.title}`} onClick={() => setMoving(w)}>Déplacer</button>
                     </div>
                   ))}
+                  {ss.map((e) => (
+                    <div key={e.id} className="rounded-xl border border-dashed border-white/15 px-3 py-2">
+                      <p className="flex items-center gap-2 text-sm text-mist-300">
+                        <i className="block h-2 w-2 shrink-0 rounded-full" style={{ background: CATEGORY_COLOR[e.kind === 'street' && !e.code ? 'street' : e.kind] }} />
+                        <span className="truncate">Suggestion : {e.code ? `${e.code} · S${e.week}` : e.title}</span>
+                        <span className="shrink-0 text-xs text-mist-500">{e.durationMin} min</span>
+                      </p>
+                      <p className="text-xs text-mist-500">{e.reason}</p>
+                      <Button className="mt-1.5" onClick={() => void add(e)} aria-label={`Ajouter ${e.code ?? e.title} le ${fmtDay(e.day)}`}>+ Ajouter</Button>
+                    </div>
+                  ))}
+                  {!blocked.includes(d) && ctx && (
+                    <button className="min-h-11 rounded-lg px-1 text-xs text-mist-500 underline" onClick={() => setBlocking(d)}>Imprévu : jour indisponible</button>
+                  )}
                   {ww.map((x, i) => (
                     <p key={i} className={`pl-4 text-xs ${x.hard ? 'text-[#ff8f8f]' : 'text-[#ffd98a]'}`}>⚠ {x.text}</p>
                   ))}
@@ -97,47 +131,12 @@ export default function PlanCard({ program }: { program: Program }) {
           )
         })}
       </ul>
-      {plan.notes.length > 0 && <ul className="mt-2 space-y-1 text-xs text-mist-500">{plan.notes.map((n) => <li key={n}>• {n}</li>)}</ul>}
-      <p className="mt-3 text-[0.68rem] text-mist-700">Le plan s’arrête à la fin du programme ({fmtDay(plan.end)}). Les séances non faites ne sont jamais rattrapées avec d’anciennes charges : la semaine du programme suit la date.</p>
+      {sugg && sugg.notes.length > 0 && <ul className="mt-2 space-y-1 text-xs text-mist-500">{sugg.notes.map((n) => <li key={n}>• {n}</li>)}</ul>}
+      <p className="mt-3 text-[0.68rem] text-mist-700">Pour ajouter une séance toi-même : touche un jour du calendrier. {end ? `Les suggestions s’arrêtent à la fin du programme (${fmtDay(end)}). ` : ''}Une séance non faite n’est jamais rattrapée avec d’anciennes charges : la semaine du programme suit la date.</p>
 
-      {preview && (
-        <Sheet
-          open
-          onClose={() => setPreview(false)}
-          title={hasPlan ? 'Mettre à jour le plan' : 'Créer mon plan'}
-          footer={
-            <div className="grid grid-cols-[1fr_auto] gap-2.5">
-              <Button
-                variant="primary"
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true)
-                  await applyPlan(diff, data.workouts, today)
-                  setBusy(false)
-                  setPreview(false)
-                }}
-              >
-                Appliquer
-              </Button>
-              <Button onClick={() => setPreview(false)}>Annuler</Button>
-            </div>
-          }
-        >
-          <div className="space-y-3 pb-2">
-            <p className="text-sm text-mist-300">
-              {hasPlan ? `Ces ${diff.changes.length} changements seront appliqués.` : `${diff.changes.length} séances seront placées sur les ${days} prochains jours.`} Tes séances posées à la main et épinglées ne bougent pas.
-            </p>
-            <ul className="divide-y divide-white/6">
-              {diff.changes.map((c, i) => (
-                <li key={i} className="py-2.5 text-sm text-mist-100">
-                  <b className="text-accent">{c.label}</b>{' '}
-                  {c.type === 'move' ? `${fmtDay(c.from!)} → ${fmtDay(c.to!)}` : c.type === 'add' ? `ajoutée le ${fmtDay(c.to!)}` : `retirée (prévue le ${fmtDay(c.from!)})`}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </Sheet>
-      )}
+      {toast.node}
+      {moving && ctx && <PlanMoveSheet ctx={ctx} workout={moving} onClose={() => setMoving(null)} onDone={(m) => toast.show(m)} />}
+      {blocking && ctx && <PlanBlockSheet ctx={ctx} day={blocking} onClose={() => setBlocking(null)} onDone={(m) => toast.show(m)} />}
     </Card>
   )
 }

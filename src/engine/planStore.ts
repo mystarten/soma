@@ -1,6 +1,9 @@
-import type { DayKey, Program, Workout } from '../types'
+import type { DayKey, Program, Settings, Workout } from '../types'
 import { categoryOf } from './calendar'
-import type { PlanEntry, PlanEvent, PlanKind } from './plan'
+import { buildPlan, planSettings, planWarnings, type PlanEntry, type PlanEvent, type PlanKind, type PlanWarning } from './plan'
+import { sessionWeekOn } from './todayPlan'
+import { isPlannedWeek } from './program'
+import { addDayKey as addDays } from './time'
 
 /* Le plan est enregistré dans le journal sous forme de séances « prévues » (donc synchronisé et sauvegardé comme le reste) :
    plan.auto = proposée par l'algorithme ; plan.locked = épinglée ; une séance posée à la main n'est jamais déplacée par l'algorithme. */
@@ -95,3 +98,107 @@ export function expiredAuto(workouts: Workout[], today: DayKey): Workout[] {
 }
 
 export const programRef = (p: Pick<Program, 'sessions'>, code: string) => p.sessions.find((s) => s.code === code)
+
+/* ── Décaler, jour indisponible ─────────────────────────────────────────── */
+
+
+export interface PlanContext {
+  program: Pick<Program, 'sessions'>
+  today: DayKey
+  days: number
+  settings: Settings
+  workouts: Workout[]
+  blocked: DayKey[]
+}
+
+export interface PlanPreview {
+  diff: PlanDiff
+  /** La séance déplacée (déjà verrouillée à son nouveau jour). */
+  moved?: Workout
+  /** Séances posées à la main qui étaient sur un jour devenu indisponible : elles sont retirées puis replacées par l'algorithme. */
+  dropped: Workout[]
+  warnings: PlanWarning[]
+  headline: PlanChange[]
+  /** Remarques de l'algorithme (ex. sorties de course non placées). */
+  notes: string[]
+  /** Dernier jour du plan (fin du programme). */
+  end: DayKey
+}
+
+const lastDayOf = (ctx: PlanContext, end: DayKey) => (addDays(ctx.today, ctx.days - 1) < end ? addDays(ctx.today, ctx.days - 1) : end)
+
+function compute(ctx: PlanContext, workouts: Workout[], blocked: DayKey[], dropped: Workout[]): { diff: PlanDiff; warnings: PlanWarning[]; notes: string[]; end: DayKey } {
+  const ps = planSettings(ctx.settings, ctx.program as Program)
+  const history = historyEvents(workouts)
+  const droppedIds = new Set(dropped.map((w) => w.id))
+  const locked = lockedEntries(workouts.filter((w) => !droppedIds.has(w.id)), ctx.today)
+  const plan = buildPlan({ program: ctx.program, today: ctx.today, days: ctx.days, override: ctx.settings.programStart, settings: ps, history, locked, blocked, prefer: storedAuto(workouts).flatMap((w) => { const k = planKindOf(w); return k ? [{ day: w.day, kind: k, code: w.program?.[0]?.code }] : [] }) })
+  const last = lastDayOf(ctx, plan.end)
+  const diff = diffPlan([...storedAuto(workouts), ...dropped], plan.entries, ctx.today, last)
+  const events: PlanEvent[] = [...history, ...locked, ...plan.entries]
+  return { diff, warnings: planWarnings(events, addDays(ctx.today, -8), last).filter((w) => w.day >= ctx.today), notes: plan.notes, end: plan.end }
+}
+
+/** Le plan recalculé tel qu'il serait sans rien changer (pour « Mettre à jour »). */
+export function previewRecalc(ctx: PlanContext): PlanPreview {
+  const { diff, warnings, notes, end } = compute(ctx, ctx.workouts, ctx.blocked, [])
+  return { diff, dropped: [], warnings, headline: [], notes, end }
+}
+
+/** Déplace une séance prévue à une autre date : elle est verrouillée là, et l'algorithme recalcule tout le reste autour. */
+export function previewMove(ctx: PlanContext, id: string, toDay: DayKey): PlanPreview | { error: string } {
+  const w = ctx.workouts.find((x) => x.id === id && x.planned && !x.deleted)
+  if (!w) return { error: 'Séance introuvable.' }
+  const end = lastDayOf({ ...ctx, days: 400 }, planEndOf(ctx))
+  if (toDay < ctx.today) return { error: 'Choisis un jour à partir d’aujourd’hui.' }
+  if (toDay > end) return { error: `Le plan s’arrête à la fin du programme (${end.slice(8)}/${end.slice(5, 7)}).` }
+  const ref = w.program?.[0]
+  let program = w.program
+  let title = w.title
+  if (ref) {
+    const s = ctx.program.sessions.find((x) => x.code === ref.code)
+    const sw = s ? sessionWeekOn(ctx.program, s, toDay, ctx.settings.programStart) : null
+    if (!s || !sw || !isPlannedWeek(s, sw.week)) return { error: `${ref.code} n’a rien de prévu ce jour-là (aucune semaine du programme ne le contient).` }
+    program = [{ code: ref.code, week: sw.week.n }]
+    title = (w.title ?? '').replace(new RegExp(`${ref.code} · S${ref.week}`), `${ref.code} · S${sw.week.n}`)
+  }
+  const moved: Workout = {
+    ...w,
+    day: toDay,
+    startedAt: new Date(`${toDay}T12:00:00`).toISOString(),
+    program,
+    title,
+    plan: { ...w.plan, locked: true, status: 'decalee', originalDay: w.plan?.originalDay ?? w.day },
+  }
+  const next = ctx.workouts.map((x) => (x.id === id ? moved : x))
+  const { diff, warnings, notes, end: planEnd } = compute(ctx, next, ctx.blocked, [])
+  const label = labelOf(program?.[0]?.code, planKindOf(w) ?? 'street')
+  return { diff, moved, dropped: [], warnings: warnings.filter((x) => Math.abs(dayDiffAbs(x.day, toDay)) <= 1), headline: [{ type: 'move', label, from: w.day, to: toDay }], notes, end: planEnd }
+}
+
+/** Marque un jour indisponible : l'algorithme n'y suggère plus rien. Tes propres séances ce jour-là restent (à toi de les déplacer). */
+export function previewBlock(ctx: PlanContext, day: DayKey): PlanPreview {
+  const blocked = [...new Set([...ctx.blocked, day])]
+  const dropped: Workout[] = []
+  const { diff, warnings, notes, end } = compute(ctx, ctx.workouts, blocked, dropped)
+  return { diff, dropped, warnings, headline: [], notes, end }
+}
+
+function planEndOf(ctx: PlanContext): DayKey {
+  return buildPlan({ program: ctx.program, today: ctx.today, days: 1, override: ctx.settings.programStart, settings: planSettings(ctx.settings, ctx.program as Program), history: [], locked: [] }).end
+}
+const dayDiffAbs = (a: DayKey, b: DayKey) => Math.round((new Date(`${a}T12:00:00`).getTime() - new Date(`${b}T12:00:00`).getTime()) / 86_400_000)
+
+/** Les suggestions de l'algorithme (rien n'est enregistré) : à toi de choisir celles que tu ajoutes. */
+export function suggestions(ctx: PlanContext): { entries: PlanEntry[]; notes: string[]; end: DayKey } {
+  const history = historyEvents(ctx.workouts)
+  const locked = lockedEntries(ctx.workouts, ctx.today)
+  const r = buildPlan({ program: ctx.program, today: ctx.today, days: ctx.days, override: ctx.settings.programStart, settings: planSettings(ctx.settings, ctx.program as Program), history, locked, blocked: ctx.blocked })
+  return { entries: r.entries, notes: r.notes, end: r.end }
+}
+
+/** Une suggestion que tu choisis d'ajouter : elle devient une séance prévue à toi (aucun recalcul ne la déplacera). */
+export function entryToPlaced(e: PlanEntry, id: string, nowIso: string): Workout {
+  const w = entryToWorkout(e, nowIso)
+  return { ...w, id, plan: { reason: e.reason, status: 'prevue' } }
+}

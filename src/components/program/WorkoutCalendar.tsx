@@ -10,6 +10,8 @@ import { parseDay, todayKey } from '../../engine/time'
 import { Button, Card, Field, Segmented, Sheet, Stepper, TextInput, useToast } from '../ui/primitives'
 import ProgramSessionSheet from './ProgramSessionSheet'
 import { ShinCheck } from './RunParts'
+import { usePlanCtx } from './usePlanCtx'
+import { PlanMoveSheet } from './PlanMoveSheet'
 import { sessionChoices } from '../../engine/programSession'
 
 const DOW = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
@@ -26,6 +28,8 @@ export default function WorkoutCalendar() {
   const [adding, setAdding] = useState<DayKey | null>(null)
   const [progAdd, setProgAdd] = useState<{ day: DayKey; existing?: Workout } | null>(null)
   const toast = useToast()
+  const [moving, setMoving] = useState<Workout | null>(null)
+  const planCtx = usePlanCtx(28)
   const byDay = useMemo(() => workoutsByDay(data.workouts), [data.workouts])
   const plannedDay = useMemo(() => plannedByDay(data.workouts), [data.workouts])
   const hasProgram = !!data.program && sessionChoices(data.program).length > 0
@@ -107,16 +111,18 @@ export default function WorkoutCalendar() {
           onFree={() => { setAdding(openDay); setOpenDay(null) }}
           onProgram={() => { setProgAdd({ day: openDay }); setOpenDay(null) }}
           onValidate={(w) => { setProgAdd({ day: w.day, existing: w }); setOpenDay(null) }}
+          onMove={(w) => { setMoving(w); setOpenDay(null) }}
         />
       )}
       {adding && <AddSheet day={adding} onClose={() => setAdding(null)} />}
       {progAdd && data.program && <ProgramSessionSheet program={data.program} day={progAdd.day} existing={progAdd.existing} onClose={() => setProgAdd(null)} onSaved={(m) => toast.show(m)} />}
       {toast.node}
+      {moving && planCtx && <PlanMoveSheet ctx={planCtx} workout={moving} onClose={() => setMoving(null)} onDone={(m) => toast.show(m)} />}
     </Card>
   )
 }
 
-function DaySheet({ day, workouts, planned, canProgram, onClose, onFree, onProgram, onValidate }: { day: DayKey; workouts: Workout[]; planned: Workout[]; canProgram: boolean; onClose: () => void; onFree: () => void; onProgram: () => void; onValidate: (w: Workout) => void }) {
+function DaySheet({ day, workouts, planned, canProgram, onClose, onFree, onProgram, onValidate, onMove }: { day: DayKey; workouts: Workout[]; planned: Workout[]; canProgram: boolean; onClose: () => void; onFree: () => void; onProgram: () => void; onValidate: (w: Workout) => void; onMove: (w: Workout) => void }) {
   return (
     <Sheet
       open
@@ -135,7 +141,7 @@ function DaySheet({ day, workouts, planned, canProgram, onClose, onFree, onProgr
       <div className="space-y-3 pb-2">
         {workouts.length === 0 && planned.length === 0 && <p className="py-4 text-center text-sm text-mist-500">Aucune séance ce jour-là.</p>}
         {planned.map((w) => (
-          <PlannedCard key={w.id} w={w} onValidate={() => onValidate(w)} />
+          <PlannedCard key={w.id} w={w} onValidate={() => onValidate(w)} onMove={() => onMove(w)} />
         ))}
         {workouts.map((w) => (
           <WorkoutCard key={w.id} w={w} />
@@ -146,7 +152,7 @@ function DaySheet({ day, workouts, planned, canProgram, onClose, onFree, onProgr
 }
 
 /** Une séance du programme placée à l'avance : on la valide quand elle est faite, ou on la retire. */
-function PlannedCard({ w, onValidate }: { w: Workout; onValidate: () => void }) {
+function PlannedCard({ w, onValidate, onMove }: { w: Workout; onValidate: () => void; onMove?: () => void }) {
   const cat = categoryOf(w)
   return (
     <div className="rounded-2xl bg-white/3 p-3.5" style={{ border: `1.5px dashed ${CATEGORY_COLOR[cat]}88` }}>
@@ -159,6 +165,7 @@ function PlannedCard({ w, onValidate }: { w: Workout; onValidate: () => void }) 
       </div>
       <div className="mt-2.5 grid grid-cols-2 gap-2.5">
         <Button variant="primary" onClick={onValidate}>Valider ✓</Button>
+        {onMove && <Button onClick={onMove}>Déplacer</Button>}
         <Button
           variant="danger"
           onClick={async () => {

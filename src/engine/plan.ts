@@ -52,6 +52,8 @@ export interface PlanInput {
   locked: PlanEntry[]
   /** Jours indisponibles : rien n'y est placé. */
   blocked?: DayKey[]
+  /** Le plan précédent : pour la course, les jambes et les abdos, l'algorithme garde les mêmes jours quand c'est encore possible (peu de changements à valider). */
+  prefer?: PlanEvent[]
 }
 
 export interface PlanResult {
@@ -179,6 +181,8 @@ export function buildPlan(input: PlanInput): PlanResult {
       }
     }
     if (!next) continue
+    /* Une séance déjà posée (ou décalée) un peu plus tard : on l'attend au lieu de la proposer deux fois, l'ordre est conservé. */
+    if (input.locked.some((l) => l.kind === 'street' && l.code === next && l.day > d && dayDiff(l.day, d) <= 9)) continue
     const s = (x: number) => cal.has(addDayKey(d, x), isStreet)
     if ((s(-1) && s(-2)) || (s(-1) && s(1)) || (s(1) && s(2))) continue
     if (cal.count(isStreet, addDayKey(d, -6), addDayKey(d, -1)) >= 5) continue
@@ -223,6 +227,7 @@ export function buildPlan(input: PlanInput): PlanResult {
     }
     return []
   }
+  const liked = (d: DayKey, kind: PlanKind) => ((input.prefer ?? []).some((p) => p.day === d && p.kind === kind) ? -4 : 0)
   const notAdjacent = (a: DayKey, b: DayKey) => Math.abs(dayDiff(a, b)) >= 2
 
   /* ── 2. Course : 3 sorties par semaine (semaines 7 à 10), sinon 2 ; jamais deux jours de suite ── */
@@ -253,7 +258,7 @@ export function buildPlan(input: PlanInput): PlanResult {
     const need = weekTarget('course', w) - countInWeek('course', w)
     const cands = wd
       .filter((d) => !blocked.has(d) && nextCode('course', d) && !cal.has(d, (e) => isRun(e) || e.kind === 'jambes' || isPull(e)) && !cal.has(addDayKey(d, -1), isRun) && !cal.has(addDayKey(d, 1), isRun) && !cal.has(addDayKey(d, -1), (e) => e.kind === 'jambes'))
-      .map((d) => ({ day: d, cost: (cal.on(d).length ? 0 : 1) + (cal.on(d).length === 0 && !keepsRest(d) ? 4 : 0) }))
+      .map((d) => ({ day: d, cost: (cal.on(d).length ? 0 : 1) + (cal.on(d).length === 0 && !keepsRest(d) ? 4 : 0) + liked(d, 'course') }))
     const picked = pickDays(cands, need, notAdjacent)
     let n = countInWeek('course', w)
     for (const d of picked) {
@@ -276,7 +281,7 @@ export function buildPlan(input: PlanInput): PlanResult {
     const cands = wd
       .filter((d) => !blocked.has(d) && nextCode('jambes', d) && !cal.has(d, (e) => isHard(e)) && !cal.has(addDayKey(d, 1), isRun) && !cal.has(addDayKey(d, -1), (e) => e.kind === 'jambes') && !cal.has(addDayKey(d, 1), (e) => e.kind === 'jambes'))
       .filter((d) => cal.on(d).length > 0 || keepsRest(d))
-      .map((d) => ({ day: d, cost: cal.on(d).length ? 1 : 0 }))
+      .map((d) => ({ day: d, cost: (cal.on(d).length ? 1 : 0) + liked(d, 'jambes') }))
     for (const d of pickDays(cands, need, notAdjacent)) if (cal.on(d).length > 0 || keepsRest(d)) place(mk('jambes', d, nextCode('jambes', d), 'Jour sans tirage ni course, et pas la veille d’une sortie de course'))
   }
 
@@ -286,7 +291,7 @@ export function buildPlan(input: PlanInput): PlanResult {
     const cands = wd
       .filter((d) => !blocked.has(d) && nextCode('abdos', d) && !cal.has(d, (e) => isPull(e) || e.kind === 'abdos') && cal.on(d).length < 2 && !cal.has(addDayKey(d, -1), (e) => e.kind === 'abdos') && !cal.has(addDayKey(d, 1), (e) => e.kind === 'abdos'))
       .filter((d) => cal.on(d).length > 0 || keepsRest(d))
-      .map((d) => ({ day: d, cost: cal.has(d, (e) => e.kind === 'street') ? 0 : cal.on(d).length ? 1 : 2 }))
+      .map((d) => ({ day: d, cost: (cal.has(d, (e) => e.kind === 'street') ? 0 : cal.on(d).length ? 1 : 2) + liked(d, 'abdos') }))
     for (const d of pickDays(cands, need, notAdjacent)) {
       if (cal.on(d).length === 0 && !keepsRest(d)) continue
       const withP = cal.has(d, (e) => e.kind === 'street')

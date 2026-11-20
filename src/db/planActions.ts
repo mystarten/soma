@@ -13,3 +13,12 @@ export async function applyPlan(diff: PlanDiff, workouts: Workout[], today: stri
 }
 
 export type { Program }
+
+import type { PlanPreview } from '../engine/planStore'
+
+/** Applique un aperçu validé : la séance déplacée (verrouillée), les retraits, les ajouts. */
+export async function applyPreview(p: PlanPreview, workouts: Workout[], today: string): Promise<void> {
+  for (const w of p.dropped) await deleteWorkout(w.id)
+  if (p.moved) await saveWorkouts([p.moved])
+  await applyPlan(p.diff, workouts, today)
+}
